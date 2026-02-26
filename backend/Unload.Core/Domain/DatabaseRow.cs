@@ -1,4 +1,4 @@
 namespace Unload.Core;
 
-public sealed record DatabaseRow(
+public record DatabaseRow(
     IReadOnlyDictionary<string, object?> Columns);

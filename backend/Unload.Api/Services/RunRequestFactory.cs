@@ -2,7 +2,7 @@ using Unload.Core;
 
 namespace Unload.Api;
 
-public sealed class RunRequestFactory : IRunRequestFactory
+public class RunRequestFactory : IRunRequestFactory
 {
     public RunRequest Create(IReadOnlyCollection<string> profileCodes, string outputDirectory)
     {

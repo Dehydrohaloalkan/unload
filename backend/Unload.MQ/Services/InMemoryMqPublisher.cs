@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.MQ;
 
-public sealed class InMemoryMqPublisher : IMqPublisher
+public class InMemoryMqPublisher : IMqPublisher
 {
     private readonly ConcurrentQueue<RunnerEvent> _events = new();
 

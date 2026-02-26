@@ -4,7 +4,7 @@ using Unload.Core;
 
 namespace Unload.Cryptography;
 
-public sealed class Sha256RequestHasher : IRequestHasher
+public class Sha256RequestHasher : IRequestHasher
 {
     public string ComputeHash(string value)
     {

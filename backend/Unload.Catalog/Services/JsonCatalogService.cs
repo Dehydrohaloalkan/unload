@@ -4,7 +4,7 @@ using Unload.Core;
 
 namespace Unload.Catalog;
 
-public sealed class JsonCatalogService : ICatalogService
+public class JsonCatalogService : ICatalogService
 {
     private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{2,32}$", RegexOptions.Compiled);
     private readonly string _catalogPath;

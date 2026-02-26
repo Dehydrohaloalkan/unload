@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public sealed record ScriptDefinition(
+public record ScriptDefinition(
     string ProfileCode,
     string ScriptCode,
     string ScriptPath,

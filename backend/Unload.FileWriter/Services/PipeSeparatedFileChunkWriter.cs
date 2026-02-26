@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.FileWriter;
 
-public sealed class PipeSeparatedFileChunkWriter : IFileChunkWriter
+public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 {
     public async Task<WrittenFile> WriteChunkAsync(
         FileChunk chunk,

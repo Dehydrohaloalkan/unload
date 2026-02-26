@@ -1,6 +1,6 @@
 namespace Unload.Runner;
 
-public sealed record RunnerOptions(
+public record RunnerOptions(
     int ChunkSizeBytes,
     int MaxDegreeOfParallelism,
     int DataflowBoundedCapacity);

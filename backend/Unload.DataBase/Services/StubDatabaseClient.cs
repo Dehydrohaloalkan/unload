@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.DataBase;
 
-public sealed class StubDatabaseClient : IDatabaseClient
+public class StubDatabaseClient : IDatabaseClient
 {
     public async IAsyncEnumerable<DatabaseRow> ExecuteScriptAsync(
         ScriptDefinition script,

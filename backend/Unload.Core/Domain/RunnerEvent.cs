@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public sealed record RunnerEvent(
+public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
     RunnerStep Step,

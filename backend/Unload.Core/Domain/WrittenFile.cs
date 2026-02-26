@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public sealed record WrittenFile(
+public record WrittenFile(
     ScriptDefinition Script,
     int ChunkNumber,
     string FilePath,

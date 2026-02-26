@@ -43,15 +43,15 @@ internal static class CatalogSelectionLoader
     }
 }
 
-internal sealed record SelectionCatalogRoot(
+internal record SelectionCatalogRoot(
     [property: JsonPropertyName("groups")] List<SelectionGroup> Groups,
     [property: JsonPropertyName("profiles")] List<SelectionProfile> Profiles);
 
-internal sealed record SelectionGroup(
+internal record SelectionGroup(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name);
 
-internal sealed record SelectionProfile(
+internal record SelectionProfile(
     [property: JsonPropertyName("group_id")] int GroupId,
     [property: JsonPropertyName("code")] string Code);
 

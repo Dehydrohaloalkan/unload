@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public sealed record RunRequest(
+public record RunRequest(
     IReadOnlyCollection<string> ProfileCodes,
     string CorrelationId,
     string OutputDirectory);

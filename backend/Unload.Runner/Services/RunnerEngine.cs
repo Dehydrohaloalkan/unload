@@ -5,7 +5,7 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
-public sealed class RunnerEngine : IRunner
+public class RunnerEngine : IRunner
 {
     private readonly ICatalogService _catalogService;
     private readonly IDatabaseClient _databaseClient;
@@ -275,7 +275,7 @@ public sealed class RunnerEngine : IRunner
         }
     }
 
-    private sealed record ScriptRows(
+    private record ScriptRows(
         ScriptDefinition Script,
         IReadOnlyList<DatabaseRow> Rows);
 }

@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public sealed record FileChunk(
+public record FileChunk(
     ScriptDefinition Script,
     int ChunkNumber,
     IReadOnlyList<DatabaseRow> Rows,
