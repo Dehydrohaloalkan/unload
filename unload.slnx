@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/Unload.Api/Unload.Api.csproj" />
+    <Project Path="backend/Unload.Catalog/Unload.Catalog.csproj" />
+    <Project Path="backend/Unload.Core/Unload.Core.csproj" />
+    <Project Path="backend/Unload.Cryptography/Unload.Cryptography.csproj" />
+    <Project Path="backend/Unload.DataBase/Unload.DataBase.csproj" />
+    <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
+    <Project Path="backend/Unload.MQ/Unload.MQ.csproj" />
+    <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
+  </Folder>
+  <Folder Name="/console/">
+    <Project Path="console/Unload.Console/Unload.Console.csproj" />
+  </Folder>
+</Solution>

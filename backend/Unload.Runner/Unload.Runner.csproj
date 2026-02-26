@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
+    <ProjectReference Include="..\Unload.Catalog\Unload.Catalog.csproj" />
+    <ProjectReference Include="..\Unload.DataBase\Unload.DataBase.csproj" />
+    <ProjectReference Include="..\Unload.FileWriter\Unload.FileWriter.csproj" />
+    <ProjectReference Include="..\Unload.MQ\Unload.MQ.csproj" />
+    <ProjectReference Include="..\Unload.Cryptography\Unload.Cryptography.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

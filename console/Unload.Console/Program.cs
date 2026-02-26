@@ -1,0 +1,132 @@
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Unload.Console.CatalogSelection;
+using Unload.Api;
+using Unload.Catalog;
+using Unload.Core;
+using Unload.Cryptography;
+using Unload.DataBase;
+using Unload.FileWriter;
+using Unload.MQ;
+using Unload.Runner;
+
+var root = ResolveWorkspaceRoot();
+var scriptsDirectory = Path.Combine(root, "scripts");
+var catalogPath = Path.Combine(root, "configs", "catalog.json");
+var outputDirectory = Path.Combine(root, "output");
+
+var profileCodes = args.Length == 0
+    ? await PromptProfileCodesAsync(catalogPath, CancellationToken.None)
+    : args.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+var services = new ServiceCollection();
+services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(catalogPath, scriptsDirectory));
+services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
+services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
+services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
+services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
+services.AddSingleton(new RunnerOptions(
+    ChunkSizeBytes: 10 * 1024 * 1024,
+    MaxDegreeOfParallelism: Math.Max(Environment.ProcessorCount / 2, 1),
+    DataflowBoundedCapacity: 8));
+services.AddSingleton<IRunner, RunnerEngine>();
+services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
+
+await using var provider = services.BuildServiceProvider().CreateAsyncScope();
+var requestFactory = provider.ServiceProvider.GetRequiredService<IRunRequestFactory>();
+var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
+
+AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJustified());
+AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
+AnsiConsole.MarkupLine($"[grey]Scripts:[/] {Markup.Escape(scriptsDirectory)}");
+AnsiConsole.MarkupLine($"[grey]Profiles:[/] {Markup.Escape(string.Join(", ", profileCodes))}");
+AnsiConsole.MarkupLine(string.Empty);
+
+var request = requestFactory.Create(profileCodes, outputDirectory);
+
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
+
+await foreach (var @event in runner.RunAsync(request, cts.Token))
+{
+    var color = @event.Step switch
+    {
+        RunnerStep.Failed => "red",
+        RunnerStep.Completed => "green",
+        RunnerStep.FileWritten => "deepskyblue1",
+        RunnerStep.QueryCompleted => "yellow",
+        _ => "grey"
+    };
+
+    var line =
+        $"[{color}]{@event.OccurredAt:HH:mm:ss}[/] " +
+        $"[{color}]{Markup.Escape(@event.Step.ToString())}[/] " +
+        $"{Markup.Escape(@event.Message)}";
+
+    if (!string.IsNullOrWhiteSpace(@event.FilePath))
+    {
+        line += $" [grey]({Markup.Escape(@event.FilePath)})[/]";
+    }
+
+    AnsiConsole.MarkupLine(line);
+}
+
+static string ResolveWorkspaceRoot()
+{
+    var current = new DirectoryInfo(Directory.GetCurrentDirectory());
+
+    while (current is not null)
+    {
+        var catalogPath = Path.Combine(current.FullName, "configs", "catalog.json");
+        var scriptsPath = Path.Combine(current.FullName, "scripts");
+
+        if (File.Exists(catalogPath) && Directory.Exists(scriptsPath))
+        {
+            return current.FullName;
+        }
+
+        current = current.Parent;
+    }
+
+    throw new DirectoryNotFoundException(
+        "Workspace root not found. Expected folders: 'configs' with 'catalog.json' and 'scripts'.");
+}
+
+static async Task<string[]> PromptProfileCodesAsync(string catalogPath, CancellationToken cancellationToken)
+{
+    var groups = await CatalogSelectionLoader.LoadAsync(catalogPath, cancellationToken);
+    var selectedProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var group in groups)
+    {
+        if (group.ProfileCodes.Count == 0)
+        {
+            continue;
+        }
+
+        var selectedInGroup = AnsiConsole.Prompt(
+            new MultiSelectionPrompt<string>()
+                .Title($"[yellow]{Markup.Escape(group.GroupName)}[/] - выбери профили")
+                .NotRequired()
+                .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
+                .AddChoices(group.ProfileCodes));
+
+        foreach (var profileCode in selectedInGroup)
+        {
+            selectedProfiles.Add(profileCode);
+        }
+    }
+
+    if (selectedProfiles.Count == 0)
+    {
+        throw new InvalidOperationException("Не выбрано ни одного профиля для выгрузки.");
+    }
+
+    return selectedProfiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+}

@@ -1,0 +1,39 @@
+{
+    "groups": [
+        {
+            "id": 1,
+            "name": "first group"
+        },
+        {
+            "id": 2,
+            "name": "second group"
+        }
+    ],
+    "members": [
+        {
+            "id": 1,
+            "name": "first member"
+        },
+        {
+            "id": 2,
+            "name": "second member"
+        }
+    ],
+    "profiles": [
+        {
+            "group_id": 1,
+            "member_id": 1,
+            "code": "QQW"
+        },
+        {
+            "group_id": 2,
+            "member_id": 2,
+            "code": "QQS"
+        },
+        {
+            "group_id": 1,
+            "member_id": 2,
+            "code": "QQE"
+        }
+    ]
+}

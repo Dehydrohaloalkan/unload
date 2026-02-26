@@ -1,0 +1,25 @@
+# Build artifacts
+bin/
+obj/
+out/
+
+# Unload output
+output/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
