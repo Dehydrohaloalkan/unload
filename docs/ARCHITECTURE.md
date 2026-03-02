@@ -15,7 +15,8 @@
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
-  - Для каждого скрипта генерирует поток строк (`IAsyncEnumerable`) как будто это ответ из базы.
+  - Контракт БД: `IDatabaseClient` с `IsConnected` и `GetDataReaderAsync(query, cancellationToken)`.
+  - В раннер передается `DbDataReader`, строки читаются потоково.
 
 - `backend/Unload.FileWriter`
   - Запись чанков в `txt` с разделителем `|`.
@@ -31,16 +32,23 @@
 
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
-  - Реализует pipeline на `System.Threading.Tasks.Dataflow`.
-  - Шаги: resolve профилей -> запуск запроса -> разбиение на чанки до 10MB -> запись файлов.
+  - Параллельно выполняет скрипты (`MaxDegreeOfParallelism`) и читает `DbDataReader` потоково.
+  - Шаги: resolve профилей -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
+  - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
   - Диагностика: пишет полный лог событий и метрики длительности шагов в CSV через `IRunDiagnosticsSink`.
 
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, профили).
-  - `POST /api/runs` — запускает выгрузку и возвращает `correlationId`.
-  - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`, события: `status`.
+  - `POST /api/runs` — ставит запуск в очередь и возвращает `correlationId`.
+  - `GET /api/runs` — список запусков и их статусы.
+  - `GET /api/runs/{correlationId}` — статус конкретного запуска.
+  - Запуски обрабатываются фоновым worker (`BackgroundService`) из общей in-memory очереди.
+  - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`.
+  - SignalR события:
+    - `status` — события раннера конкретного запуска;
+    - `run_status` — обновления статуса запуска для всех подключенных клиентов.
 
 - `console/Unload.Console`
   - Точка входа.
@@ -54,13 +62,14 @@
 1. Консоль или API формирует `RunRequest` из профилей.
 2. `RunnerEngine` эмитит `RequestAccepted`.
 3. `JsonCatalogService` возвращает скрипты для выбранных профилей.
-4. В `Dataflow`-пайплайне:
-   - `TransformBlock`: выполнить запрос в БД (заглушка) и получить строки.
-   - `TransformBlock`: разбить строки на чанки по лимиту размера.
-   - `TransformManyBlock`: распаковать наборы чанков.
-   - `ActionBlock`: записать чанки в файлы.
-5. На каждом шаге публикуется событие в MQ-заглушку и отправляется в консоль.
-6. В конце эмитится `Completed` или `Failed`.
+4. Worker извлекает задачу из очереди и запускает `RunnerEngine`.
+5. Для каждого скрипта:
+   - получить `DbDataReader` из БД;
+   - читать строки потоково;
+   - собирать текущий чанк до лимита размера;
+   - записывать чанк в файл и продолжать чтение.
+6. На каждом шаге публикуется событие в MQ-заглушку, сохраняется диагностика и обновляется статус запуска.
+7. В конце эмитится `Completed` или `Failed`.
 
 ## Observability
 
@@ -85,11 +94,18 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"profileCodes\":[\"YSB_M\"]}"
 ```
 
+Проверка статусов запусков:
+
+```powershell
+curl http://localhost:5000/api/runs
+```
+
 Подписка клиента SignalR:
 
 - Подключиться к `/hubs/status`.
 - Вызвать `SubscribeRun(correlationId)`.
 - Слушать событие `status` с payload `RunnerEvent`.
+- Для общей ленты запусков слушать событие `run_status` с payload `RunStatusInfo`.
 
 ## Run
 

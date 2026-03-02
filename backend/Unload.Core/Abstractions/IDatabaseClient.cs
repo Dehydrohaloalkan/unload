@@ -1,8 +1,10 @@
+using System.Data.Common;
+
 namespace Unload.Core;
 
 public interface IDatabaseClient
 {
-    IAsyncEnumerable<DatabaseRow> ExecuteScriptAsync(
-        ScriptDefinition script,
-        CancellationToken cancellationToken);
+    bool IsConnected { get; }
+
+    Task<DbDataReader> GetDataReaderAsync(string query, CancellationToken cancellationToken = default);
 }

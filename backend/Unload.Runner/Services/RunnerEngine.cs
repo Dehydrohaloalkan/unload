@@ -1,7 +1,6 @@
+using System.Data.Common;
 using System.Diagnostics;
-using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks.Dataflow;
 using Unload.Core;
 
 namespace Unload.Runner;
@@ -36,7 +35,12 @@ public class RunnerEngine : IRunner
 
     public IAsyncEnumerable<RunnerEvent> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<RunnerEvent>();
+        var channel = Channel.CreateBounded<RunnerEvent>(new BoundedChannelOptions(_options.DataflowBoundedCapacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false
+        });
 
         _ = Task.Run(async () =>
         {
@@ -48,7 +52,7 @@ public class RunnerEngine : IRunner
             {
                 channel.Writer.TryComplete();
             }
-        }, cancellationToken);
+        }, CancellationToken.None);
 
         return channel.Reader.ReadAllAsync(cancellationToken);
     }
@@ -62,12 +66,18 @@ public class RunnerEngine : IRunner
         try
         {
             ValidateRequest(request);
+            ValidateDatabaseConnectivity();
 
             var runHash = _requestHasher.ComputeHash($"{request.CorrelationId}:{DateTimeOffset.UtcNow:O}")[..12];
             var runOutputDirectory = Path.Combine(request.OutputDirectory, runHash);
             Directory.CreateDirectory(runOutputDirectory);
 
-            await EmitAsync(writer, request, RunnerStep.RequestAccepted, "Run request accepted.");
+            await EmitAsync(
+                writer,
+                request,
+                RunnerStep.RequestAccepted,
+                "Run request accepted.",
+                cancellationToken: cancellationToken);
 
             var resolveStopwatch = Stopwatch.StartNew();
             var resolvedProfiles = await _catalogService.ResolveAsync(request.ProfileCodes, cancellationToken);
@@ -77,7 +87,8 @@ public class RunnerEngine : IRunner
                 request,
                 RunnerStep.ProfilesResolved,
                 $"Profiles resolved: {resolvedProfiles.Count}.",
-                records: resolvedProfiles.Count);
+                records: resolvedProfiles.Count,
+                cancellationToken: cancellationToken);
             await _diagnosticsSink.WriteMetricAsync(
                 new RunMetricRecord(
                     DateTimeOffset.UtcNow,
@@ -87,7 +98,7 @@ public class RunnerEngine : IRunner
                     "success",
                     Records: resolvedProfiles.Count,
                     Details: "Catalog profiles resolved."),
-                CancellationToken.None);
+                cancellationToken);
 
             var scripts = resolvedProfiles
                 .SelectMany(static x => x.Value)
@@ -103,146 +114,40 @@ public class RunnerEngine : IRunner
                     RunnerStep.ScriptDiscovered,
                     $"Discovered script {script.ScriptCode}.",
                     profileCode: script.ProfileCode,
-                    scriptCode: script.ScriptCode);
+                    scriptCode: script.ScriptCode,
+                    cancellationToken: cancellationToken);
             }
 
             if (scripts.Length == 0)
             {
-                await EmitAsync(writer, request, RunnerStep.Completed, "No scripts found for selected profiles.");
+                await EmitAsync(
+                    writer,
+                    request,
+                    RunnerStep.Completed,
+                    "No scripts found for selected profiles.",
+                    cancellationToken: cancellationToken);
                 return;
             }
 
-            var blockOptions = new ExecutionDataflowBlockOptions
+            var parallelOptions = new ParallelOptions
             {
                 CancellationToken = cancellationToken,
-                BoundedCapacity = _options.DataflowBoundedCapacity,
                 MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism
             };
 
-            var queryBlock = new TransformBlock<ScriptDefinition, ScriptRows>(async script =>
+            await Parallel.ForEachAsync(scripts, parallelOptions, async (script, token) =>
             {
-                await EmitAsync(
-                    writer,
-                    request,
-                    RunnerStep.QueryStarted,
-                    $"Running query for script {script.ScriptCode}.",
-                    profileCode: script.ProfileCode,
-                    scriptCode: script.ScriptCode);
+                await ProcessScriptAsync(request, script, runOutputDirectory, writer, token);
+            });
 
-                var queryStopwatch = Stopwatch.StartNew();
-                var rows = new List<DatabaseRow>();
-                await foreach (var row in _databaseClient.ExecuteScriptAsync(script, cancellationToken))
-                {
-                    rows.Add(row);
-                }
-                queryStopwatch.Stop();
-
-                await EmitAsync(
-                    writer,
-                    request,
-                    RunnerStep.QueryCompleted,
-                    $"Query finished for script {script.ScriptCode}.",
-                    profileCode: script.ProfileCode,
-                    scriptCode: script.ScriptCode,
-                    records: rows.Count);
-                await _diagnosticsSink.WriteMetricAsync(
-                    new RunMetricRecord(
-                        DateTimeOffset.UtcNow,
-                        request.CorrelationId,
-                        RunnerStep.QueryCompleted,
-                        queryStopwatch.ElapsedMilliseconds,
-                        "success",
-                        script.ProfileCode,
-                        script.ScriptCode,
-                        rows.Count,
-                        Details: "Database query execution completed."),
-                    CancellationToken.None);
-
-                return new ScriptRows(script, rows);
-            }, blockOptions);
-
-            var chunkBlock = new TransformBlock<ScriptRows, IReadOnlyList<FileChunk>>(async batch =>
-            {
-                var chunkStopwatch = Stopwatch.StartNew();
-                var chunks = CreateChunks(batch.Script, batch.Rows, _options.ChunkSizeBytes);
-                chunkStopwatch.Stop();
-                foreach (var chunk in chunks)
-                {
-                    await EmitAsync(
-                        writer,
-                        request,
-                        RunnerStep.ChunkCreated,
-                        $"Chunk #{chunk.ChunkNumber} created for {batch.Script.ScriptCode}.",
-                        profileCode: batch.Script.ProfileCode,
-                        scriptCode: batch.Script.ScriptCode,
-                        records: chunk.Rows.Count);
-                }
-                await _diagnosticsSink.WriteMetricAsync(
-                    new RunMetricRecord(
-                        DateTimeOffset.UtcNow,
-                        request.CorrelationId,
-                        RunnerStep.ChunkCreated,
-                        chunkStopwatch.ElapsedMilliseconds,
-                        "success",
-                        batch.Script.ProfileCode,
-                        batch.Script.ScriptCode,
-                        chunks.Sum(static x => x.Rows.Count),
-                        Details: $"Chunks created: {chunks.Count}."),
-                    CancellationToken.None);
-
-                return chunks;
-            }, blockOptions);
-
-            var flattenBlock = new TransformManyBlock<IReadOnlyList<FileChunk>, FileChunk>(chunks => chunks, blockOptions);
-
-            var writeBlock = new ActionBlock<FileChunk>(async chunk =>
-            {
-                var writeStopwatch = Stopwatch.StartNew();
-                var written = await _fileChunkWriter.WriteChunkAsync(chunk, runOutputDirectory, cancellationToken);
-                writeStopwatch.Stop();
-                await EmitAsync(
-                    writer,
-                    request,
-                    RunnerStep.FileWritten,
-                    $"File written: {Path.GetFileName(written.FilePath)}.",
-                    profileCode: written.Script.ProfileCode,
-                    scriptCode: written.Script.ScriptCode,
-                    records: written.RowsCount,
-                    filePath: written.FilePath);
-                await _diagnosticsSink.WriteMetricAsync(
-                    new RunMetricRecord(
-                        DateTimeOffset.UtcNow,
-                        request.CorrelationId,
-                        RunnerStep.FileWritten,
-                        writeStopwatch.ElapsedMilliseconds,
-                        "success",
-                        written.Script.ProfileCode,
-                        written.Script.ScriptCode,
-                        written.RowsCount,
-                        written.FilePath,
-                        "Chunk file written."),
-                    CancellationToken.None);
-            }, blockOptions);
-
-            queryBlock.LinkTo(chunkBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            chunkBlock.LinkTo(flattenBlock, new DataflowLinkOptions { PropagateCompletion = true });
-            flattenBlock.LinkTo(writeBlock, new DataflowLinkOptions { PropagateCompletion = true });
-
-            foreach (var script in scripts)
-            {
-                await queryBlock.SendAsync(script, cancellationToken);
-            }
-
-            queryBlock.Complete();
-            await writeBlock.Completion;
-
+            runStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
-                filePath: runOutputDirectory);
-            runStopwatch.Stop();
+                filePath: runOutputDirectory,
+                cancellationToken: cancellationToken);
             await _diagnosticsSink.WriteMetricAsync(
                 new RunMetricRecord(
                     DateTimeOffset.UtcNow,
@@ -252,12 +157,36 @@ public class RunnerEngine : IRunner
                     "success",
                     FilePath: runOutputDirectory,
                     Details: "Run completed."),
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            runStopwatch.Stop();
+            await EmitAsync(
+                writer,
+                request,
+                RunnerStep.Failed,
+                "Run was cancelled.",
+                cancellationToken: CancellationToken.None);
+            await _diagnosticsSink.WriteMetricAsync(
+                new RunMetricRecord(
+                    DateTimeOffset.UtcNow,
+                    request.CorrelationId,
+                    RunnerStep.Failed,
+                    runStopwatch.ElapsedMilliseconds,
+                    "cancelled",
+                    Details: "Run cancelled by cancellation token."),
                 CancellationToken.None);
         }
         catch (Exception ex)
         {
-            await EmitAsync(writer, request, RunnerStep.Failed, ex.Message);
             runStopwatch.Stop();
+            await EmitAsync(
+                writer,
+                request,
+                RunnerStep.Failed,
+                ex.Message,
+                cancellationToken: CancellationToken.None);
             await _diagnosticsSink.WriteMetricAsync(
                 new RunMetricRecord(
                     DateTimeOffset.UtcNow,
@@ -270,6 +199,156 @@ public class RunnerEngine : IRunner
         }
     }
 
+    private async Task ProcessScriptAsync(
+        RunRequest request,
+        ScriptDefinition script,
+        string runOutputDirectory,
+        ChannelWriter<RunnerEvent> writer,
+        CancellationToken cancellationToken)
+    {
+        await EmitAsync(
+            writer,
+            request,
+            RunnerStep.QueryStarted,
+            $"Running query for script {script.ScriptCode}.",
+            profileCode: script.ProfileCode,
+            scriptCode: script.ScriptCode,
+            cancellationToken: cancellationToken);
+
+        var queryStopwatch = Stopwatch.StartNew();
+        await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
+        var columns = GetColumns(reader);
+
+        if (columns.Count == 0)
+        {
+            throw new InvalidOperationException($"Query for script '{script.ScriptCode}' returned no columns.");
+        }
+
+        var rowsRead = 0;
+        var chunkNumber = 1;
+        var currentRows = new List<DatabaseRow>();
+        var headerLine = PipeDelimitedFormatter.BuildHeaderLine(columns);
+        var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
+        var currentSize = headerSize;
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var row = ReadRow(reader, columns);
+            var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
+            var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
+            if (rowSize + headerSize > _options.ChunkSizeBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Single row size {rowSize} bytes exceeds chunk size {_options.ChunkSizeBytes} bytes.");
+            }
+
+            if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+            {
+                await FlushChunkAsync(
+                    request,
+                    script,
+                    runOutputDirectory,
+                    writer,
+                    chunkNumber,
+                    currentRows,
+                    currentSize,
+                    cancellationToken);
+                chunkNumber++;
+                currentRows = [];
+                currentSize = headerSize;
+            }
+
+            currentRows.Add(row);
+            currentSize += rowSize;
+            rowsRead++;
+        }
+
+        queryStopwatch.Stop();
+        await EmitAsync(
+            writer,
+            request,
+            RunnerStep.QueryCompleted,
+            $"Query finished for script {script.ScriptCode}.",
+            profileCode: script.ProfileCode,
+            scriptCode: script.ScriptCode,
+            records: rowsRead,
+            cancellationToken: cancellationToken);
+        await _diagnosticsSink.WriteMetricAsync(
+            new RunMetricRecord(
+                DateTimeOffset.UtcNow,
+                request.CorrelationId,
+                RunnerStep.QueryCompleted,
+                queryStopwatch.ElapsedMilliseconds,
+                "success",
+                script.ProfileCode,
+                script.ScriptCode,
+                rowsRead,
+                Details: "Database query execution completed."),
+            cancellationToken);
+
+        if (currentRows.Count > 0)
+        {
+            await FlushChunkAsync(
+                request,
+                script,
+                runOutputDirectory,
+                writer,
+                chunkNumber,
+                currentRows,
+                currentSize,
+                cancellationToken);
+        }
+    }
+
+    private async Task FlushChunkAsync(
+        RunRequest request,
+        ScriptDefinition script,
+        string runOutputDirectory,
+        ChannelWriter<RunnerEvent> writer,
+        int chunkNumber,
+        IReadOnlyList<DatabaseRow> rows,
+        int byteSize,
+        CancellationToken cancellationToken)
+    {
+        var chunk = new FileChunk(script, chunkNumber, rows.ToArray(), byteSize);
+        await EmitAsync(
+            writer,
+            request,
+            RunnerStep.ChunkCreated,
+            $"Chunk #{chunk.ChunkNumber} created for {script.ScriptCode}.",
+            profileCode: script.ProfileCode,
+            scriptCode: script.ScriptCode,
+            records: chunk.Rows.Count,
+            cancellationToken: cancellationToken);
+
+        var writeStopwatch = Stopwatch.StartNew();
+        var written = await _fileChunkWriter.WriteChunkAsync(chunk, runOutputDirectory, cancellationToken);
+        writeStopwatch.Stop();
+        await EmitAsync(
+            writer,
+            request,
+            RunnerStep.FileWritten,
+            $"File written: {Path.GetFileName(written.FilePath)}.",
+            profileCode: script.ProfileCode,
+            scriptCode: script.ScriptCode,
+            records: written.RowsCount,
+            filePath: written.FilePath,
+            cancellationToken: cancellationToken);
+        await _diagnosticsSink.WriteMetricAsync(
+            new RunMetricRecord(
+                DateTimeOffset.UtcNow,
+                request.CorrelationId,
+                RunnerStep.FileWritten,
+                writeStopwatch.ElapsedMilliseconds,
+                "success",
+                script.ProfileCode,
+                script.ScriptCode,
+                written.RowsCount,
+                written.FilePath,
+                "Chunk file written."),
+            cancellationToken);
+    }
+
     private async Task EmitAsync(
         ChannelWriter<RunnerEvent> writer,
         RunRequest request,
@@ -278,7 +357,8 @@ public class RunnerEngine : IRunner
         string? profileCode = null,
         string? scriptCode = null,
         int? records = null,
-        string? filePath = null)
+        string? filePath = null,
+        CancellationToken cancellationToken = default)
     {
         var @event = new RunnerEvent(
             DateTimeOffset.UtcNow,
@@ -290,58 +370,39 @@ public class RunnerEngine : IRunner
             records,
             filePath);
 
-        await _diagnosticsSink.WriteEventAsync(@event, CancellationToken.None);
-        await _mqPublisher.PublishAsync(@event, CancellationToken.None);
-        await writer.WriteAsync(@event, CancellationToken.None);
+        await _diagnosticsSink.WriteEventAsync(@event, cancellationToken);
+        await _mqPublisher.PublishAsync(@event, cancellationToken);
+        await writer.WriteAsync(@event, cancellationToken);
     }
 
-    private static IReadOnlyList<FileChunk> CreateChunks(
-        ScriptDefinition script,
-        IReadOnlyList<DatabaseRow> rows,
-        int chunkSizeBytes)
+    private static List<string> GetColumns(DbDataReader reader)
     {
-        if (chunkSizeBytes <= 0)
+        var columns = new List<string>(reader.FieldCount);
+        for (var i = 0; i < reader.FieldCount; i++)
         {
-            throw new InvalidOperationException("Chunk size must be greater than zero.");
+            columns.Add(reader.GetName(i));
         }
 
-        var chunks = new List<FileChunk>();
-        var currentRows = new List<DatabaseRow>();
-        var columns = PipeDelimitedFormatter.GetOrderedColumns(rows);
-        var headerLine = PipeDelimitedFormatter.BuildHeaderLine(columns);
-        var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
-        var currentSize = headerSize;
-        var chunkNumber = 1;
+        return columns;
+    }
 
-        foreach (var row in rows)
+    private static DatabaseRow ReadRow(DbDataReader reader, IReadOnlyList<string> columns)
+    {
+        var values = new Dictionary<string, object?>(columns.Count, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < columns.Count; i++)
         {
-            var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
-            var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
-
-            if (rowSize + headerSize > chunkSizeBytes)
-            {
-                throw new InvalidOperationException(
-                    $"Single row size {rowSize} bytes exceeds chunk size {chunkSizeBytes} bytes.");
-            }
-
-            if (currentRows.Count > 0 && currentSize + rowSize > chunkSizeBytes)
-            {
-                chunks.Add(new FileChunk(script, chunkNumber, currentRows.ToArray(), currentSize));
-                chunkNumber++;
-                currentRows = [];
-                currentSize = headerSize;
-            }
-
-            currentRows.Add(row);
-            currentSize += rowSize;
+            values[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
         }
 
-        if (currentRows.Count > 0)
-        {
-            chunks.Add(new FileChunk(script, chunkNumber, currentRows.ToArray(), currentSize));
-        }
+        return new DatabaseRow(values);
+    }
 
-        return chunks;
+    private void ValidateDatabaseConnectivity()
+    {
+        if (!_databaseClient.IsConnected)
+        {
+            throw new InvalidOperationException("Database connection is not available.");
+        }
     }
 
     private static void ValidateRequest(RunRequest request)
@@ -356,8 +417,4 @@ public class RunnerEngine : IRunner
             throw new InvalidOperationException("At least one profile code is required.");
         }
     }
-
-    private record ScriptRows(
-        ScriptDefinition Script,
-        IReadOnlyList<DatabaseRow> Rows);
 }

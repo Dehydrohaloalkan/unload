@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 
 namespace Unload.Api;
@@ -9,22 +8,19 @@ public class RunOrchestrator : IRunOrchestrator
     private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 
     private readonly IRunRequestFactory _requestFactory;
-    private readonly IRunner _runner;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<RunOrchestrator> _logger;
+    private readonly IRunQueue _runQueue;
+    private readonly IRunStateStore _runStateStore;
     private readonly string _outputDirectory;
 
     public RunOrchestrator(
         IRunRequestFactory requestFactory,
-        IRunner runner,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<RunOrchestrator> logger,
+        IRunQueue runQueue,
+        IRunStateStore runStateStore,
         string outputDirectory)
     {
         _requestFactory = requestFactory;
-        _runner = runner;
-        _hubContext = hubContext;
-        _logger = logger;
+        _runQueue = runQueue;
+        _runStateStore = runStateStore;
         _outputDirectory = Path.GetFullPath(outputDirectory);
     }
 
@@ -32,29 +28,11 @@ public class RunOrchestrator : IRunOrchestrator
     {
         var normalizedCodes = NormalizeProfileCodes(profileCodes);
         var request = _requestFactory.Create(normalizedCodes, _outputDirectory);
-
-        _ = Task.Run(async () =>
+        _runStateStore.SetQueued(request.CorrelationId, normalizedCodes);
+        if (!_runQueue.TryEnqueue(request))
         {
-            try
-            {
-                await foreach (var @event in _runner.RunAsync(request, CancellationToken.None))
-                {
-                    _logger.LogInformation(
-                        "Run {CorrelationId}: {Step} {Message}",
-                        @event.CorrelationId,
-                        @event.Step,
-                        @event.Message);
-
-                    await _hubContext.Clients
-                        .Group(request.CorrelationId)
-                        .SendAsync("status", @event, CancellationToken.None);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Run '{CorrelationId}' failed in orchestrator.", request.CorrelationId);
-            }
-        });
+            throw new InvalidOperationException("Run queue is full. Please retry later.");
+        }
 
         return request.CorrelationId;
     }

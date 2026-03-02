@@ -29,12 +29,14 @@ builder.Services.AddSingleton(new RunnerOptions(
     DataflowBoundedCapacity: 8));
 builder.Services.AddSingleton<IRunner, RunnerEngine>();
 builder.Services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
+builder.Services.AddSingleton<IRunQueue, InMemoryRunQueue>();
+builder.Services.AddSingleton<IRunStateStore, InMemoryRunStateStore>();
 builder.Services.AddSingleton<IRunOrchestrator>(_ => new RunOrchestrator(
     _.GetRequiredService<IRunRequestFactory>(),
-    _.GetRequiredService<IRunner>(),
-    _.GetRequiredService<IHubContext<RunStatusHub>>(),
-    _.GetRequiredService<ILogger<RunOrchestrator>>(),
+    _.GetRequiredService<IRunQueue>(),
+    _.GetRequiredService<IRunStateStore>(),
     outputDirectory));
+builder.Services.AddHostedService<RunProcessingBackgroundService>();
 
 var app = builder.Build();
 
@@ -44,12 +46,31 @@ app.MapGet("/api/catalog", async (ICatalogService catalogService, CancellationTo
     return Results.Ok(catalog);
 });
 
-app.MapPost("/api/runs", (RunStartRequest request, IRunOrchestrator orchestrator) =>
+app.MapPost("/api/runs", async (
+    RunStartRequest request,
+    IRunOrchestrator orchestrator,
+    IRunStateStore runStateStore,
+    IHubContext<RunStatusHub> hubContext,
+    CancellationToken cancellationToken) =>
 {
     var correlationId = orchestrator.StartRun(request.ProfileCodes);
+    var runState = runStateStore.Get(correlationId);
+    if (runState is not null)
+    {
+        await hubContext.Clients.All.SendAsync("run_status", runState, cancellationToken);
+    }
+
     return Results.Accepted(
         $"/api/runs/{correlationId}",
-        new RunAcceptedResponse(correlationId, "/hubs/status", "SubscribeRun", "status"));
+        new RunAcceptedResponse(correlationId, $"/api/runs/{correlationId}", "/hubs/status", "SubscribeRun", "status", "run_status"));
+});
+
+app.MapGet("/api/runs", (IRunStateStore runStateStore) => Results.Ok(runStateStore.List()));
+
+app.MapGet("/api/runs/{correlationId}", (string correlationId, IRunStateStore runStateStore) =>
+{
+    var run = runStateStore.Get(correlationId);
+    return run is null ? Results.NotFound() : Results.Ok(run);
 });
 
 app.MapHub<RunStatusHub>("/hubs/status");
