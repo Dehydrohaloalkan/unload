@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks.Dataflow;
@@ -11,6 +12,7 @@ public class RunnerEngine : IRunner
     private readonly IDatabaseClient _databaseClient;
     private readonly IFileChunkWriter _fileChunkWriter;
     private readonly IMqPublisher _mqPublisher;
+    private readonly IRunDiagnosticsSink _diagnosticsSink;
     private readonly IRequestHasher _requestHasher;
     private readonly RunnerOptions _options;
 
@@ -19,6 +21,7 @@ public class RunnerEngine : IRunner
         IDatabaseClient databaseClient,
         IFileChunkWriter fileChunkWriter,
         IMqPublisher mqPublisher,
+        IRunDiagnosticsSink diagnosticsSink,
         IRequestHasher requestHasher,
         RunnerOptions options)
     {
@@ -26,6 +29,7 @@ public class RunnerEngine : IRunner
         _databaseClient = databaseClient;
         _fileChunkWriter = fileChunkWriter;
         _mqPublisher = mqPublisher;
+        _diagnosticsSink = diagnosticsSink;
         _requestHasher = requestHasher;
         _options = options;
     }
@@ -54,6 +58,7 @@ public class RunnerEngine : IRunner
         ChannelWriter<RunnerEvent> writer,
         CancellationToken cancellationToken)
     {
+        var runStopwatch = Stopwatch.StartNew();
         try
         {
             ValidateRequest(request);
@@ -64,13 +69,25 @@ public class RunnerEngine : IRunner
 
             await EmitAsync(writer, request, RunnerStep.RequestAccepted, "Run request accepted.");
 
+            var resolveStopwatch = Stopwatch.StartNew();
             var resolvedProfiles = await _catalogService.ResolveAsync(request.ProfileCodes, cancellationToken);
+            resolveStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
                 RunnerStep.ProfilesResolved,
                 $"Profiles resolved: {resolvedProfiles.Count}.",
                 records: resolvedProfiles.Count);
+            await _diagnosticsSink.WriteMetricAsync(
+                new RunMetricRecord(
+                    DateTimeOffset.UtcNow,
+                    request.CorrelationId,
+                    RunnerStep.ProfilesResolved,
+                    resolveStopwatch.ElapsedMilliseconds,
+                    "success",
+                    Records: resolvedProfiles.Count,
+                    Details: "Catalog profiles resolved."),
+                CancellationToken.None);
 
             var scripts = resolvedProfiles
                 .SelectMany(static x => x.Value)
@@ -112,11 +129,13 @@ public class RunnerEngine : IRunner
                     profileCode: script.ProfileCode,
                     scriptCode: script.ScriptCode);
 
+                var queryStopwatch = Stopwatch.StartNew();
                 var rows = new List<DatabaseRow>();
                 await foreach (var row in _databaseClient.ExecuteScriptAsync(script, cancellationToken))
                 {
                     rows.Add(row);
                 }
+                queryStopwatch.Stop();
 
                 await EmitAsync(
                     writer,
@@ -126,13 +145,27 @@ public class RunnerEngine : IRunner
                     profileCode: script.ProfileCode,
                     scriptCode: script.ScriptCode,
                     records: rows.Count);
+                await _diagnosticsSink.WriteMetricAsync(
+                    new RunMetricRecord(
+                        DateTimeOffset.UtcNow,
+                        request.CorrelationId,
+                        RunnerStep.QueryCompleted,
+                        queryStopwatch.ElapsedMilliseconds,
+                        "success",
+                        script.ProfileCode,
+                        script.ScriptCode,
+                        rows.Count,
+                        Details: "Database query execution completed."),
+                    CancellationToken.None);
 
                 return new ScriptRows(script, rows);
             }, blockOptions);
 
             var chunkBlock = new TransformBlock<ScriptRows, IReadOnlyList<FileChunk>>(async batch =>
             {
+                var chunkStopwatch = Stopwatch.StartNew();
                 var chunks = CreateChunks(batch.Script, batch.Rows, _options.ChunkSizeBytes);
+                chunkStopwatch.Stop();
                 foreach (var chunk in chunks)
                 {
                     await EmitAsync(
@@ -144,6 +177,18 @@ public class RunnerEngine : IRunner
                         scriptCode: batch.Script.ScriptCode,
                         records: chunk.Rows.Count);
                 }
+                await _diagnosticsSink.WriteMetricAsync(
+                    new RunMetricRecord(
+                        DateTimeOffset.UtcNow,
+                        request.CorrelationId,
+                        RunnerStep.ChunkCreated,
+                        chunkStopwatch.ElapsedMilliseconds,
+                        "success",
+                        batch.Script.ProfileCode,
+                        batch.Script.ScriptCode,
+                        chunks.Sum(static x => x.Rows.Count),
+                        Details: $"Chunks created: {chunks.Count}."),
+                    CancellationToken.None);
 
                 return chunks;
             }, blockOptions);
@@ -152,7 +197,9 @@ public class RunnerEngine : IRunner
 
             var writeBlock = new ActionBlock<FileChunk>(async chunk =>
             {
+                var writeStopwatch = Stopwatch.StartNew();
                 var written = await _fileChunkWriter.WriteChunkAsync(chunk, runOutputDirectory, cancellationToken);
+                writeStopwatch.Stop();
                 await EmitAsync(
                     writer,
                     request,
@@ -162,6 +209,19 @@ public class RunnerEngine : IRunner
                     scriptCode: written.Script.ScriptCode,
                     records: written.RowsCount,
                     filePath: written.FilePath);
+                await _diagnosticsSink.WriteMetricAsync(
+                    new RunMetricRecord(
+                        DateTimeOffset.UtcNow,
+                        request.CorrelationId,
+                        RunnerStep.FileWritten,
+                        writeStopwatch.ElapsedMilliseconds,
+                        "success",
+                        written.Script.ProfileCode,
+                        written.Script.ScriptCode,
+                        written.RowsCount,
+                        written.FilePath,
+                        "Chunk file written."),
+                    CancellationToken.None);
             }, blockOptions);
 
             queryBlock.LinkTo(chunkBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -182,10 +242,31 @@ public class RunnerEngine : IRunner
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
                 filePath: runOutputDirectory);
+            runStopwatch.Stop();
+            await _diagnosticsSink.WriteMetricAsync(
+                new RunMetricRecord(
+                    DateTimeOffset.UtcNow,
+                    request.CorrelationId,
+                    RunnerStep.Completed,
+                    runStopwatch.ElapsedMilliseconds,
+                    "success",
+                    FilePath: runOutputDirectory,
+                    Details: "Run completed."),
+                CancellationToken.None);
         }
         catch (Exception ex)
         {
             await EmitAsync(writer, request, RunnerStep.Failed, ex.Message);
+            runStopwatch.Stop();
+            await _diagnosticsSink.WriteMetricAsync(
+                new RunMetricRecord(
+                    DateTimeOffset.UtcNow,
+                    request.CorrelationId,
+                    RunnerStep.Failed,
+                    runStopwatch.ElapsedMilliseconds,
+                    "error",
+                    Details: ex.Message),
+                CancellationToken.None);
         }
     }
 
@@ -209,6 +290,7 @@ public class RunnerEngine : IRunner
             records,
             filePath);
 
+        await _diagnosticsSink.WriteEventAsync(@event, CancellationToken.None);
         await _mqPublisher.PublishAsync(@event, CancellationToken.None);
         await writer.WriteAsync(@event, CancellationToken.None);
     }

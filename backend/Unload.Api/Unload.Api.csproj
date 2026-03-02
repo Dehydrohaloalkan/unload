@@ -1,7 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <ProjectReference Include="..\Unload.Catalog\Unload.Catalog.csproj" />
     <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
+    <ProjectReference Include="..\Unload.Cryptography\Unload.Cryptography.csproj" />
+    <ProjectReference Include="..\Unload.DataBase\Unload.DataBase.csproj" />
+    <ProjectReference Include="..\Unload.FileWriter\Unload.FileWriter.csproj" />
+    <ProjectReference Include="..\Unload.MQ\Unload.MQ.csproj" />
     <ProjectReference Include="..\Unload.Runner\Unload.Runner.csproj" />
   </ItemGroup>
 

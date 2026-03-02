@@ -14,6 +14,7 @@ var root = ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
 var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
+var diagnosticsDirectory = ResolveDiagnosticsDirectory(root);
 
 var profileCodes = args.Length == 0
     ? await PromptProfileCodesAsync(catalogPath, CancellationToken.None)
@@ -26,6 +27,7 @@ services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(catalogPath, 
 services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
 services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
 services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
+services.AddSingleton<IRunDiagnosticsSink>(_ => new CsvRunDiagnosticsSink(diagnosticsDirectory));
 services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
 services.AddSingleton(new RunnerOptions(
     ChunkSizeBytes: 10 * 1024 * 1024,
@@ -42,6 +44,7 @@ AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJu
 AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
 AnsiConsole.MarkupLine($"[grey]Scripts:[/] {Markup.Escape(scriptsDirectory)}");
 AnsiConsole.MarkupLine($"[grey]Profiles:[/] {Markup.Escape(string.Join(", ", profileCodes))}");
+AnsiConsole.MarkupLine($"[grey]Diagnostics:[/] {Markup.Escape(diagnosticsDirectory)}");
 AnsiConsole.MarkupLine(string.Empty);
 
 var request = requestFactory.Create(profileCodes, outputDirectory);
@@ -105,21 +108,27 @@ static async Task<string[]> PromptProfileCodesAsync(string catalogPath, Cancella
 
     foreach (var group in groups)
     {
-        if (group.ProfileCodes.Count == 0)
+        if (group.Profiles.Count == 0)
         {
             continue;
         }
+
+        var labelsToCodes = group.Profiles
+            .ToDictionary(
+                static x => $"{x.MemberName} [{x.MemberCode}] ({x.ProfileCode})",
+                static x => x.ProfileCode,
+                StringComparer.OrdinalIgnoreCase);
 
         var selectedInGroup = AnsiConsole.Prompt(
             new MultiSelectionPrompt<string>()
                 .Title($"[yellow]{Markup.Escape(group.GroupName)}[/] - выбери профили")
                 .NotRequired()
                 .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
-                .AddChoices(group.ProfileCodes));
+                .AddChoices(labelsToCodes.Keys));
 
-        foreach (var profileCode in selectedInGroup)
+        foreach (var label in selectedInGroup)
         {
-            selectedProfiles.Add(profileCode);
+            selectedProfiles.Add(labelsToCodes[label]);
         }
     }
 
@@ -129,4 +138,12 @@ static async Task<string[]> PromptProfileCodesAsync(string catalogPath, Cancella
     }
 
     return selectedProfiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+}
+
+static string ResolveDiagnosticsDirectory(string root)
+{
+    var configured = Environment.GetEnvironmentVariable("UNLOAD_DIAGNOSTICS_DIR");
+    return string.IsNullOrWhiteSpace(configured)
+        ? Path.Combine(root, "observability")
+        : Path.GetFullPath(configured);
 }
