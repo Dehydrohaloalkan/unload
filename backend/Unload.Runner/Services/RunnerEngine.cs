@@ -206,6 +206,7 @@ public class RunnerEngine : IRunner
         ChannelWriter<RunnerEvent> writer,
         CancellationToken cancellationToken)
     {
+        var scriptStopwatch = Stopwatch.StartNew();
         await EmitAsync(
             writer,
             request,
@@ -298,6 +299,20 @@ public class RunnerEngine : IRunner
                 currentSize,
                 cancellationToken);
         }
+
+        scriptStopwatch.Stop();
+        await _diagnosticsSink.WriteMetricAsync(
+            new RunMetricRecord(
+                DateTimeOffset.UtcNow,
+                request.CorrelationId,
+                RunnerStep.ScriptCompleted,
+                scriptStopwatch.ElapsedMilliseconds,
+                "success",
+                script.ProfileCode,
+                script.ScriptCode,
+                rowsRead,
+                Details: "Script export completed (query + chunk writing)."),
+            cancellationToken);
     }
 
     private async Task FlushChunkAsync(

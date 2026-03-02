@@ -1,12 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api;
-using Unload.Catalog;
+using Unload.Application;
 using Unload.Core;
-using Unload.Cryptography;
-using Unload.DataBase;
-using Unload.FileWriter;
-using Unload.MQ;
-using Unload.Runner;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,25 +12,11 @@ var outputDirectory = Path.Combine(root, "output");
 var diagnosticsDirectory = ResolveDiagnosticsDirectory(root);
 
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(catalogPath, scriptsDirectory));
-builder.Services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
-builder.Services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
-builder.Services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
-builder.Services.AddSingleton<IRunDiagnosticsSink>(_ => new CsvRunDiagnosticsSink(diagnosticsDirectory));
-builder.Services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-builder.Services.AddSingleton(new RunnerOptions(
-    ChunkSizeBytes: 10 * 1024 * 1024,
-    MaxDegreeOfParallelism: Math.Max(Environment.ProcessorCount / 2, 1),
-    DataflowBoundedCapacity: 8));
-builder.Services.AddSingleton<IRunner, RunnerEngine>();
-builder.Services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
-builder.Services.AddSingleton<IRunQueue, InMemoryRunQueue>();
-builder.Services.AddSingleton<IRunStateStore, InMemoryRunStateStore>();
-builder.Services.AddSingleton<IRunOrchestrator>(_ => new RunOrchestrator(
-    _.GetRequiredService<IRunRequestFactory>(),
-    _.GetRequiredService<IRunQueue>(),
-    _.GetRequiredService<IRunStateStore>(),
-    outputDirectory));
+builder.Services.AddUnloadRuntime(new UnloadRuntimePaths(
+    CatalogPath: catalogPath,
+    ScriptsDirectory: scriptsDirectory,
+    OutputDirectory: outputDirectory,
+    DiagnosticsDirectory: diagnosticsDirectory));
 builder.Services.AddHostedService<RunProcessingBackgroundService>();
 
 var app = builder.Build();

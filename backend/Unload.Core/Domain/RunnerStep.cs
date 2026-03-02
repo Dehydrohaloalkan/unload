@@ -9,6 +9,7 @@ public enum RunnerStep
     QueryCompleted,
     ChunkCreated,
     FileWritten,
+    ScriptCompleted,
     PublishedToMq,
     Completed,
     Failed

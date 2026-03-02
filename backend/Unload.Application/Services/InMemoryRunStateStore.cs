@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Unload.Core;
 
-namespace Unload.Api;
+namespace Unload.Application;
 
 public class InMemoryRunStateStore : IRunStateStore
 {

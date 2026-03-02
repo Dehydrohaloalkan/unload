@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\backend\Unload.Runner\Unload.Runner.csproj" />
-    <ProjectReference Include="..\..\backend\Unload.Api\Unload.Api.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.Application\Unload.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

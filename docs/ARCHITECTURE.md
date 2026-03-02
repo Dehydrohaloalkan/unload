@@ -38,8 +38,15 @@
   - После каждого шага создается `RunnerEvent`.
   - Диагностика: пишет полный лог событий и метрики длительности шагов в CSV через `IRunDiagnosticsSink`.
 
+- `backend/Unload.Application`
+  - Application-слой use-case запуска выгрузки.
+  - Контракты и реализации orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunQueue`, `IRunStateStore`.
+  - In-memory реализации очереди и store статусов, общий `RunStatusInfo`.
+  - Общая DI-композиция через `AddUnloadRuntime(UnloadRuntimePaths)` для API и Console.
+
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
+  - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, профили).
   - `POST /api/runs` — ставит запуск в очередь и возвращает `correlationId`.
   - `GET /api/runs` — список запусков и их статусы.
@@ -53,23 +60,78 @@
 - `console/Unload.Console`
   - Точка входа.
   - DI через `Microsoft.Extensions.DependencyInjection`.
+  - Переиспользует тот же runtime/use-case слой (`Unload.Application`), что и API.
   - Отображение событий в терминале через `Spectre.Console`.
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
   - Если профили не переданы аргументами, интерактивно показывает профили по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
 
+## Module diagram
+
+```mermaid
+flowchart LR
+    Console["console/Unload.Console"] --> App["backend/Unload.Application"]
+    Api["backend/Unload.Api"] --> App
+
+    App --> Core["backend/Unload.Core"]
+    App --> Runner["backend/Unload.Runner"]
+    App --> Catalog["backend/Unload.Catalog"]
+    App --> Db["backend/Unload.DataBase"]
+    App --> Writer["backend/Unload.FileWriter"]
+    App --> Mq["backend/Unload.MQ"]
+    App --> Crypto["backend/Unload.Cryptography"]
+
+    Runner --> Core
+    Catalog --> Core
+    Db --> Core
+    Writer --> Core
+    Mq --> Core
+    Crypto --> Core
+```
+
 ## Execution flow
 
-1. Консоль или API формирует `RunRequest` из профилей.
-2. `RunnerEngine` эмитит `RequestAccepted`.
-3. `JsonCatalogService` возвращает скрипты для выбранных профилей.
-4. Worker извлекает задачу из очереди и запускает `RunnerEngine`.
-5. Для каждого скрипта:
+1. Консоль или API вызывает `IRunOrchestrator` из `Unload.Application` для постановки запуска в очередь.
+2. `IRunOrchestrator` валидирует профили, формирует `RunRequest` и сохраняет начальный статус.
+3. `RunProcessingBackgroundService` в API извлекает задачу из очереди и запускает `RunnerEngine`.
+4. `RunnerEngine` эмитит `RequestAccepted`.
+5. `JsonCatalogService` возвращает скрипты для выбранных профилей.
+6. Для каждого скрипта:
    - получить `DbDataReader` из БД;
    - читать строки потоково;
    - собирать текущий чанк до лимита размера;
    - записывать чанк в файл и продолжать чтение.
-6. На каждом шаге публикуется событие в MQ-заглушку, сохраняется диагностика и обновляется статус запуска.
-7. В конце эмитится `Completed` или `Failed`.
+7. На каждом шаге публикуется событие в MQ-заглушку, сохраняется диагностика и обновляется статус запуска.
+8. В конце эмитится `Completed` или `Failed`.
+
+## Run sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant Client as Console/API Client
+    participant Transport as API/Console Transport
+    participant App as Unload.Application
+    participant Queue as IRunQueue
+    participant Worker as BackgroundService
+    participant Runner as RunnerEngine
+    participant Infra as Catalog/DB/FileWriter/MQ
+    participant State as IRunStateStore
+    participant SignalR as RunStatusHub
+
+    Client->>Transport: start run(profileCodes)
+    Transport->>App: IRunOrchestrator.StartRun(...)
+    App->>App: normalize + validate profile codes
+    App->>Queue: TryEnqueue(RunRequest)
+    App->>State: SetQueued(...)
+    Transport-->>Client: correlationId
+
+    Worker->>Queue: DequeueAllAsync()
+    Worker->>State: SetRunning(correlationId)
+    Worker->>Runner: RunAsync(request)
+    Runner->>Infra: catalog/db/file/mq operations
+    Runner-->>Worker: RunnerEvent stream
+    Worker->>State: ApplyEvent(event)
+    Worker->>SignalR: status + run_status
+```
 
 ## Observability
 
@@ -78,6 +140,8 @@
 - Для каждого запуска (`correlationId`) создается отдельная папка:
   - `events.csv`: полный лог событий (`RunnerEvent`).
   - `metrics.csv`: длительность шагов (`duration_ms`) и итог (`outcome`).
+  - Для сравнения длительности скриптов используется строка с `step=ScriptCompleted`:
+    - `profile_code` + `script_code` + `duration_ms` показывают полное время выгрузки скрипта (query + запись чанков).
 - Формат CSV безопасно экранируется, чтобы избежать CSV formula injection при открытии в табличных редакторах.
 
 ## API run

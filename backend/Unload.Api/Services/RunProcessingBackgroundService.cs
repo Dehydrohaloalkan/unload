@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Application;
 using Unload.Core;
 
 namespace Unload.Api;

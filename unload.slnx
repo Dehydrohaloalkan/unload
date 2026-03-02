@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/backend/">
     <Project Path="backend/Unload.Api/Unload.Api.csproj" />
+    <Project Path="backend/Unload.Application/Unload.Application.csproj" />
     <Project Path="backend/Unload.Catalog/Unload.Catalog.csproj" />
     <Project Path="backend/Unload.Core/Unload.Core.csproj" />
     <Project Path="backend/Unload.Cryptography/Unload.Cryptography.csproj" />

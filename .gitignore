@@ -5,6 +5,7 @@ out/
 
 # Unload output
 output/
+observability/
 
 # IDE
 .vs/

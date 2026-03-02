@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using Unload.Core;
 
-namespace Unload.Api;
+namespace Unload.Application;
 
 public class InMemoryRunQueue : IRunQueue
 {

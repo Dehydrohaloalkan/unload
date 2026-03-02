@@ -1,14 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Unload.Console.CatalogSelection;
-using Unload.Api;
-using Unload.Catalog;
+using Unload.Application;
 using Unload.Core;
-using Unload.Cryptography;
-using Unload.DataBase;
-using Unload.FileWriter;
-using Unload.MQ;
-using Unload.Runner;
 
 var root = ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
@@ -23,18 +17,11 @@ var profileCodes = args.Length == 0
         .ToArray();
 
 var services = new ServiceCollection();
-services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(catalogPath, scriptsDirectory));
-services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
-services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
-services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
-services.AddSingleton<IRunDiagnosticsSink>(_ => new CsvRunDiagnosticsSink(diagnosticsDirectory));
-services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-services.AddSingleton(new RunnerOptions(
-    ChunkSizeBytes: 10 * 1024 * 1024,
-    MaxDegreeOfParallelism: Math.Max(Environment.ProcessorCount / 2, 1),
-    DataflowBoundedCapacity: 8));
-services.AddSingleton<IRunner, RunnerEngine>();
-services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
+services.AddUnloadRuntime(new UnloadRuntimePaths(
+    CatalogPath: catalogPath,
+    ScriptsDirectory: scriptsDirectory,
+    OutputDirectory: outputDirectory,
+    DiagnosticsDirectory: diagnosticsDirectory));
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var requestFactory = provider.ServiceProvider.GetRequiredService<IRunRequestFactory>();

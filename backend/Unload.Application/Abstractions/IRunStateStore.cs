@@ -1,4 +1,6 @@
-namespace Unload.Api;
+using Unload.Core;
+
+namespace Unload.Application;
 
 public interface IRunStateStore
 {
@@ -6,7 +8,7 @@ public interface IRunStateStore
 
     void SetRunning(string correlationId);
 
-    void ApplyEvent(Unload.Core.RunnerEvent @event);
+    void ApplyEvent(RunnerEvent @event);
 
     void SetFailed(string correlationId, string message);
 
