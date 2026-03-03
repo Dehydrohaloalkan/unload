@@ -13,6 +13,7 @@
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по формату имени `Y<member><group>_<type>_<codes>_<ext>.sql`.
   - Валидирует `group.folder`, `member.code`, `targetCode` и защищает от выхода за границы директории скриптов.
   - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogValidation` (валидации), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
+  - Построение `CatalogInfo` внутри `JsonCatalogService` декомпозировано на небольшие шаги (`BuildMemberGroupCodes`, `BuildTargets`, `BuildGroups`, `BuildMembers`) вместо длинных LINQ-цепочек.
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.

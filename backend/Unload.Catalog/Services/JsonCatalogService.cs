@@ -32,96 +32,12 @@ public class JsonCatalogService : ICatalogService
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
         var groupsById = catalog.Groups.ToDictionary(static x => x.Id);
-        var memberGroupCodes = catalog.Members.ToDictionary(
-            static member => member.Id,
-            member => member.Groups
-                .Distinct()
-                .Select(groupId =>
-                {
-                    if (!groupsById.TryGetValue(groupId, out var group))
-                    {
-                        throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
-                    }
+        var memberGroupCodes = BuildMemberGroupCodes(catalog, groupsById);
+        var targets = BuildTargets(catalog, groupsById);
+        var groups = BuildGroups(catalog);
+        var members = BuildMembers(catalog, memberGroupCodes);
 
-                    CatalogValidation.ValidateGroupCode(group.Code);
-                    return group.Code.Trim().ToUpperInvariant();
-                })
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(static code => code, StringComparer.OrdinalIgnoreCase)
-                .ToArray());
-
-        var targets = catalog.Members
-            .SelectMany(member => member.Groups.Distinct().Select(groupId => (Member: member, GroupId: groupId)))
-            .Select(entry =>
-            {
-                if (!groupsById.TryGetValue(entry.GroupId, out var group))
-                {
-                    throw new InvalidOperationException($"Group '{entry.GroupId}' was not found in catalog.");
-                }
-
-                var member = entry.Member;
-                CatalogValidation.ValidateGroupFolder(group.Folder);
-                CatalogValidation.ValidateGroupCode(group.Code);
-                CatalogValidation.ValidateMemberCode(member.Code);
-                CatalogValidation.ValidateMemberFileExtension(member.File);
-
-                var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
-                var normalizedGroupCode = group.Code.Trim().ToUpperInvariant();
-                var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
-                var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
-
-                return new CatalogTargetInfo(
-                    CatalogScriptPathHelper.BuildTargetCode(normalizedGroupFolder, normalizedMemberCode),
-                    group.Id,
-                    member.Id,
-                    BuildGroupDisplayName(group.Name, normalizedGroupFolder),
-                    normalizedGroupFolder,
-                    normalizedGroupCode,
-                    BuildMemberDisplayName(
-                        member.Name,
-                        normalizedMemberCode,
-                        normalizedFileExtension,
-                        [normalizedGroupCode]),
-                    normalizedMemberCode,
-                    normalizedFileExtension);
-            })
-            .DistinctBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return new CatalogInfo(
-            catalog.Groups
-                .Select(group =>
-                {
-                    CatalogValidation.ValidateGroupFolder(group.Folder);
-                    CatalogValidation.ValidateGroupCode(group.Code);
-                    var normalizedFolder = group.Folder.Trim().ToUpperInvariant();
-                    var normalizedCode = group.Code.Trim().ToUpperInvariant();
-                    return new CatalogGroupInfo(
-                        group.Id,
-                        BuildGroupDisplayName(group.Name, normalizedFolder),
-                        normalizedFolder,
-                        normalizedCode);
-                })
-                .ToArray(),
-            catalog.Members
-                .Select(member =>
-                {
-                    CatalogValidation.ValidateMemberCode(member.Code);
-                    CatalogValidation.ValidateMemberFileExtension(member.File);
-                    var normalizedCode = member.Code.Trim().ToUpperInvariant();
-                    var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
-                    var groupCodes = memberGroupCodes.TryGetValue(member.Id, out var existingCodes)
-                        ? existingCodes
-                        : [];
-                    return new CatalogMemberInfo(
-                        member.Id,
-                        BuildMemberDisplayName(member.Name, normalizedCode, normalizedFileExtension, groupCodes),
-                        normalizedCode,
-                        normalizedFileExtension);
-                })
-                .ToArray(),
-            targets);
+        return new CatalogInfo(groups, members, targets);
     }
 
     /// <summary>
@@ -237,6 +153,147 @@ public class JsonCatalogService : ICatalogService
     private static string BuildGroupDisplayName(string groupName, string groupFolder)
     {
         return $"{groupName} ({groupFolder})";
+    }
+
+    /// <summary>
+    /// Строит справочник кодов групп по каждому участнику каталога.
+    /// </summary>
+    private static Dictionary<int, string[]> BuildMemberGroupCodes(
+        CatalogRoot catalog,
+        IReadOnlyDictionary<int, CatalogGroup> groupsById)
+    {
+        var result = new Dictionary<int, string[]>();
+
+        foreach (var member in catalog.Members)
+        {
+            var uniqueGroupCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var groupId in member.Groups.Distinct())
+            {
+                if (!groupsById.TryGetValue(groupId, out var group))
+                {
+                    throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
+                }
+
+                CatalogValidation.ValidateGroupCode(group.Code);
+                uniqueGroupCodes.Add(group.Code.Trim().ToUpperInvariant());
+            }
+
+            result[member.Id] = uniqueGroupCodes
+                .OrderBy(static code => code, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Вычисляет target-выборки для всех комбинаций участник-группа.
+    /// </summary>
+    private static CatalogTargetInfo[] BuildTargets(
+        CatalogRoot catalog,
+        IReadOnlyDictionary<int, CatalogGroup> groupsById)
+    {
+        var targetsByCode = new Dictionary<string, CatalogTargetInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var member in catalog.Members)
+        {
+            CatalogValidation.ValidateMemberCode(member.Code);
+            CatalogValidation.ValidateMemberFileExtension(member.File);
+
+            var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
+            var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
+
+            foreach (var groupId in member.Groups.Distinct())
+            {
+                if (!groupsById.TryGetValue(groupId, out var group))
+                {
+                    throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
+                }
+
+                CatalogValidation.ValidateGroupFolder(group.Folder);
+                CatalogValidation.ValidateGroupCode(group.Code);
+
+                var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
+                var normalizedGroupCode = group.Code.Trim().ToUpperInvariant();
+                var targetCode = CatalogScriptPathHelper.BuildTargetCode(normalizedGroupFolder, normalizedMemberCode);
+
+                targetsByCode[targetCode] = new CatalogTargetInfo(
+                    targetCode,
+                    group.Id,
+                    member.Id,
+                    BuildGroupDisplayName(group.Name, normalizedGroupFolder),
+                    normalizedGroupFolder,
+                    normalizedGroupCode,
+                    BuildMemberDisplayName(
+                        member.Name,
+                        normalizedMemberCode,
+                        normalizedFileExtension,
+                        [normalizedGroupCode]),
+                    normalizedMemberCode,
+                    normalizedFileExtension);
+            }
+        }
+
+        return targetsByCode.Values
+            .OrderBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Формирует нормализованный список групп каталога.
+    /// </summary>
+    private static CatalogGroupInfo[] BuildGroups(CatalogRoot catalog)
+    {
+        var groups = new CatalogGroupInfo[catalog.Groups.Count];
+
+        for (var i = 0; i < catalog.Groups.Count; i++)
+        {
+            var group = catalog.Groups[i];
+            CatalogValidation.ValidateGroupFolder(group.Folder);
+            CatalogValidation.ValidateGroupCode(group.Code);
+
+            var normalizedFolder = group.Folder.Trim().ToUpperInvariant();
+            var normalizedCode = group.Code.Trim().ToUpperInvariant();
+
+            groups[i] = new CatalogGroupInfo(
+                group.Id,
+                BuildGroupDisplayName(group.Name, normalizedFolder),
+                normalizedFolder,
+                normalizedCode);
+        }
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Формирует нормализованный список участников каталога.
+    /// </summary>
+    private static CatalogMemberInfo[] BuildMembers(
+        CatalogRoot catalog,
+        IReadOnlyDictionary<int, string[]> memberGroupCodes)
+    {
+        var members = new CatalogMemberInfo[catalog.Members.Count];
+
+        for (var i = 0; i < catalog.Members.Count; i++)
+        {
+            var member = catalog.Members[i];
+            CatalogValidation.ValidateMemberCode(member.Code);
+            CatalogValidation.ValidateMemberFileExtension(member.File);
+
+            var normalizedCode = member.Code.Trim().ToUpperInvariant();
+            var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
+            var groupCodes = memberGroupCodes.TryGetValue(member.Id, out var existingCodes)
+                ? existingCodes
+                : [];
+
+            members[i] = new CatalogMemberInfo(
+                member.Id,
+                BuildMemberDisplayName(member.Name, normalizedCode, normalizedFileExtension, groupCodes),
+                normalizedCode,
+                normalizedFileExtension);
+        }
+
+        return members;
     }
 
     private static string BuildMemberDisplayName(
