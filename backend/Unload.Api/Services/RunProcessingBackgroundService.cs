@@ -4,6 +4,10 @@ using Unload.Core;
 
 namespace Unload.Api;
 
+/// <summary>
+/// Фоновый обработчик очереди запусков API.
+/// Используется для запуска раннера, обновления статусов и отправки SignalR-событий клиентам.
+/// </summary>
 public class RunProcessingBackgroundService : BackgroundService
 {
     private readonly IRunQueue _runQueue;
@@ -12,6 +16,14 @@ public class RunProcessingBackgroundService : BackgroundService
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<RunProcessingBackgroundService> _logger;
 
+    /// <summary>
+    /// Создает фоновый обработчик с зависимостями очереди, раннера и SignalR.
+    /// </summary>
+    /// <param name="runQueue">Очередь запросов на выполнение.</param>
+    /// <param name="runStateStore">Хранилище состояний запусков.</param>
+    /// <param name="runner">Движок выполнения выгрузки.</param>
+    /// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
+    /// <param name="logger">Логгер фонового сервиса.</param>
     public RunProcessingBackgroundService(
         IRunQueue runQueue,
         IRunStateStore runStateStore,
@@ -26,6 +38,11 @@ public class RunProcessingBackgroundService : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Основной цикл обработки очереди запусков.
+    /// </summary>
+    /// <param name="stoppingToken">Токен остановки фонового сервиса.</param>
+    /// <returns>Задача жизненного цикла фонового сервиса.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var request in _runQueue.DequeueAllAsync(stoppingToken))
@@ -59,6 +76,12 @@ public class RunProcessingBackgroundService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Публикует агрегированный статус запуска всем подключенным клиентам.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="cancellationToken">Токен отмены отправки.</param>
+    /// <returns>Задача завершения публикации.</returns>
     private async Task PublishRunStateAsync(string correlationId, CancellationToken cancellationToken)
     {
         var state = _runStateStore.Get(correlationId);

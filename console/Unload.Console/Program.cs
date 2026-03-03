@@ -67,6 +67,11 @@ await foreach (var @event in runner.RunAsync(request, cts.Token))
     AnsiConsole.MarkupLine(line);
 }
 
+/// <summary>
+/// Находит корень workspace по наличию <c>configs/catalog.json</c> и директории <c>scripts</c>.
+/// Используется для вычисления runtime-путей консольного приложения.
+/// </summary>
+/// <returns>Абсолютный путь к корню workspace.</returns>
 static string ResolveWorkspaceRoot()
 {
     var current = new DirectoryInfo(Directory.GetCurrentDirectory());
@@ -88,6 +93,13 @@ static string ResolveWorkspaceRoot()
         "Workspace root not found. Expected folders: 'configs' with 'catalog.json' and 'scripts'.");
 }
 
+/// <summary>
+/// Показывает интерактивное меню выбора профилей и возвращает выбранные коды.
+/// Используется, когда профили не переданы аргументами командной строки.
+/// </summary>
+/// <param name="catalogPath">Путь к файлу каталога профилей.</param>
+/// <param name="cancellationToken">Токен отмены операции.</param>
+/// <returns>Отсортированный список выбранных кодов профилей.</returns>
 static async Task<string[]> PromptProfileCodesAsync(string catalogPath, CancellationToken cancellationToken)
 {
     var groups = await CatalogSelectionLoader.LoadAsync(catalogPath, cancellationToken);
@@ -127,6 +139,11 @@ static async Task<string[]> PromptProfileCodesAsync(string catalogPath, Cancella
     return selectedProfiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
 }
 
+/// <summary>
+/// Возвращает директорию диагностики из переменной окружения или значение по умолчанию.
+/// </summary>
+/// <param name="root">Корневая директория workspace.</param>
+/// <returns>Абсолютный путь к директории диагностики.</returns>
 static string ResolveDiagnosticsDirectory(string root)
 {
     var configured = Environment.GetEnvironmentVariable("UNLOAD_DIAGNOSTICS_DIR");

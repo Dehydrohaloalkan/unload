@@ -4,6 +4,10 @@ using Unload.Core;
 
 namespace Unload.Catalog;
 
+/// <summary>
+/// Сервис чтения каталога из JSON и резолва профилей в SQL-скрипты.
+/// Используется раннером и API для получения структуры каталога и набора скриптов к выполнению.
+/// </summary>
 public class JsonCatalogService : ICatalogService
 {
     private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
@@ -13,12 +17,22 @@ public class JsonCatalogService : ICatalogService
     private readonly string _catalogPath;
     private readonly string _scriptsDirectory;
 
+    /// <summary>
+    /// Инициализирует сервис путями к файлу каталога и директории скриптов.
+    /// </summary>
+    /// <param name="catalogPath">Путь к <c>catalog.json</c>.</param>
+    /// <param name="scriptsDirectory">Путь к корню SQL-скриптов.</param>
     public JsonCatalogService(string catalogPath, string scriptsDirectory)
     {
         _catalogPath = Path.GetFullPath(catalogPath);
         _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
     }
 
+    /// <summary>
+    /// Загружает каталог, валидирует его и возвращает нормализованную модель.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены чтения.</param>
+    /// <returns>Каталог групп, участников и вычисленных профилей.</returns>
     public async Task<CatalogInfo> GetCatalogAsync(CancellationToken cancellationToken)
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
@@ -79,6 +93,12 @@ public class JsonCatalogService : ICatalogService
             profiles);
     }
 
+    /// <summary>
+    /// Резолвит выбранные профили в отсортированные списки SQL-скриптов.
+    /// </summary>
+    /// <param name="profileCodes">Коды профилей для резолва.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Словарь профиль -> список определений скриптов.</returns>
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>>> ResolveAsync(
         IReadOnlyCollection<string> profileCodes,
         CancellationToken cancellationToken)
@@ -102,6 +122,11 @@ public class JsonCatalogService : ICatalogService
         return resolved;
     }
 
+    /// <summary>
+    /// Загружает и десериализует исходный JSON-каталог.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены чтения.</param>
+    /// <returns>Корневая модель десериализованного каталога.</returns>
     private async Task<CatalogRoot> LoadCatalogAsync(CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(_catalogPath);
@@ -113,6 +138,12 @@ public class JsonCatalogService : ICatalogService
         return result ?? throw new InvalidOperationException("Catalog is empty or invalid.");
     }
 
+    /// <summary>
+    /// Загружает SQL-скрипты для конкретного профиля с проверками безопасности путей.
+    /// </summary>
+    /// <param name="profile">Профиль, для которого выбираются скрипты.</param>
+    /// <param name="cancellationToken">Токен отмены загрузки.</param>
+    /// <returns>Список определений скриптов профиля.</returns>
     private async Task<IReadOnlyList<ScriptDefinition>> LoadScriptsForProfileAsync(
         CatalogProfileInfo profile,
         CancellationToken cancellationToken)
@@ -165,6 +196,12 @@ public class JsonCatalogService : ICatalogService
         return scripts;
     }
 
+    /// <summary>
+    /// Проверяет, относится ли SQL-файл к участнику по второй букве имени файла.
+    /// </summary>
+    /// <param name="scriptPath">Путь к SQL-файлу.</param>
+    /// <param name="memberCode">Код участника профиля.</param>
+    /// <returns><c>true</c>, если файл относится к участнику; иначе <c>false</c>.</returns>
     private static bool IsScriptForMember(string scriptPath, string memberCode)
     {
         var fileName = Path.GetFileNameWithoutExtension(scriptPath);
@@ -176,6 +213,11 @@ public class JsonCatalogService : ICatalogService
         return char.ToUpperInvariant(fileName[1]) == char.ToUpperInvariant(memberCode[0]);
     }
 
+    /// <summary>
+    /// Вычисляет порядок скрипта по числовому суффиксу после последнего <c>_</c>.
+    /// </summary>
+    /// <param name="filePath">Путь к SQL-файлу.</param>
+    /// <returns>Числовой порядок или <see cref="int.MaxValue"/>, если суффикс не найден.</returns>
     private static int GetScriptOrder(string filePath)
     {
         var fileName = Path.GetFileNameWithoutExtension(filePath);
@@ -189,6 +231,10 @@ public class JsonCatalogService : ICatalogService
         return int.TryParse(suffix, out var number) ? number : int.MaxValue;
     }
 
+    /// <summary>
+    /// Валидирует синтаксис кода профиля.
+    /// </summary>
+    /// <param name="profileCode">Код профиля.</param>
     private static void ValidateProfileCode(string profileCode)
     {
         if (!ProfileCodePattern.IsMatch(profileCode))
@@ -197,6 +243,10 @@ public class JsonCatalogService : ICatalogService
         }
     }
 
+    /// <summary>
+    /// Валидирует имя папки группы каталога.
+    /// </summary>
+    /// <param name="folder">Имя папки группы.</param>
     private static void ValidateGroupFolder(string folder)
     {
         var normalized = folder.Trim().ToUpperInvariant();
@@ -206,6 +256,10 @@ public class JsonCatalogService : ICatalogService
         }
     }
 
+    /// <summary>
+    /// Валидирует код участника каталога.
+    /// </summary>
+    /// <param name="memberCode">Код участника.</param>
     private static void ValidateMemberCode(string memberCode)
     {
         var normalized = memberCode.Trim().ToUpperInvariant();
@@ -215,6 +269,10 @@ public class JsonCatalogService : ICatalogService
         }
     }
 
+    /// <summary>
+    /// Валидирует расширение выходного файла участника.
+    /// </summary>
+    /// <param name="memberFileExtension">Расширение файла, заданное в каталоге.</param>
     private static void ValidateMemberFileExtension(string memberFileExtension)
     {
         var normalized = memberFileExtension.Trim().ToUpperInvariant();
@@ -225,11 +283,24 @@ public class JsonCatalogService : ICatalogService
         }
     }
 
+    /// <summary>
+    /// Строит код профиля в формате <c>GROUP_MEMBER</c>.
+    /// </summary>
+    /// <param name="groupFolder">Папка группы.</param>
+    /// <param name="memberCode">Код участника.</param>
+    /// <returns>Нормализованный код профиля.</returns>
     private static string BuildProfileCode(string groupFolder, string memberCode)
     {
         return $"{groupFolder}_{memberCode}";
     }
 
+    /// <summary>
+    /// Строит базовую часть имени выходного файла по правилам формата выгрузки.
+    /// </summary>
+    /// <param name="memberCode">Код участника профиля.</param>
+    /// <param name="groupFolder">Папка группы профиля.</param>
+    /// <param name="scriptCode">Код скрипта (имя SQL-файла без расширения).</param>
+    /// <returns>Базовая часть имени выходного файла без суффикса чанка и расширения.</returns>
     private static string BuildOutputFileStem(string memberCode, string groupFolder, string scriptCode)
     {
         if (scriptCode.Length < 3)

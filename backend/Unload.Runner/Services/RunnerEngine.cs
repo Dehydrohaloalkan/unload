@@ -6,6 +6,10 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
+/// <summary>
+/// Реализация движка выгрузки данных.
+/// Используется background worker и console для выполнения SQL-скриптов, чанкования результатов и публикации событий.
+/// </summary>
 public class RunnerEngine : IRunner
 {
     private readonly ICatalogService _catalogService;
@@ -15,6 +19,15 @@ public class RunnerEngine : IRunner
     private readonly IRunDiagnosticsSink _diagnosticsSink;
     private readonly RunnerOptions _options;
 
+    /// <summary>
+    /// Создает экземпляр раннера с инфраструктурными зависимостями.
+    /// </summary>
+    /// <param name="catalogService">Сервис резолва профилей и скриптов.</param>
+    /// <param name="databaseClient">Клиент чтения данных из БД.</param>
+    /// <param name="fileChunkWriter">Сервис записи чанков в файлы.</param>
+    /// <param name="mqPublisher">Публикатор событий раннера в MQ.</param>
+    /// <param name="diagnosticsSink">Сервис записи диагностических событий и метрик.</param>
+    /// <param name="options">Опции чанкования и параллелизма.</param>
     public RunnerEngine(
         ICatalogService catalogService,
         IDatabaseClient databaseClient,
@@ -31,6 +44,12 @@ public class RunnerEngine : IRunner
         _options = options;
     }
 
+    /// <summary>
+    /// Запускает обработку запроса и отдает поток событий выполнения.
+    /// </summary>
+    /// <param name="request">Параметры запуска выгрузки.</param>
+    /// <param name="cancellationToken">Токен отмены выполнения.</param>
+    /// <returns>Асинхронный поток событий раннера.</returns>
     public IAsyncEnumerable<RunnerEvent> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
         var channel = Channel.CreateBounded<RunnerEvent>(new BoundedChannelOptions(_options.DataflowBoundedCapacity)
@@ -55,6 +74,12 @@ public class RunnerEngine : IRunner
         return channel.Reader.ReadAllAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Выполняет полный пайплайн выгрузки: резолв профилей, обработка скриптов и финализация запуска.
+    /// </summary>
+    /// <param name="request">Запрос запуска.</param>
+    /// <param name="writer">Канал, в который пишутся события выполнения.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     private async Task ExecutePipelineAsync(
         RunRequest request,
         ChannelWriter<RunnerEvent> writer,
@@ -195,6 +220,14 @@ public class RunnerEngine : IRunner
         }
     }
 
+    /// <summary>
+    /// Выполняет один SQL-скрипт: читает данные, формирует чанки и отправляет их на запись.
+    /// </summary>
+    /// <param name="request">Исходный запрос запуска.</param>
+    /// <param name="script">Определение скрипта для выполнения.</param>
+    /// <param name="runOutputDirectory">Директория результатов текущего запуска.</param>
+    /// <param name="writer">Канал публикации событий.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     private async Task ProcessScriptAsync(
         RunRequest request,
         ScriptDefinition script,
@@ -311,6 +344,17 @@ public class RunnerEngine : IRunner
             cancellationToken);
     }
 
+    /// <summary>
+    /// Формирует объект чанка, записывает его в файл и публикует соответствующие события и метрики.
+    /// </summary>
+    /// <param name="request">Запрос запуска.</param>
+    /// <param name="script">Скрипт, к которому относится чанк.</param>
+    /// <param name="runOutputDirectory">Директория результатов текущего запуска.</param>
+    /// <param name="writer">Канал публикации событий.</param>
+    /// <param name="chunkNumber">Порядковый номер чанка.</param>
+    /// <param name="rows">Строки данных чанка.</param>
+    /// <param name="byteSize">Размер чанка в байтах.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     private async Task FlushChunkAsync(
         RunRequest request,
         ScriptDefinition script,
@@ -360,6 +404,18 @@ public class RunnerEngine : IRunner
             cancellationToken);
     }
 
+    /// <summary>
+    /// Создает событие раннера и доставляет его в диагностику, MQ и поток клиентских событий.
+    /// </summary>
+    /// <param name="writer">Канал публикации событий раннера.</param>
+    /// <param name="request">Запрос запуска.</param>
+    /// <param name="step">Шаг выполнения.</param>
+    /// <param name="message">Текст события.</param>
+    /// <param name="profileCode">Код профиля (опционально).</param>
+    /// <param name="scriptCode">Код скрипта (опционально).</param>
+    /// <param name="records">Количество записей (опционально).</param>
+    /// <param name="filePath">Путь к файлу результата (опционально).</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     private async Task EmitAsync(
         ChannelWriter<RunnerEvent> writer,
         RunRequest request,
@@ -386,6 +442,11 @@ public class RunnerEngine : IRunner
         await writer.WriteAsync(@event, cancellationToken);
     }
 
+    /// <summary>
+    /// Извлекает список имен колонок из ридера БД.
+    /// </summary>
+    /// <param name="reader">Открытый ридер данных.</param>
+    /// <returns>Список колонок в исходном порядке.</returns>
     private static List<string> GetColumns(DbDataReader reader)
     {
         var columns = new List<string>(reader.FieldCount);
@@ -397,6 +458,12 @@ public class RunnerEngine : IRunner
         return columns;
     }
 
+    /// <summary>
+    /// Читает текущую строку <see cref="DbDataReader"/> в доменную модель.
+    /// </summary>
+    /// <param name="reader">Ридер данных, указывающий на текущую строку.</param>
+    /// <param name="columns">Список колонок для чтения.</param>
+    /// <returns>Строка данных в виде словаря колонок и значений.</returns>
     private static DatabaseRow ReadRow(DbDataReader reader, IReadOnlyList<string> columns)
     {
         var values = new Dictionary<string, object?>(columns.Count, StringComparer.OrdinalIgnoreCase);
@@ -408,6 +475,9 @@ public class RunnerEngine : IRunner
         return new DatabaseRow(values);
     }
 
+    /// <summary>
+    /// Проверяет доступность подключения к базе данных перед запуском.
+    /// </summary>
     private void ValidateDatabaseConnectivity()
     {
         if (!_databaseClient.IsConnected)
@@ -416,6 +486,10 @@ public class RunnerEngine : IRunner
         }
     }
 
+    /// <summary>
+    /// Валидирует базовые обязательные поля запроса.
+    /// </summary>
+    /// <param name="request">Запрос запуска, который нужно проверить.</param>
     private static void ValidateRequest(RunRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.CorrelationId))
@@ -429,6 +503,11 @@ public class RunnerEngine : IRunner
         }
     }
 
+    /// <summary>
+    /// Создает уникальную папку запуска внутри базовой директории output.
+    /// </summary>
+    /// <param name="baseOutputDirectory">Базовая директория для результатов выгрузки.</param>
+    /// <returns>Полный путь к созданной директории текущего запуска.</returns>
     private static string CreateRunOutputDirectory(string baseOutputDirectory)
     {
         var timestamp = DateTime.Now.ToString("dd_MM_yyyy_HHmmss", CultureInfo.InvariantCulture);

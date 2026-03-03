@@ -4,10 +4,23 @@ using Unload.Core;
 
 namespace Unload.DataBase;
 
+/// <summary>
+/// Заглушка клиента БД, генерирующая тестовый <see cref="DbDataReader"/>.
+/// Используется в development/demo режиме вместо реального подключения к базе данных.
+/// </summary>
 public class StubDatabaseClient : IDatabaseClient
 {
+    /// <summary>
+    /// Всегда сообщает о доступности подключения в заглушке.
+    /// </summary>
     public bool IsConnected => true;
 
+    /// <summary>
+    /// Возвращает синтетический набор данных для переданного запроса.
+    /// </summary>
+    /// <param name="query">SQL-запрос, используется только для формирования демонстрационного script code.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Потоковый ридер с тестовыми строками.</returns>
     public Task<DbDataReader> GetDataReaderAsync(string query, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

@@ -3,10 +3,19 @@ using Unload.Core;
 
 namespace Unload.Application;
 
+/// <summary>
+/// Потокобезопасное in-memory хранилище статусов запусков.
+/// Используется API и background worker для синхронизации жизненного цикла run.
+/// </summary>
 public class InMemoryRunStateStore : IRunStateStore
 {
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Создает или перезаписывает запись запуска в статусе очереди.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="profileCodes">Коды профилей запуска.</param>
     public void SetQueued(string correlationId, IReadOnlyCollection<string> profileCodes)
     {
         var now = DateTimeOffset.UtcNow;
@@ -21,6 +30,10 @@ public class InMemoryRunStateStore : IRunStateStore
         _runs[correlationId] = snapshot;
     }
 
+    /// <summary>
+    /// Обновляет запись запуска в статус выполняется.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
     public void SetRunning(string correlationId)
     {
         var now = DateTimeOffset.UtcNow;
@@ -41,6 +54,10 @@ public class InMemoryRunStateStore : IRunStateStore
             });
     }
 
+    /// <summary>
+    /// Применяет входящее событие раннера к снимку состояния запуска.
+    /// </summary>
+    /// <param name="event">Событие, на основании которого обновляется статус.</param>
     public void ApplyEvent(RunnerEvent @event)
     {
         var now = DateTimeOffset.UtcNow;
@@ -65,6 +82,11 @@ public class InMemoryRunStateStore : IRunStateStore
             });
     }
 
+    /// <summary>
+    /// Помечает запуск как завершившийся ошибкой.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Диагностическое сообщение об ошибке.</param>
     public void SetFailed(string correlationId, string message)
     {
         var now = DateTimeOffset.UtcNow;
@@ -87,11 +109,20 @@ public class InMemoryRunStateStore : IRunStateStore
             });
     }
 
+    /// <summary>
+    /// Возвращает текущее состояние указанного запуска.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <returns>Состояние запуска или <c>null</c>, если запись отсутствует.</returns>
     public RunStatusInfo? Get(string correlationId)
     {
         return _runs.TryGetValue(correlationId, out var run) ? run : null;
     }
 
+    /// <summary>
+    /// Возвращает список всех запусков, отсортированный по времени обновления.
+    /// </summary>
+    /// <returns>Снимок состояний запусков.</returns>
     public IReadOnlyList<RunStatusInfo> List()
     {
         return _runs.Values
@@ -99,6 +130,11 @@ public class InMemoryRunStateStore : IRunStateStore
             .ToArray();
     }
 
+    /// <summary>
+    /// Преобразует шаг раннера в агрегированный статус жизненного цикла.
+    /// </summary>
+    /// <param name="step">Шаг выполнения раннера.</param>
+    /// <returns>Агрегированный статус для отображения клиентам.</returns>
     private static RunLifecycleStatus MapStatus(RunnerStep step)
     {
         return step switch

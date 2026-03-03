@@ -3,8 +3,19 @@ using Unload.Core;
 
 namespace Unload.FileWriter;
 
+/// <summary>
+/// Реализация записи чанка в pipe-delimited файл.
+/// Используется раннером для сохранения результатов SQL-скриптов по частям.
+/// </summary>
 public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 {
+    /// <summary>
+    /// Записывает заголовок и строки чанка в файл с рассчитанным суффиксом части.
+    /// </summary>
+    /// <param name="chunk">Чанк данных для записи.</param>
+    /// <param name="outputDirectory">Директория назначения.</param>
+    /// <param name="cancellationToken">Токен отмены записи.</param>
+    /// <returns>Информация о записанном файле.</returns>
     public async Task<WrittenFile> WriteChunkAsync(
         FileChunk chunk,
         string outputDirectory,
@@ -38,6 +49,11 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
             chunk.ByteSize);
     }
 
+    /// <summary>
+    /// Формирует суффикс номера чанка в base36 формате (<c>00</c>, <c>01</c>, ..., <c>0A</c> ...).
+    /// </summary>
+    /// <param name="chunkNumber">Номер чанка, начиная с 1.</param>
+    /// <returns>Двухсимвольный или более длинный base36 суффикс.</returns>
     private static string BuildChunkSuffix(int chunkNumber)
     {
         if (chunkNumber <= 0)

@@ -4,17 +4,31 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
+/// <summary>
+/// Диагностический sink, сохраняющий события и метрики запуска в CSV-файлы.
+/// Используется раннером для пост-анализа выполнения и наблюдаемости.
+/// </summary>
 public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
 {
     private static readonly char[] InvalidPathChars = Path.GetInvalidFileNameChars();
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _baseDirectory;
 
+    /// <summary>
+    /// Создает sink и нормализует базовую директорию диагностики.
+    /// </summary>
+    /// <param name="baseDirectory">Корневая директория, где создаются папки запусков.</param>
     public CsvRunDiagnosticsSink(string baseDirectory)
     {
         _baseDirectory = Path.GetFullPath(baseDirectory);
     }
 
+    /// <summary>
+    /// Записывает событие выполнения в <c>events.csv</c> соответствующего запуска.
+    /// </summary>
+    /// <param name="event">Событие раннера для записи.</param>
+    /// <param name="cancellationToken">Токен отмены записи.</param>
+    /// <returns>Задача завершения записи.</returns>
     public Task WriteEventAsync(RunnerEvent @event, CancellationToken cancellationToken)
     {
         var runDirectory = GetRunDirectory(@event.CorrelationId);
@@ -37,6 +51,12 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
             cancellationToken);
     }
 
+    /// <summary>
+    /// Записывает метрику выполнения в <c>metrics.csv</c> соответствующего запуска.
+    /// </summary>
+    /// <param name="metric">Метрика длительности шага.</param>
+    /// <param name="cancellationToken">Токен отмены записи.</param>
+    /// <returns>Задача завершения записи.</returns>
     public Task WriteMetricAsync(RunMetricRecord metric, CancellationToken cancellationToken)
     {
         var runDirectory = GetRunDirectory(metric.CorrelationId);
@@ -61,6 +81,15 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
             cancellationToken);
     }
 
+    /// <summary>
+    /// Добавляет строку в CSV-файл, создавая заголовок при первом обращении.
+    /// Выполняет запись под локом на конкретный <c>correlationId</c>.
+    /// </summary>
+    /// <param name="filePath">Путь к CSV-файлу назначения.</param>
+    /// <param name="header">Строка заголовка CSV.</param>
+    /// <param name="row">Строка данных CSV.</param>
+    /// <param name="correlationId">Идентификатор запуска для выбора синхронизационного лока.</param>
+    /// <param name="cancellationToken">Токен отмены записи.</param>
     private async Task AppendRowAsync(
         string filePath,
         string header,
@@ -89,6 +118,11 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
         }
     }
 
+    /// <summary>
+    /// Возвращает директорию запуска с безопасным именем на основе correlation id.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <returns>Путь к директории диагностических файлов запуска.</returns>
     private string GetRunDirectory(string correlationId)
     {
         var safeName = correlationId;
@@ -100,6 +134,12 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
         return Path.Combine(_baseDirectory, safeName);
     }
 
+    /// <summary>
+    /// Экранирует значение для безопасной записи в CSV.
+    /// Дополнительно защищает от formula-injection в табличных редакторах.
+    /// </summary>
+    /// <param name="value">Исходное строковое значение.</param>
+    /// <returns>Экранированное значение в CSV-формате.</returns>
     private static string Csv(string? value)
     {
         if (string.IsNullOrEmpty(value))

@@ -3,6 +3,10 @@ using Unload.Core;
 
 namespace Unload.Application;
 
+/// <summary>
+/// Оркестратор постановки запуска выгрузки в очередь.
+/// Используется API/Console для валидации профилей, создания запроса и публикации начального статуса.
+/// </summary>
 public class RunOrchestrator : IRunOrchestrator
 {
     private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
@@ -12,6 +16,13 @@ public class RunOrchestrator : IRunOrchestrator
     private readonly IRunStateStore _runStateStore;
     private readonly string _outputDirectory;
 
+    /// <summary>
+    /// Инициализирует orchestrator с зависимостями очереди, фабрики и хранилища статусов.
+    /// </summary>
+    /// <param name="requestFactory">Фабрика создания запроса запуска.</param>
+    /// <param name="runQueue">Очередь запусков.</param>
+    /// <param name="runStateStore">Хранилище статусов запусков.</param>
+    /// <param name="outputDirectory">Базовая директория для результатов.</param>
     public RunOrchestrator(
         IRunRequestFactory requestFactory,
         IRunQueue runQueue,
@@ -24,6 +35,11 @@ public class RunOrchestrator : IRunOrchestrator
         _outputDirectory = Path.GetFullPath(outputDirectory);
     }
 
+    /// <summary>
+    /// Нормализует и валидирует коды профилей, создает запрос и ставит его в очередь.
+    /// </summary>
+    /// <param name="profileCodes">Коды профилей от клиента.</param>
+    /// <returns>Correlation id созданного запуска.</returns>
     public string StartRun(IReadOnlyCollection<string> profileCodes)
     {
         var normalizedCodes = NormalizeProfileCodes(profileCodes);
@@ -37,6 +53,11 @@ public class RunOrchestrator : IRunOrchestrator
         return request.CorrelationId;
     }
 
+    /// <summary>
+    /// Выполняет нормализацию и базовую валидацию кодов профилей.
+    /// </summary>
+    /// <param name="profileCodes">Исходный список кодов профилей.</param>
+    /// <returns>Нормализованный уникальный список кодов в верхнем регистре.</returns>
     private static IReadOnlyCollection<string> NormalizeProfileCodes(IReadOnlyCollection<string> profileCodes)
     {
         var normalized = profileCodes

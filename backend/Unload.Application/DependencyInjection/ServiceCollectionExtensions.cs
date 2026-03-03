@@ -9,8 +9,18 @@ using Unload.Runner;
 
 namespace Unload.Application;
 
+/// <summary>
+/// Расширения DI-контейнера для регистрации runtime сервисов выгрузки.
+/// Используется API и Console при инициализации приложения.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Регистрирует полный набор инфраструктурных и application сервисов выгрузки.
+    /// </summary>
+    /// <param name="services">Коллекция сервисов приложения.</param>
+    /// <param name="paths">Пути к каталогу, скриптам, output и диагностике.</param>
+    /// <returns>Та же коллекция сервисов для цепочки вызовов.</returns>
     public static IServiceCollection AddUnloadRuntime(this IServiceCollection services, UnloadRuntimePaths paths)
     {
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
