@@ -255,7 +255,8 @@ public class RunnerEngine : IRunner
         var rowsRead = 0;
         var chunkNumber = 1;
         var currentRows = new List<DatabaseRow>();
-        var headerLine = PipeDelimitedFormatter.BuildHeaderLine(columns);
+        var headerLine =
+            $"#|{script.ScriptType}|{script.OutputFileStem}{DateTimeOffset.Now.DayOfYear}{chunkNumber}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
         var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
         var currentSize = headerSize;
 

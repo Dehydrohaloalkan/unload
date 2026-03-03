@@ -32,6 +32,23 @@ public class JsonCatalogService : ICatalogService
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
         var groupsById = catalog.Groups.ToDictionary(static x => x.Id);
+        var memberGroupCodes = catalog.Members.ToDictionary(
+            static member => member.Id,
+            member => member.Groups
+                .Distinct()
+                .Select(groupId =>
+                {
+                    if (!groupsById.TryGetValue(groupId, out var group))
+                    {
+                        throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
+                    }
+
+                    CatalogValidation.ValidateGroupCode(group.Code);
+                    return group.Code.Trim().ToUpperInvariant();
+                })
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static code => code, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
 
         var targets = catalog.Members
             .SelectMany(member => member.Groups.Distinct().Select(groupId => (Member: member, GroupId: groupId)))
@@ -44,10 +61,12 @@ public class JsonCatalogService : ICatalogService
 
                 var member = entry.Member;
                 CatalogValidation.ValidateGroupFolder(group.Folder);
+                CatalogValidation.ValidateGroupCode(group.Code);
                 CatalogValidation.ValidateMemberCode(member.Code);
                 CatalogValidation.ValidateMemberFileExtension(member.File);
 
                 var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
+                var normalizedGroupCode = group.Code.Trim().ToUpperInvariant();
                 var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
                 var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
 
@@ -55,9 +74,14 @@ public class JsonCatalogService : ICatalogService
                     CatalogScriptPathHelper.BuildTargetCode(normalizedGroupFolder, normalizedMemberCode),
                     group.Id,
                     member.Id,
-                    group.Name,
+                    BuildGroupDisplayName(group.Name, normalizedGroupFolder),
                     normalizedGroupFolder,
-                    member.Name,
+                    normalizedGroupCode,
+                    BuildMemberDisplayName(
+                        member.Name,
+                        normalizedMemberCode,
+                        normalizedFileExtension,
+                        [normalizedGroupCode]),
                     normalizedMemberCode,
                     normalizedFileExtension);
             })
@@ -70,7 +94,14 @@ public class JsonCatalogService : ICatalogService
                 .Select(group =>
                 {
                     CatalogValidation.ValidateGroupFolder(group.Folder);
-                    return new CatalogGroupInfo(group.Id, group.Name, group.Folder.ToUpperInvariant());
+                    CatalogValidation.ValidateGroupCode(group.Code);
+                    var normalizedFolder = group.Folder.Trim().ToUpperInvariant();
+                    var normalizedCode = group.Code.Trim().ToUpperInvariant();
+                    return new CatalogGroupInfo(
+                        group.Id,
+                        BuildGroupDisplayName(group.Name, normalizedFolder),
+                        normalizedFolder,
+                        normalizedCode);
                 })
                 .ToArray(),
             catalog.Members
@@ -78,11 +109,16 @@ public class JsonCatalogService : ICatalogService
                 {
                     CatalogValidation.ValidateMemberCode(member.Code);
                     CatalogValidation.ValidateMemberFileExtension(member.File);
+                    var normalizedCode = member.Code.Trim().ToUpperInvariant();
+                    var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
+                    var groupCodes = memberGroupCodes.TryGetValue(member.Id, out var existingCodes)
+                        ? existingCodes
+                        : [];
                     return new CatalogMemberInfo(
                         member.Id,
-                        member.Name,
-                        member.Code.Trim().ToUpperInvariant(),
-                        member.File.Trim().ToUpperInvariant());
+                        BuildMemberDisplayName(member.Name, normalizedCode, normalizedFileExtension, groupCodes),
+                        normalizedCode,
+                        normalizedFileExtension);
                 })
                 .ToArray(),
             targets);
@@ -162,7 +198,11 @@ public class JsonCatalogService : ICatalogService
 
         var files = Directory
             .EnumerateFiles(groupDirectory, "*.sql", SearchOption.TopDirectoryOnly)
-            .Where(path => CatalogScriptPathHelper.IsScriptForMember(path, target.MemberCode))
+            .Where(path => CatalogScriptPathHelper.IsScriptForTarget(
+                path,
+                target.MemberCode,
+                target.GroupCode,
+                target.MemberFileExtension))
             .OrderBy(CatalogScriptPathHelper.GetScriptOrder)
             .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -178,19 +218,35 @@ public class JsonCatalogService : ICatalogService
 
             var sqlText = await File.ReadAllTextAsync(fullPath, cancellationToken);
             var scriptCode = Path.GetFileNameWithoutExtension(fullPath);
-            var outputFileStem = CatalogScriptPathHelper.BuildOutputFileStem(
-                target.MemberCode,
-                target.GroupFolder,
-                scriptCode);
+            var scriptNameParts = CatalogScriptPathHelper.ParseScriptName(scriptCode);
             scripts.Add(new ScriptDefinition(
                 target.TargetCode,
                 scriptCode,
-                outputFileStem,
+                scriptNameParts.Prefix,
                 target.MemberFileExtension,
+                scriptNameParts.ScriptType,
+                scriptNameParts.ScriptCodes,
+                scriptNameParts.FirstCodeDigit,
                 fullPath,
                 sqlText));
         }
 
         return scripts;
+    }
+
+    private static string BuildGroupDisplayName(string groupName, string groupFolder)
+    {
+        return $"{groupName} ({groupFolder})";
+    }
+
+    private static string BuildMemberDisplayName(
+        string memberName,
+        string memberCode,
+        string fileExtension,
+        IReadOnlyList<string> groupCodes)
+    {
+        var extensionWithoutDot = fileExtension.TrimStart('.');
+        var groupCodeMask = groupCodes.Count > 0 ? groupCodes[0] : "*";
+        return $"{memberName} (Y{memberCode}{groupCodeMask}*.{extensionWithoutDot})";
     }
 }

@@ -9,7 +9,8 @@ internal static class CatalogValidation
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
     private static readonly Regex GroupFolderPattern = new("^[A-Z0-9_]{3,32}$", RegexOptions.Compiled);
-    private static readonly Regex MemberCodePattern = new("^[A-Z0-9]{1,8}$", RegexOptions.Compiled);
+    private static readonly Regex GroupCodePattern = new("^[A-Z0-9]{1}$", RegexOptions.Compiled);
+    private static readonly Regex MemberCodePattern = new("^[A-Z0-9]{1}$", RegexOptions.Compiled);
     private static readonly Regex MemberFileExtensionPattern = new("^\\.[A-Z0-9]{1,8}$", RegexOptions.Compiled);
 
     public static void ValidateTargetCode(string targetCode)
@@ -26,6 +27,15 @@ internal static class CatalogValidation
         if (!GroupFolderPattern.IsMatch(normalized))
         {
             throw new InvalidOperationException($"Group folder '{folder}' is invalid.");
+        }
+    }
+
+    public static void ValidateGroupCode(string groupCode)
+    {
+        var normalized = groupCode.Trim().ToUpperInvariant();
+        if (!GroupCodePattern.IsMatch(normalized))
+        {
+            throw new InvalidOperationException($"Group code '{groupCode}' is invalid.");
         }
     }
 

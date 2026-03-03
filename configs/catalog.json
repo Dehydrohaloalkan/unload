@@ -3,12 +3,14 @@
         {
             "id": 1,
             "name": "first group",
-            "folder": "YSB"
+            "folder": "YSB",
+            "code": "O"
         },
         {
             "id": 2,
             "name": "second group",
-            "folder": "YSK"
+            "folder": "YSK",
+            "code": "K"
         }
     ],
     "members": [
@@ -16,14 +18,14 @@
             "id": 1,
             "name": "first member",
             "code": "M",
-            "file": ".NAL",
+            "file": ".MIN",
             "groups": [1]
         },
         {
             "id": 2,
             "name": "second member",
             "code": "V",
-            "file": ".VNA",
+            "file": ".REP",
             "groups": [2]
         }
     ]

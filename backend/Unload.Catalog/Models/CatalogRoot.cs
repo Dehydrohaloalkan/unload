@@ -19,10 +19,12 @@ public record CatalogRoot(
 /// <param name="Id">Идентификатор группы.</param>
 /// <param name="Name">Имя группы.</param>
 /// <param name="Folder">Имя папки группы в директории скриптов.</param>
+/// <param name="Code">Код группы для имен SQL-скриптов.</param>
 public record CatalogGroup(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("folder")] string Folder);
+    [property: JsonPropertyName("folder")] string Folder,
+    [property: JsonPropertyName("code")] string Code);
 
 /// <summary>
 /// JSON-модель участника каталога.

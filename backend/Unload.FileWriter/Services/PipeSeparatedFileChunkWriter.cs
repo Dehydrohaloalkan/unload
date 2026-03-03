@@ -10,7 +10,7 @@ namespace Unload.FileWriter;
 public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 {
     /// <summary>
-    /// Записывает заголовок и строки чанка в файл с рассчитанным суффиксом части.
+    /// Записывает служебный заголовок и строки чанка в выходной файл нового формата.
     /// </summary>
     /// <param name="chunk">Чанк данных для записи.</param>
     /// <param name="outputDirectory">Директория назначения.</param>
@@ -23,15 +23,17 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
     {
         Directory.CreateDirectory(outputDirectory);
 
-        var chunkSuffix = BuildChunkSuffix(chunk.ChunkNumber);
-        var fileName = $"{chunk.Script.OutputFileStem}_{chunkSuffix}{chunk.Script.OutputFileExtension}";
+        var dayOfYear = DateTimeOffset.Now.DayOfYear;
+        var fileName = $"{chunk.Script.OutputFileStem}{dayOfYear}{chunk.ChunkNumber}{chunk.Script.OutputFileExtension}";
         var filePath = Path.Combine(outputDirectory, fileName);
 
         await using var stream = File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
         var columns = PipeDelimitedFormatter.GetOrderedColumns(chunk.Rows);
-        await writer.WriteLineAsync(PipeDelimitedFormatter.BuildHeaderLine(columns));
+        var metadataHeader =
+            $"#|{chunk.Script.ScriptType}|{fileName}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{chunk.Rows.Count}|{chunk.Script.FirstCodeDigit}";
+        await writer.WriteLineAsync(metadataHeader);
 
         foreach (var row in chunk.Rows)
         {
@@ -47,30 +49,5 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
             filePath,
             chunk.Rows.Count,
             chunk.ByteSize);
-    }
-
-    /// <summary>
-    /// Формирует суффикс номера чанка в base36 формате (<c>00</c>, <c>01</c>, ..., <c>0A</c> ...).
-    /// </summary>
-    /// <param name="chunkNumber">Номер чанка, начиная с 1.</param>
-    /// <returns>Двухсимвольный или более длинный base36 суффикс.</returns>
-    private static string BuildChunkSuffix(int chunkNumber)
-    {
-        if (chunkNumber <= 0)
-        {
-            throw new InvalidOperationException($"Chunk number '{chunkNumber}' is invalid.");
-        }
-
-        var value = chunkNumber - 1;
-        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        var result = string.Empty;
-
-        do
-        {
-            result = alphabet[value % 36] + result;
-            value /= 36;
-        } while (value > 0);
-
-        return result.Length >= 2 ? result : result.PadLeft(2, '0');
     }
 }

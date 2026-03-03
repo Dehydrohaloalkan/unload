@@ -9,8 +9,8 @@
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
-  - Понимает структуру `groups` + `members` (у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
-  - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по второй букве имени файла (`member.code`).
+  - Понимает структуру `groups` + `members` (у `group` есть `folder` и `code`, у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
+  - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по формату имени `Y<member><group>_<type>_<codes>_<ext>.sql`.
   - Валидирует `group.folder`, `member.code`, `targetCode` и защищает от выхода за границы директории скриптов.
   - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogValidation` (валидации), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
 
@@ -20,11 +20,11 @@
   - В раннер передается `DbDataReader`, строки читаются потоково.
 
 - `backend/Unload.FileWriter`
-  - Запись чанков в файлы с расширением из `member.file` и разделителем `|`.
-  - Первая строка файла — заголовок (имена колонок через `|`), далее строки данных.
+  - Запись чанков в файлы с расширением из имени SQL/`member.file` и разделителем `|`.
+  - Первая строка файла — служебный заголовок: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
+  - Начиная со второй строки пишутся данные из БД через `|`.
   - Пишет в `output/<dd_MM_yyyy_HHmmss>/` без подпапок.
-  - Формат имени файла: `Y<member.code><3rd letter of group.folder>_<sql name after first 3 chars>_<chunk><member.file>`.
-  - `<chunk>` — base36 суффикс чанка (`00`, `01`, ..., `09`, `0A`, ..., `0Z`, `10`, ...).
+  - Формат имени файла: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{ext}` (без `_`).
 
 - `backend/Unload.MQ`
   - Заглушка MQ: `InMemoryMqPublisher`.
@@ -52,7 +52,9 @@
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
-  - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки).
+  - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
+    - `group.name` отдается в формате `{имя (folder)}`;
+    - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
   - `POST /api/runs` — ставит запуск в очередь и возвращает `correlationId`.
   - `GET /api/runs` — список запусков и их статусы.
   - `GET /api/runs/{correlationId}` — статус конкретного запуска.
@@ -109,6 +111,26 @@ flowchart LR
    - записывать чанк в файл и продолжать чтение.
 7. На каждом шаге публикуется событие в MQ-заглушку, сохраняется диагностика и обновляется статус запуска.
 8. В конце эмитится `Completed` или `Failed`.
+
+## Форматы имен и выходных файлов
+
+### Формат SQL-скрипта
+
+- `Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql`
+- `Y` — константный префикс.
+- `<memberCode>` — код мембера (2-й символ имени).
+- `<groupCode>` — код группы из `catalog.json` (3-й символ имени).
+- `<type>` — тип выгрузки, используется в заголовке output-файла.
+- `<codes>` — один или несколько числовых кодов, разделенных `_` (например, `01` или `01_2_15`).
+- `<extension>` — расширение output-файла без точки (должно совпадать с `member.file` без `.`).
+
+### Формат выходного файла
+
+- Имя: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{extension}`
+- Первая строка:
+  - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
+- Остальные строки:
+  - данные из БД через `|`.
 
 ## Run sequence diagram
 
