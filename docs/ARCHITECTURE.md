@@ -12,6 +12,7 @@
   - Понимает структуру `groups` + `members` (у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по второй букве имени файла (`member.code`).
   - Валидирует `group.folder`, `member.code`, `targetCode` и защищает от выхода за границы директории скриптов.
+  - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogValidation` (валидации), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
@@ -39,6 +40,8 @@
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
   - Диагностика: пишет полный лог событий и метрики длительности шагов в CSV через `IRunDiagnosticsSink`.
+  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (проверки и output-путь), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
+  - CSV-диагностика разнесена по ответственности: `CsvRunDiagnosticsSink` (запись файлов), `CsvValueEscaper` (безопасное экранирование CSV), `DiagnosticsRunPathHelper` (безопасный путь папки запуска).
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.
@@ -58,6 +61,7 @@
   - SignalR события:
     - `status` — события раннера конкретного запуска;
     - `run_status` — обновления статуса запуска для всех подключенных клиентов.
+  - `Program` оставлен как точка конфигурации endpoint-ов, резолв путей вынесен в `ApiWorkspacePathResolver`.
 
 - `console/Unload.Console`
   - Точка входа.
@@ -66,6 +70,7 @@
   - Отображение событий в терминале через `Spectre.Console`.
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
   - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
+  - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор), `CatalogSelectionLoader` + `CatalogSelectionJsonModels` (чтение модели каталога).
 
 ## Module diagram
 

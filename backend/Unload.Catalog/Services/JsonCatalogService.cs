@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Unload.Core;
 
 namespace Unload.Catalog;
@@ -10,10 +9,6 @@ namespace Unload.Catalog;
 /// </summary>
 public class JsonCatalogService : ICatalogService
 {
-    private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
-    private static readonly Regex GroupFolderPattern = new("^[A-Z0-9_]{3,32}$", RegexOptions.Compiled);
-    private static readonly Regex MemberCodePattern = new("^[A-Z0-9]{1,8}$", RegexOptions.Compiled);
-    private static readonly Regex MemberFileExtensionPattern = new("^\\.[A-Z0-9]{1,8}$", RegexOptions.Compiled);
     private readonly string _catalogPath;
     private readonly string _scriptsDirectory;
 
@@ -48,16 +43,16 @@ public class JsonCatalogService : ICatalogService
                 }
 
                 var member = entry.Member;
-                ValidateGroupFolder(group.Folder);
-                ValidateMemberCode(member.Code);
-                ValidateMemberFileExtension(member.File);
+                CatalogValidation.ValidateGroupFolder(group.Folder);
+                CatalogValidation.ValidateMemberCode(member.Code);
+                CatalogValidation.ValidateMemberFileExtension(member.File);
 
                 var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
                 var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
                 var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
 
                 return new CatalogTargetInfo(
-                    BuildTargetCode(normalizedGroupFolder, normalizedMemberCode),
+                    CatalogScriptPathHelper.BuildTargetCode(normalizedGroupFolder, normalizedMemberCode),
                     group.Id,
                     member.Id,
                     group.Name,
@@ -74,15 +69,15 @@ public class JsonCatalogService : ICatalogService
             catalog.Groups
                 .Select(group =>
                 {
-                    ValidateGroupFolder(group.Folder);
+                    CatalogValidation.ValidateGroupFolder(group.Folder);
                     return new CatalogGroupInfo(group.Id, group.Name, group.Folder.ToUpperInvariant());
                 })
                 .ToArray(),
             catalog.Members
                 .Select(member =>
                 {
-                    ValidateMemberCode(member.Code);
-                    ValidateMemberFileExtension(member.File);
+                    CatalogValidation.ValidateMemberCode(member.Code);
+                    CatalogValidation.ValidateMemberFileExtension(member.File);
                     return new CatalogMemberInfo(
                         member.Id,
                         member.Name,
@@ -109,7 +104,7 @@ public class JsonCatalogService : ICatalogService
 
         foreach (var targetCode in targetCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            ValidateTargetCode(targetCode);
+            CatalogValidation.ValidateTargetCode(targetCode);
 
             if (!targetMap.TryGetValue(targetCode, out var target))
             {
@@ -167,8 +162,8 @@ public class JsonCatalogService : ICatalogService
 
         var files = Directory
             .EnumerateFiles(groupDirectory, "*.sql", SearchOption.TopDirectoryOnly)
-            .Where(path => IsScriptForMember(path, target.MemberCode))
-            .OrderBy(GetScriptOrder)
+            .Where(path => CatalogScriptPathHelper.IsScriptForMember(path, target.MemberCode))
+            .OrderBy(CatalogScriptPathHelper.GetScriptOrder)
             .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -183,7 +178,10 @@ public class JsonCatalogService : ICatalogService
 
             var sqlText = await File.ReadAllTextAsync(fullPath, cancellationToken);
             var scriptCode = Path.GetFileNameWithoutExtension(fullPath);
-            var outputFileStem = BuildOutputFileStem(target.MemberCode, target.GroupFolder, scriptCode);
+            var outputFileStem = CatalogScriptPathHelper.BuildOutputFileStem(
+                target.MemberCode,
+                target.GroupFolder,
+                scriptCode);
             scripts.Add(new ScriptDefinition(
                 target.TargetCode,
                 scriptCode,
@@ -194,125 +192,5 @@ public class JsonCatalogService : ICatalogService
         }
 
         return scripts;
-    }
-
-    /// <summary>
-    /// Проверяет, относится ли SQL-файл к участнику по второй букве имени файла.
-    /// </summary>
-    /// <param name="scriptPath">Путь к SQL-файлу.</param>
-    /// <param name="memberCode">Код участника target-выборки.</param>
-    /// <returns><c>true</c>, если файл относится к участнику; иначе <c>false</c>.</returns>
-    private static bool IsScriptForMember(string scriptPath, string memberCode)
-    {
-        var fileName = Path.GetFileNameWithoutExtension(scriptPath);
-        if (string.IsNullOrWhiteSpace(fileName) || fileName.Length < 2)
-        {
-            return false;
-        }
-
-        return char.ToUpperInvariant(fileName[1]) == char.ToUpperInvariant(memberCode[0]);
-    }
-
-    /// <summary>
-    /// Вычисляет порядок скрипта по числовому суффиксу после последнего <c>_</c>.
-    /// </summary>
-    /// <param name="filePath">Путь к SQL-файлу.</param>
-    /// <returns>Числовой порядок или <see cref="int.MaxValue"/>, если суффикс не найден.</returns>
-    private static int GetScriptOrder(string filePath)
-    {
-        var fileName = Path.GetFileNameWithoutExtension(filePath);
-        var lastUnderscore = fileName.LastIndexOf('_');
-        if (lastUnderscore < 0)
-        {
-            return int.MaxValue;
-        }
-
-        var suffix = fileName[(lastUnderscore + 1)..];
-        return int.TryParse(suffix, out var number) ? number : int.MaxValue;
-    }
-
-    /// <summary>
-    /// Валидирует синтаксис target-кода.
-    /// </summary>
-    /// <param name="targetCode">Target-код.</param>
-    private static void ValidateTargetCode(string targetCode)
-    {
-        if (!TargetCodePattern.IsMatch(targetCode))
-        {
-            throw new InvalidOperationException($"Target code '{targetCode}' is invalid.");
-        }
-    }
-
-    /// <summary>
-    /// Валидирует имя папки группы каталога.
-    /// </summary>
-    /// <param name="folder">Имя папки группы.</param>
-    private static void ValidateGroupFolder(string folder)
-    {
-        var normalized = folder.Trim().ToUpperInvariant();
-        if (!GroupFolderPattern.IsMatch(normalized))
-        {
-            throw new InvalidOperationException($"Group folder '{folder}' is invalid.");
-        }
-    }
-
-    /// <summary>
-    /// Валидирует код участника каталога.
-    /// </summary>
-    /// <param name="memberCode">Код участника.</param>
-    private static void ValidateMemberCode(string memberCode)
-    {
-        var normalized = memberCode.Trim().ToUpperInvariant();
-        if (!MemberCodePattern.IsMatch(normalized))
-        {
-            throw new InvalidOperationException($"Member code '{memberCode}' is invalid.");
-        }
-    }
-
-    /// <summary>
-    /// Валидирует расширение выходного файла участника.
-    /// </summary>
-    /// <param name="memberFileExtension">Расширение файла, заданное в каталоге.</param>
-    private static void ValidateMemberFileExtension(string memberFileExtension)
-    {
-        var normalized = memberFileExtension.Trim().ToUpperInvariant();
-        if (!MemberFileExtensionPattern.IsMatch(normalized))
-        {
-            throw new InvalidOperationException(
-                $"Member file extension '{memberFileExtension}' is invalid.");
-        }
-    }
-
-    /// <summary>
-    /// Строит target-код в формате <c>GROUP_MEMBER</c>.
-    /// </summary>
-    /// <param name="groupFolder">Папка группы.</param>
-    /// <param name="memberCode">Код участника.</param>
-    /// <returns>Нормализованный target-код.</returns>
-    private static string BuildTargetCode(string groupFolder, string memberCode)
-    {
-        return $"{groupFolder}_{memberCode}";
-    }
-
-    /// <summary>
-    /// Строит базовую часть имени выходного файла по правилам формата выгрузки.
-    /// </summary>
-    /// <param name="memberCode">Код участника target-выборки.</param>
-    /// <param name="groupFolder">Папка группы target-выборки.</param>
-    /// <param name="scriptCode">Код скрипта (имя SQL-файла без расширения).</param>
-    /// <returns>Базовая часть имени выходного файла без суффикса чанка и расширения.</returns>
-    private static string BuildOutputFileStem(string memberCode, string groupFolder, string scriptCode)
-    {
-        if (scriptCode.Length < 3)
-        {
-            throw new InvalidOperationException(
-                $"Script '{scriptCode}' must have at least 3 characters in file name.");
-        }
-
-        var tail = scriptCode[3..].TrimStart('_');
-        var groupThirdLetter = groupFolder[2];
-        return string.IsNullOrWhiteSpace(tail)
-            ? $"Y{memberCode}{groupThirdLetter}"
-            : $"Y{memberCode}{groupThirdLetter}_{tail}";
     }
 }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Unload.Console.CatalogSelection;
 
@@ -57,43 +56,3 @@ internal static class CatalogSelectionLoader
         return groupedTargets;
     }
 }
-
-/// <summary>
-/// Корневая JSON-модель каталога для консольного загрузчика.
-/// </summary>
-/// <param name="Groups">Список групп каталога.</param>
-/// <param name="Members">Список участников каталога.</param>
-internal record SelectionCatalogRoot(
-    [property: JsonPropertyName("groups")] List<SelectionGroup> Groups,
-    [property: JsonPropertyName("members")] List<SelectionMember> Members);
-
-/// <summary>
-/// JSON-модель группы для консольного загрузчика.
-/// </summary>
-/// <param name="Id">Идентификатор группы.</param>
-/// <param name="Name">Название группы.</param>
-/// <param name="Folder">Папка группы.</param>
-internal record SelectionGroup(
-    [property: JsonPropertyName("id")] int Id,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("folder")] string Folder);
-
-/// <summary>
-/// JSON-модель участника для консольного загрузчика.
-/// </summary>
-/// <param name="Id">Идентификатор участника.</param>
-/// <param name="Name">Название участника.</param>
-/// <param name="Code">Код участника.</param>
-/// <param name="Groups">Список идентификаторов групп участника.</param>
-internal record SelectionMember(
-    [property: JsonPropertyName("id")] int Id,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("code")] string Code,
-    [property: JsonPropertyName("groups")] List<int> Groups);
-
-/// <summary>
-/// Source-generation контекст сериализации каталога для console.
-/// Используется для типобезопасной и производительной десериализации JSON.
-/// </summary>
-[JsonSerializable(typeof(SelectionCatalogRoot))]
-internal partial class CatalogSelectionJsonContext : JsonSerializerContext;

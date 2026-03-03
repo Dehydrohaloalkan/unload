@@ -10,7 +10,6 @@ namespace Unload.Runner;
 /// </summary>
 public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
 {
-    private static readonly char[] InvalidPathChars = Path.GetInvalidFileNameChars();
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _baseDirectory;
 
@@ -31,17 +30,17 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
     /// <returns>Задача завершения записи.</returns>
     public Task WriteEventAsync(RunnerEvent @event, CancellationToken cancellationToken)
     {
-        var runDirectory = GetRunDirectory(@event.CorrelationId);
+        var runDirectory = DiagnosticsRunPathHelper.GetRunDirectory(_baseDirectory, @event.CorrelationId);
         var filePath = Path.Combine(runDirectory, "events.csv");
         var row = string.Join(',',
-            Csv(@event.OccurredAt.ToString("O")),
-            Csv(@event.CorrelationId),
-            Csv(@event.Step.ToString()),
-            Csv(@event.TargetCode),
-            Csv(@event.ScriptCode),
-            Csv(@event.Records?.ToString()),
-            Csv(@event.FilePath),
-            Csv(@event.Message));
+            CsvValueEscaper.Csv(@event.OccurredAt.ToString("O")),
+            CsvValueEscaper.Csv(@event.CorrelationId),
+            CsvValueEscaper.Csv(@event.Step.ToString()),
+            CsvValueEscaper.Csv(@event.TargetCode),
+            CsvValueEscaper.Csv(@event.ScriptCode),
+            CsvValueEscaper.Csv(@event.Records?.ToString()),
+            CsvValueEscaper.Csv(@event.FilePath),
+            CsvValueEscaper.Csv(@event.Message));
 
         return AppendRowAsync(
             filePath,
@@ -59,19 +58,19 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
     /// <returns>Задача завершения записи.</returns>
     public Task WriteMetricAsync(RunMetricRecord metric, CancellationToken cancellationToken)
     {
-        var runDirectory = GetRunDirectory(metric.CorrelationId);
+        var runDirectory = DiagnosticsRunPathHelper.GetRunDirectory(_baseDirectory, metric.CorrelationId);
         var filePath = Path.Combine(runDirectory, "metrics.csv");
         var row = string.Join(',',
-            Csv(metric.OccurredAt.ToString("O")),
-            Csv(metric.CorrelationId),
-            Csv(metric.Step.ToString()),
-            Csv(metric.DurationMs.ToString()),
-            Csv(metric.Outcome),
-            Csv(metric.TargetCode),
-            Csv(metric.ScriptCode),
-            Csv(metric.Records?.ToString()),
-            Csv(metric.FilePath),
-            Csv(metric.Details));
+            CsvValueEscaper.Csv(metric.OccurredAt.ToString("O")),
+            CsvValueEscaper.Csv(metric.CorrelationId),
+            CsvValueEscaper.Csv(metric.Step.ToString()),
+            CsvValueEscaper.Csv(metric.DurationMs.ToString()),
+            CsvValueEscaper.Csv(metric.Outcome),
+            CsvValueEscaper.Csv(metric.TargetCode),
+            CsvValueEscaper.Csv(metric.ScriptCode),
+            CsvValueEscaper.Csv(metric.Records?.ToString()),
+            CsvValueEscaper.Csv(metric.FilePath),
+            CsvValueEscaper.Csv(metric.Details));
 
         return AppendRowAsync(
             filePath,
@@ -118,42 +117,4 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
         }
     }
 
-    /// <summary>
-    /// Возвращает директорию запуска с безопасным именем на основе correlation id.
-    /// </summary>
-    /// <param name="correlationId">Идентификатор запуска.</param>
-    /// <returns>Путь к директории диагностических файлов запуска.</returns>
-    private string GetRunDirectory(string correlationId)
-    {
-        var safeName = correlationId;
-        foreach (var invalidChar in InvalidPathChars)
-        {
-            safeName = safeName.Replace(invalidChar, '_');
-        }
-
-        return Path.Combine(_baseDirectory, safeName);
-    }
-
-    /// <summary>
-    /// Экранирует значение для безопасной записи в CSV.
-    /// Дополнительно защищает от formula-injection в табличных редакторах.
-    /// </summary>
-    /// <param name="value">Исходное строковое значение.</param>
-    /// <returns>Экранированное значение в CSV-формате.</returns>
-    private static string Csv(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return "\"\"";
-        }
-
-        var safe = value;
-        if (safe.Length > 0 && "=+-@".Contains(safe[0], StringComparison.Ordinal))
-        {
-            safe = $"'{safe}";
-        }
-
-        safe = safe.Replace("\"", "\"\"");
-        return $"\"{safe}\"";
-    }
 }

@@ -1,6 +1,4 @@
-using System.Data.Common;
 using System.Diagnostics;
-using System.Globalization;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -88,10 +86,10 @@ public class RunnerEngine : IRunner
         var runStopwatch = Stopwatch.StartNew();
         try
         {
-            ValidateRequest(request);
-            ValidateDatabaseConnectivity();
+            RunnerEngineGuard.ValidateRequest(request);
+            RunnerEngineGuard.ValidateDatabaseConnectivity(_databaseClient);
 
-            var runOutputDirectory = CreateRunOutputDirectory(request.OutputDirectory);
+            var runOutputDirectory = RunnerEngineGuard.CreateRunOutputDirectory(request.OutputDirectory);
 
             await EmitAsync(
                 writer,
@@ -247,7 +245,7 @@ public class RunnerEngine : IRunner
 
         var queryStopwatch = Stopwatch.StartNew();
         await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
-        var columns = GetColumns(reader);
+        var columns = RunnerEngineDataReader.GetColumns(reader);
 
         if (columns.Count == 0)
         {
@@ -263,7 +261,7 @@ public class RunnerEngine : IRunner
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            var row = ReadRow(reader, columns);
+            var row = RunnerEngineDataReader.ReadRow(reader, columns);
             var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
             var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
             if (rowSize + headerSize > _options.ChunkSizeBytes)
@@ -442,85 +440,4 @@ public class RunnerEngine : IRunner
         await writer.WriteAsync(@event, cancellationToken);
     }
 
-    /// <summary>
-    /// Извлекает список имен колонок из ридера БД.
-    /// </summary>
-    /// <param name="reader">Открытый ридер данных.</param>
-    /// <returns>Список колонок в исходном порядке.</returns>
-    private static List<string> GetColumns(DbDataReader reader)
-    {
-        var columns = new List<string>(reader.FieldCount);
-        for (var i = 0; i < reader.FieldCount; i++)
-        {
-            columns.Add(reader.GetName(i));
-        }
-
-        return columns;
-    }
-
-    /// <summary>
-    /// Читает текущую строку <see cref="DbDataReader"/> в доменную модель.
-    /// </summary>
-    /// <param name="reader">Ридер данных, указывающий на текущую строку.</param>
-    /// <param name="columns">Список колонок для чтения.</param>
-    /// <returns>Строка данных в виде словаря колонок и значений.</returns>
-    private static DatabaseRow ReadRow(DbDataReader reader, IReadOnlyList<string> columns)
-    {
-        var values = new Dictionary<string, object?>(columns.Count, StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < columns.Count; i++)
-        {
-            values[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-        }
-
-        return new DatabaseRow(values);
-    }
-
-    /// <summary>
-    /// Проверяет доступность подключения к базе данных перед запуском.
-    /// </summary>
-    private void ValidateDatabaseConnectivity()
-    {
-        if (!_databaseClient.IsConnected)
-        {
-            throw new InvalidOperationException("Database connection is not available.");
-        }
-    }
-
-    /// <summary>
-    /// Валидирует базовые обязательные поля запроса.
-    /// </summary>
-    /// <param name="request">Запрос запуска, который нужно проверить.</param>
-    private static void ValidateRequest(RunRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.CorrelationId))
-        {
-            throw new InvalidOperationException("CorrelationId is required.");
-        }
-
-        if (request.TargetCodes.Count == 0)
-        {
-            throw new InvalidOperationException("At least one target code is required.");
-        }
-    }
-
-    /// <summary>
-    /// Создает уникальную папку запуска внутри базовой директории output.
-    /// </summary>
-    /// <param name="baseOutputDirectory">Базовая директория для результатов выгрузки.</param>
-    /// <returns>Полный путь к созданной директории текущего запуска.</returns>
-    private static string CreateRunOutputDirectory(string baseOutputDirectory)
-    {
-        var timestamp = DateTime.Now.ToString("dd_MM_yyyy_HHmmss", CultureInfo.InvariantCulture);
-        var candidate = Path.Combine(baseOutputDirectory, timestamp);
-        var suffix = 1;
-
-        while (Directory.Exists(candidate))
-        {
-            candidate = Path.Combine(baseOutputDirectory, $"{timestamp}_{suffix:D2}");
-            suffix++;
-        }
-
-        Directory.CreateDirectory(candidate);
-        return candidate;
-    }
 }
