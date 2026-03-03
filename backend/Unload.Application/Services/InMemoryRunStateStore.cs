@@ -15,14 +15,14 @@ public class InMemoryRunStateStore : IRunStateStore
     /// Создает или перезаписывает запись запуска в статусе очереди.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
-    /// <param name="profileCodes">Коды профилей запуска.</param>
-    public void SetQueued(string correlationId, IReadOnlyCollection<string> profileCodes)
+    /// <param name="targetCodes">Target-коды запуска.</param>
+    public void SetQueued(string correlationId, IReadOnlyCollection<string> targetCodes)
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = new RunStatusInfo(
             correlationId,
             RunLifecycleStatus.Queued,
-            profileCodes.ToArray(),
+            targetCodes.ToArray(),
             now,
             now,
             Message: "Run queued.");

@@ -1,20 +1,20 @@
 namespace Unload.Core;
 
 /// <summary>
-/// Нормализованная модель каталога профилей, собираемая из <c>configs/catalog.json</c>.
-/// Используется API для выдачи каталога и раннером для резолва профилей в скрипты.
+/// Нормализованная модель каталога target-выборок, собираемая из <c>configs/catalog.json</c>.
+/// Используется API для выдачи каталога и раннером для резолва target-кодов в скрипты.
 /// </summary>
 /// <param name="Groups">Список групп каталога.</param>
 /// <param name="Members">Список участников/подсистем каталога.</param>
-/// <param name="Profiles">Список вычисленных профилей вида <c>GROUP_MEMBER</c>.</param>
+/// <param name="Targets">Список вычисленных target-выборок вида <c>GROUP_MEMBER</c>.</param>
 public record CatalogInfo(
     IReadOnlyList<CatalogGroupInfo> Groups,
     IReadOnlyList<CatalogMemberInfo> Members,
-    IReadOnlyList<CatalogProfileInfo> Profiles);
+    IReadOnlyList<CatalogTargetInfo> Targets);
 
 /// <summary>
 /// Описание группы в каталоге.
-/// Используется для построения профиля и поиска папки со скриптами.
+/// Используется для построения target-кода и поиска папки со скриптами.
 /// </summary>
 /// <param name="Id">Уникальный идентификатор группы из каталога.</param>
 /// <param name="Name">Отображаемое имя группы.</param>
@@ -26,7 +26,7 @@ public record CatalogGroupInfo(
 
 /// <summary>
 /// Описание участника каталога.
-/// Используется для построения кода профиля и расширения итогового файла.
+/// Используется для построения target-кода и расширения итогового файла.
 /// </summary>
 /// <param name="Id">Уникальный идентификатор участника.</param>
 /// <param name="Name">Отображаемое имя участника.</param>
@@ -39,19 +39,19 @@ public record CatalogMemberInfo(
     string FileExtension);
 
 /// <summary>
-/// Связка группы и участника, представляющая конкретный профиль выгрузки.
-/// Используется сервисом каталога при резолве профилей в SQL-скрипты.
+/// Связка группы и участника, представляющая конкретную target-выборку выгрузки.
+/// Используется сервисом каталога при резолве target-кодов в SQL-скрипты.
 /// </summary>
-/// <param name="ProfileCode">Полный код профиля в формате <c>GROUP_MEMBER</c>.</param>
-/// <param name="GroupId">Идентификатор группы профиля.</param>
-/// <param name="MemberId">Идентификатор участника профиля.</param>
-/// <param name="GroupName">Имя группы профиля.</param>
-/// <param name="GroupFolder">Папка группы профиля в <c>scripts</c>.</param>
-/// <param name="MemberName">Имя участника профиля.</param>
-/// <param name="MemberCode">Код участника профиля.</param>
-/// <param name="MemberFileExtension">Расширение итоговых файлов для профиля.</param>
-public record CatalogProfileInfo(
-    string ProfileCode,
+/// <param name="TargetCode">Полный target-код в формате <c>GROUP_MEMBER</c>.</param>
+/// <param name="GroupId">Идентификатор группы target-выборки.</param>
+/// <param name="MemberId">Идентификатор участника target-выборки.</param>
+/// <param name="GroupName">Имя группы target-выборки.</param>
+/// <param name="GroupFolder">Папка группы target-выборки в <c>scripts</c>.</param>
+/// <param name="MemberName">Имя участника target-выборки.</param>
+/// <param name="MemberCode">Код участника target-выборки.</param>
+/// <param name="MemberFileExtension">Расширение итоговых файлов для target-выборки.</param>
+public record CatalogTargetInfo(
+    string TargetCode,
     int GroupId,
     int MemberId,
     string GroupName,

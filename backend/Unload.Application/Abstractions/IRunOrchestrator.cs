@@ -9,7 +9,7 @@ public interface IRunOrchestrator
     /// <summary>
     /// Создает и ставит запуск в очередь.
     /// </summary>
-    /// <param name="profileCodes">Коды профилей, выбранных пользователем.</param>
+    /// <param name="targetCodes">Target-коды, выбранные пользователем.</param>
     /// <returns>Идентификатор корреляции созданного запуска.</returns>
-    string StartRun(IReadOnlyCollection<string> profileCodes);
+    string StartRun(IReadOnlyCollection<string> targetCodes);
 }

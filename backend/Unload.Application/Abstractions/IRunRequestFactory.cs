@@ -11,8 +11,8 @@ public interface IRunRequestFactory
     /// <summary>
     /// Создает новый объект запроса выполнения выгрузки.
     /// </summary>
-    /// <param name="profileCodes">Нормализованные коды профилей для запуска.</param>
+    /// <param name="targetCodes">Нормализованные target-коды для запуска.</param>
     /// <param name="outputDirectory">Базовая директория, где нужно сохранять результаты.</param>
     /// <returns>Готовый запрос выполнения раннера.</returns>
-    RunRequest Create(IReadOnlyCollection<string> profileCodes, string outputDirectory);
+    RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory);
 }

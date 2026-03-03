@@ -9,7 +9,7 @@ namespace Unload.Core;
 /// <param name="Step">Этап выполнения, для которого измерена длительность.</param>
 /// <param name="DurationMs">Длительность этапа в миллисекундах.</param>
 /// <param name="Outcome">Результат этапа: success/error/cancelled и т.д.</param>
-/// <param name="ProfileCode">Код профиля (если этап профильно-специфичен).</param>
+/// <param name="TargetCode">Target-код (если этап привязан к конкретной выборке).</param>
 /// <param name="ScriptCode">Код скрипта (если этап скриптовый).</param>
 /// <param name="Records">Количество обработанных строк (если применимо).</param>
 /// <param name="FilePath">Путь к файлу результата (если применимо).</param>
@@ -20,7 +20,7 @@ public record RunMetricRecord(
     RunnerStep Step,
     long DurationMs,
     string Outcome,
-    string? ProfileCode = null,
+    string? TargetCode = null,
     string? ScriptCode = null,
     int? Records = null,
     string? FilePath = null,

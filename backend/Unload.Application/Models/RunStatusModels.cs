@@ -20,7 +20,7 @@ public enum RunLifecycleStatus
 /// </summary>
 /// <param name="CorrelationId">Идентификатор запуска.</param>
 /// <param name="Status">Текущий агрегированный статус запуска.</param>
-/// <param name="ProfileCodes">Коды профилей, запрошенных для выполнения.</param>
+/// <param name="TargetCodes">Target-коды, запрошенные для выполнения.</param>
 /// <param name="CreatedAt">Время создания записи статуса.</param>
 /// <param name="UpdatedAt">Время последнего обновления статуса.</param>
 /// <param name="LastStep">Последний шаг раннера, если уже получен.</param>
@@ -29,7 +29,7 @@ public enum RunLifecycleStatus
 public record RunStatusInfo(
     string CorrelationId,
     RunLifecycleStatus Status,
-    IReadOnlyCollection<string> ProfileCodes,
+    IReadOnlyCollection<string> TargetCodes,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     RunnerStep? LastStep = null,

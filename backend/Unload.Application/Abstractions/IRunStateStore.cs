@@ -12,8 +12,8 @@ public interface IRunStateStore
     /// Помечает запуск как поставленный в очередь.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
-    /// <param name="profileCodes">Коды профилей, связанных с запуском.</param>
-    void SetQueued(string correlationId, IReadOnlyCollection<string> profileCodes);
+    /// <param name="targetCodes">Target-коды, связанные с запуском.</param>
+    void SetQueued(string correlationId, IReadOnlyCollection<string> targetCodes);
 
     /// <summary>
     /// Помечает запуск как выполняющийся.

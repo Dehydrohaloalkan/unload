@@ -9,9 +9,9 @@
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
-  - Понимает структуру `groups` + `members` (у `member` есть `groups` и `file`) и строит код профиля как `<GROUP_FOLDER>_<MEMBER_CODE>`.
-  - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты профиля по второй букве имени файла (`member.code`).
-  - Валидирует `group.folder`, `member.code`, `profileCode` и защищает от выхода за границы директории скриптов.
+  - Понимает структуру `groups` + `members` (у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
+  - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по второй букве имени файла (`member.code`).
+  - Валидирует `group.folder`, `member.code`, `targetCode` и защищает от выхода за границы директории скриптов.
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
@@ -35,7 +35,7 @@
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
   - Параллельно выполняет скрипты (`MaxDegreeOfParallelism`) и читает `DbDataReader` потоково.
-  - Шаги: resolve профилей -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
+  - Шаги: resolve target-кодов -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
   - Диагностика: пишет полный лог событий и метрики длительности шагов в CSV через `IRunDiagnosticsSink`.
@@ -49,7 +49,7 @@
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
-  - `GET /api/catalog` — отдает структуру каталога (группы, участники, профили).
+  - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки).
   - `POST /api/runs` — ставит запуск в очередь и возвращает `correlationId`.
   - `GET /api/runs` — список запусков и их статусы.
   - `GET /api/runs/{correlationId}` — статус конкретного запуска.
@@ -65,7 +65,7 @@
   - Переиспользует тот же runtime/use-case слой (`Unload.Application`), что и API.
   - Отображение событий в терминале через `Spectre.Console`.
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
-  - Если профили не переданы аргументами, интерактивно показывает профили по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
+  - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
 
 ## Module diagram
 
@@ -93,10 +93,10 @@ flowchart LR
 ## Execution flow
 
 1. Консоль или API вызывает `IRunOrchestrator` из `Unload.Application` для постановки запуска в очередь.
-2. `IRunOrchestrator` валидирует профили, формирует `RunRequest` и сохраняет начальный статус.
+2. `IRunOrchestrator` валидирует target-коды, формирует `RunRequest` и сохраняет начальный статус.
 3. `RunProcessingBackgroundService` в API извлекает задачу из очереди и запускает `RunnerEngine`.
 4. `RunnerEngine` эмитит `RequestAccepted`.
-5. `JsonCatalogService` возвращает скрипты для выбранных профилей.
+5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
 6. Для каждого скрипта:
    - получить `DbDataReader` из БД;
    - читать строки потоково;
@@ -119,9 +119,9 @@ sequenceDiagram
     participant State as IRunStateStore
     participant SignalR as RunStatusHub
 
-    Client->>Transport: start run(profileCodes)
+    Client->>Transport: start run(targetCodes)
     Transport->>App: IRunOrchestrator.StartRun(...)
-    App->>App: normalize + validate profile codes
+    App->>App: normalize + validate target codes
     App->>Queue: TryEnqueue(RunRequest)
     App->>State: SetQueued(...)
     Transport-->>Client: correlationId
@@ -143,7 +143,7 @@ sequenceDiagram
   - `events.csv`: полный лог событий (`RunnerEvent`).
   - `metrics.csv`: длительность шагов (`duration_ms`) и итог (`outcome`).
   - Для сравнения длительности скриптов используется строка с `step=ScriptCompleted`:
-    - `profile_code` + `script_code` + `duration_ms` показывают полное время выгрузки скрипта (query + запись чанков).
+    - `target_code` + `script_code` + `duration_ms` показывают полное время выгрузки скрипта (query + запись чанков).
 - Формат CSV безопасно экранируется, чтобы избежать CSV formula injection при открытии в табличных редакторах.
 
 ## Code documentation
@@ -166,7 +166,7 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 Пример запуска выгрузки:
 
 ```powershell
-curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"profileCodes\":[\"YSB_M\"]}"
+curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"targetCodes\":[\"YSB_M\"]}"
 ```
 
 Проверка статусов запусков:
@@ -190,7 +190,7 @@ curl http://localhost:5000/api/runs
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 ```
 
-С указанием профилей:
+С указанием target-кодов:
 
 ```powershell
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- QQW,QQE

@@ -7,7 +7,7 @@ namespace Unload.Core;
 public enum RunnerStep
 {
     RequestAccepted,
-    ProfilesResolved,
+    TargetsResolved,
     ScriptDiscovered,
     QueryStarted,
     QueryCompleted,

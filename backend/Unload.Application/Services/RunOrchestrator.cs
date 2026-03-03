@@ -5,11 +5,11 @@ namespace Unload.Application;
 
 /// <summary>
 /// Оркестратор постановки запуска выгрузки в очередь.
-/// Используется API/Console для валидации профилей, создания запроса и публикации начального статуса.
+/// Используется API/Console для валидации target-кодов, создания запроса и публикации начального статуса.
 /// </summary>
 public class RunOrchestrator : IRunOrchestrator
 {
-    private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
+    private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 
     private readonly IRunRequestFactory _requestFactory;
     private readonly IRunQueue _runQueue;
@@ -36,13 +36,13 @@ public class RunOrchestrator : IRunOrchestrator
     }
 
     /// <summary>
-    /// Нормализует и валидирует коды профилей, создает запрос и ставит его в очередь.
+    /// Нормализует и валидирует target-коды, создает запрос и ставит его в очередь.
     /// </summary>
-    /// <param name="profileCodes">Коды профилей от клиента.</param>
+    /// <param name="targetCodes">Target-коды от клиента.</param>
     /// <returns>Correlation id созданного запуска.</returns>
-    public string StartRun(IReadOnlyCollection<string> profileCodes)
+    public string StartRun(IReadOnlyCollection<string> targetCodes)
     {
-        var normalizedCodes = NormalizeProfileCodes(profileCodes);
+        var normalizedCodes = NormalizeTargetCodes(targetCodes);
         var request = _requestFactory.Create(normalizedCodes, _outputDirectory);
         _runStateStore.SetQueued(request.CorrelationId, normalizedCodes);
         if (!_runQueue.TryEnqueue(request))
@@ -54,13 +54,13 @@ public class RunOrchestrator : IRunOrchestrator
     }
 
     /// <summary>
-    /// Выполняет нормализацию и базовую валидацию кодов профилей.
+    /// Выполняет нормализацию и базовую валидацию target-кодов.
     /// </summary>
-    /// <param name="profileCodes">Исходный список кодов профилей.</param>
+    /// <param name="targetCodes">Исходный список target-кодов.</param>
     /// <returns>Нормализованный уникальный список кодов в верхнем регистре.</returns>
-    private static IReadOnlyCollection<string> NormalizeProfileCodes(IReadOnlyCollection<string> profileCodes)
+    private static IReadOnlyCollection<string> NormalizeTargetCodes(IReadOnlyCollection<string> targetCodes)
     {
-        var normalized = profileCodes
+        var normalized = targetCodes
             .Where(static x => !string.IsNullOrWhiteSpace(x))
             .Select(static x => x.Trim().ToUpperInvariant())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -68,14 +68,14 @@ public class RunOrchestrator : IRunOrchestrator
 
         if (normalized.Length == 0)
         {
-            throw new InvalidOperationException("At least one profile code is required.");
+            throw new InvalidOperationException("At least one target code is required.");
         }
 
         foreach (var code in normalized)
         {
-            if (!ProfileCodePattern.IsMatch(code))
+            if (!TargetCodePattern.IsMatch(code))
             {
-                throw new InvalidOperationException($"Profile code '{code}' is invalid.");
+                throw new InvalidOperationException($"Target code '{code}' is invalid.");
             }
         }
 

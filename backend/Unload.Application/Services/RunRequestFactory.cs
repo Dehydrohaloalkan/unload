@@ -11,14 +11,14 @@ public class RunRequestFactory : IRunRequestFactory
     /// <summary>
     /// Создает <see cref="RunRequest"/> c уникальным идентификатором запуска.
     /// </summary>
-    /// <param name="profileCodes">Коды профилей для выполнения.</param>
+    /// <param name="targetCodes">Target-коды для выполнения.</param>
     /// <param name="outputDirectory">Базовая директория вывода.</param>
     /// <returns>Новый объект запроса запуска.</returns>
-    public RunRequest Create(IReadOnlyCollection<string> profileCodes, string outputDirectory)
+    public RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         return new RunRequest(
-            profileCodes,
+            targetCodes,
             CorrelationId: $"req-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{suffix}",
             OutputDirectory: outputDirectory);
     }

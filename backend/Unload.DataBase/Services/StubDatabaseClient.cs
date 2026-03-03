@@ -25,7 +25,7 @@ public class StubDatabaseClient : IDatabaseClient
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var profileCode = "STUB";
+        var targetCode = "STUB";
         var scriptCode = string.IsNullOrWhiteSpace(query)
             ? "QUERY"
             : query.Length <= 24
@@ -33,7 +33,7 @@ public class StubDatabaseClient : IDatabaseClient
                 : query[..24];
 
         var table = new DataTable();
-        table.Columns.Add("profile", typeof(string));
+        table.Columns.Add("target_code", typeof(string));
         table.Columns.Add("script", typeof(string));
         table.Columns.Add("row_number", typeof(int));
         table.Columns.Add("event_date_utc", typeof(string));
@@ -44,7 +44,7 @@ public class StubDatabaseClient : IDatabaseClient
         for (var i = 1; i <= rowCount; i++)
         {
             table.Rows.Add(
-                profileCode,
+                targetCode,
                 scriptCode,
                 i,
                 DateTime.UtcNow.ToString("O"),

@@ -37,7 +37,7 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
             Csv(@event.OccurredAt.ToString("O")),
             Csv(@event.CorrelationId),
             Csv(@event.Step.ToString()),
-            Csv(@event.ProfileCode),
+            Csv(@event.TargetCode),
             Csv(@event.ScriptCode),
             Csv(@event.Records?.ToString()),
             Csv(@event.FilePath),
@@ -45,7 +45,7 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
 
         return AppendRowAsync(
             filePath,
-            "occurred_at,correlation_id,step,profile_code,script_code,records,file_path,message",
+            "occurred_at,correlation_id,step,target_code,script_code,records,file_path,message",
             row,
             @event.CorrelationId,
             cancellationToken);
@@ -67,7 +67,7 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
             Csv(metric.Step.ToString()),
             Csv(metric.DurationMs.ToString()),
             Csv(metric.Outcome),
-            Csv(metric.ProfileCode),
+            Csv(metric.TargetCode),
             Csv(metric.ScriptCode),
             Csv(metric.Records?.ToString()),
             Csv(metric.FilePath),
@@ -75,7 +75,7 @@ public class CsvRunDiagnosticsSink : IRunDiagnosticsSink
 
         return AppendRowAsync(
             filePath,
-            "occurred_at,correlation_id,step,duration_ms,outcome,profile_code,script_code,records,file_path,details",
+            "occurred_at,correlation_id,step,duration_ms,outcome,target_code,script_code,records,file_path,details",
             row,
             metric.CorrelationId,
             cancellationToken);

@@ -4,17 +4,17 @@ using System.Text.Json.Serialization;
 namespace Unload.Console.CatalogSelection;
 
 /// <summary>
-/// Загрузчик каталога для консольного сценария выбора профилей.
-/// Используется console-приложением для построения интерактивного списка профилей.
+/// Загрузчик каталога для консольного сценария выбора target-выборок.
+/// Используется console-приложением для построения интерактивного списка target-кодов.
 /// </summary>
 internal static class CatalogSelectionLoader
 {
     /// <summary>
-    /// Загружает каталог и преобразует его в группы профилей для консольного выбора.
+    /// Загружает каталог и преобразует его в группы target-выборок для консольного выбора.
     /// </summary>
     /// <param name="catalogPath">Путь к JSON-каталогу.</param>
     /// <param name="cancellationToken">Токен отмены операции.</param>
-    /// <returns>Список групп с профилями для UI-мультиселекта.</returns>
+    /// <returns>Список групп с target-выборками для UI-мультиселекта.</returns>
     public static async Task<IReadOnlyList<CatalogSelectionGroup>> LoadAsync(string catalogPath, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(catalogPath);
@@ -32,29 +32,29 @@ internal static class CatalogSelectionLoader
             .GroupBy(static x => x.Id)
             .ToDictionary(static x => x.Key, static x => x.First());
 
-        var groupedProfiles = root.Groups
+        var groupedTargets = root.Groups
             .Select(groupData =>
             {
-                var profiles = membersById.Values
+                var targets = membersById.Values
                     .Where(member => member.Groups.Contains(groupData.Id))
                     .Select(member =>
                     {
                         var normalizedFolder = groupData.Folder.Trim().ToUpperInvariant();
                         var normalizedCode = member.Code.Trim().ToUpperInvariant();
-                        var profileCode = $"{normalizedFolder}_{normalizedCode}";
+                        var targetCode = $"{normalizedFolder}_{normalizedCode}";
 
-                        return new CatalogSelectionProfile(profileCode, member.Name, normalizedCode);
+                        return new CatalogSelectionTarget(targetCode, member.Name, normalizedCode);
                     })
-                    .DistinctBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
+                    .DistinctBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
                     .OrderBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
-                return new CatalogSelectionGroup(groupData.Id, groupData.Name, profiles);
+                return new CatalogSelectionGroup(groupData.Id, groupData.Name, targets);
             })
             .OrderBy(static x => x.GroupName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return groupedProfiles;
+        return groupedTargets;
     }
 }
 

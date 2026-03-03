@@ -5,12 +5,12 @@ using Unload.Core;
 namespace Unload.Catalog;
 
 /// <summary>
-/// Сервис чтения каталога из JSON и резолва профилей в SQL-скрипты.
+/// Сервис чтения каталога из JSON и резолва target-кодов в SQL-скрипты.
 /// Используется раннером и API для получения структуры каталога и набора скриптов к выполнению.
 /// </summary>
 public class JsonCatalogService : ICatalogService
 {
-    private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
+    private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
     private static readonly Regex GroupFolderPattern = new("^[A-Z0-9_]{3,32}$", RegexOptions.Compiled);
     private static readonly Regex MemberCodePattern = new("^[A-Z0-9]{1,8}$", RegexOptions.Compiled);
     private static readonly Regex MemberFileExtensionPattern = new("^\\.[A-Z0-9]{1,8}$", RegexOptions.Compiled);
@@ -32,13 +32,13 @@ public class JsonCatalogService : ICatalogService
     /// Загружает каталог, валидирует его и возвращает нормализованную модель.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены чтения.</param>
-    /// <returns>Каталог групп, участников и вычисленных профилей.</returns>
+    /// <returns>Каталог групп, участников и вычисленных target-выборок.</returns>
     public async Task<CatalogInfo> GetCatalogAsync(CancellationToken cancellationToken)
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
         var groupsById = catalog.Groups.ToDictionary(static x => x.Id);
 
-        var profiles = catalog.Members
+        var targets = catalog.Members
             .SelectMany(member => member.Groups.Distinct().Select(groupId => (Member: member, GroupId: groupId)))
             .Select(entry =>
             {
@@ -56,8 +56,8 @@ public class JsonCatalogService : ICatalogService
                 var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
                 var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
 
-                return new CatalogProfileInfo(
-                    BuildProfileCode(normalizedGroupFolder, normalizedMemberCode),
+                return new CatalogTargetInfo(
+                    BuildTargetCode(normalizedGroupFolder, normalizedMemberCode),
                     group.Id,
                     member.Id,
                     group.Name,
@@ -66,8 +66,8 @@ public class JsonCatalogService : ICatalogService
                     normalizedMemberCode,
                     normalizedFileExtension);
             })
-            .DistinctBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return new CatalogInfo(
@@ -90,33 +90,33 @@ public class JsonCatalogService : ICatalogService
                         member.File.Trim().ToUpperInvariant());
                 })
                 .ToArray(),
-            profiles);
+            targets);
     }
 
     /// <summary>
-    /// Резолвит выбранные профили в отсортированные списки SQL-скриптов.
+    /// Резолвит выбранные target-коды в отсортированные списки SQL-скриптов.
     /// </summary>
-    /// <param name="profileCodes">Коды профилей для резолва.</param>
+    /// <param name="targetCodes">Target-коды для резолва.</param>
     /// <param name="cancellationToken">Токен отмены операции.</param>
-    /// <returns>Словарь профиль -> список определений скриптов.</returns>
+    /// <returns>Словарь target-код -> список определений скриптов.</returns>
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>>> ResolveAsync(
-        IReadOnlyCollection<string> profileCodes,
+        IReadOnlyCollection<string> targetCodes,
         CancellationToken cancellationToken)
     {
         var catalogInfo = await GetCatalogAsync(cancellationToken);
-        var profileMap = catalogInfo.Profiles.ToDictionary(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase);
+        var targetMap = catalogInfo.Targets.ToDictionary(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase);
         var resolved = new Dictionary<string, IReadOnlyList<ScriptDefinition>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var profileCode in profileCodes.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var targetCode in targetCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            ValidateProfileCode(profileCode);
+            ValidateTargetCode(targetCode);
 
-            if (!profileMap.TryGetValue(profileCode, out var profile))
+            if (!targetMap.TryGetValue(targetCode, out var target))
             {
-                throw new InvalidOperationException($"Profile '{profileCode}' not found in catalog.");
+                throw new InvalidOperationException($"Target '{targetCode}' not found in catalog.");
             }
 
-            resolved[profileCode] = await LoadScriptsForProfileAsync(profile, cancellationToken);
+            resolved[targetCode] = await LoadScriptsForTargetAsync(target, cancellationToken);
         }
 
         return resolved;
@@ -139,13 +139,13 @@ public class JsonCatalogService : ICatalogService
     }
 
     /// <summary>
-    /// Загружает SQL-скрипты для конкретного профиля с проверками безопасности путей.
+    /// Загружает SQL-скрипты для конкретного target-кода с проверками безопасности путей.
     /// </summary>
-    /// <param name="profile">Профиль, для которого выбираются скрипты.</param>
+    /// <param name="target">Target, для которого выбираются скрипты.</param>
     /// <param name="cancellationToken">Токен отмены загрузки.</param>
-    /// <returns>Список определений скриптов профиля.</returns>
-    private async Task<IReadOnlyList<ScriptDefinition>> LoadScriptsForProfileAsync(
-        CatalogProfileInfo profile,
+    /// <returns>Список определений скриптов target-кода.</returns>
+    private async Task<IReadOnlyList<ScriptDefinition>> LoadScriptsForTargetAsync(
+        CatalogTargetInfo target,
         CancellationToken cancellationToken)
     {
         if (!Directory.Exists(_scriptsDirectory))
@@ -153,7 +153,7 @@ public class JsonCatalogService : ICatalogService
             throw new DirectoryNotFoundException($"Scripts directory was not found: {_scriptsDirectory}");
         }
 
-        var groupDirectory = Path.GetFullPath(Path.Combine(_scriptsDirectory, profile.GroupFolder));
+        var groupDirectory = Path.GetFullPath(Path.Combine(_scriptsDirectory, target.GroupFolder));
         if (!groupDirectory.StartsWith(_scriptsDirectory, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Detected scripts group path outside allowed scripts directory.");
@@ -167,7 +167,7 @@ public class JsonCatalogService : ICatalogService
 
         var files = Directory
             .EnumerateFiles(groupDirectory, "*.sql", SearchOption.TopDirectoryOnly)
-            .Where(path => IsScriptForMember(path, profile.MemberCode))
+            .Where(path => IsScriptForMember(path, target.MemberCode))
             .OrderBy(GetScriptOrder)
             .ThenBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -183,12 +183,12 @@ public class JsonCatalogService : ICatalogService
 
             var sqlText = await File.ReadAllTextAsync(fullPath, cancellationToken);
             var scriptCode = Path.GetFileNameWithoutExtension(fullPath);
-            var outputFileStem = BuildOutputFileStem(profile.MemberCode, profile.GroupFolder, scriptCode);
+            var outputFileStem = BuildOutputFileStem(target.MemberCode, target.GroupFolder, scriptCode);
             scripts.Add(new ScriptDefinition(
-                profile.ProfileCode,
+                target.TargetCode,
                 scriptCode,
                 outputFileStem,
-                profile.MemberFileExtension,
+                target.MemberFileExtension,
                 fullPath,
                 sqlText));
         }
@@ -200,7 +200,7 @@ public class JsonCatalogService : ICatalogService
     /// Проверяет, относится ли SQL-файл к участнику по второй букве имени файла.
     /// </summary>
     /// <param name="scriptPath">Путь к SQL-файлу.</param>
-    /// <param name="memberCode">Код участника профиля.</param>
+    /// <param name="memberCode">Код участника target-выборки.</param>
     /// <returns><c>true</c>, если файл относится к участнику; иначе <c>false</c>.</returns>
     private static bool IsScriptForMember(string scriptPath, string memberCode)
     {
@@ -232,14 +232,14 @@ public class JsonCatalogService : ICatalogService
     }
 
     /// <summary>
-    /// Валидирует синтаксис кода профиля.
+    /// Валидирует синтаксис target-кода.
     /// </summary>
-    /// <param name="profileCode">Код профиля.</param>
-    private static void ValidateProfileCode(string profileCode)
+    /// <param name="targetCode">Target-код.</param>
+    private static void ValidateTargetCode(string targetCode)
     {
-        if (!ProfileCodePattern.IsMatch(profileCode))
+        if (!TargetCodePattern.IsMatch(targetCode))
         {
-            throw new InvalidOperationException($"Profile code '{profileCode}' is invalid.");
+            throw new InvalidOperationException($"Target code '{targetCode}' is invalid.");
         }
     }
 
@@ -284,12 +284,12 @@ public class JsonCatalogService : ICatalogService
     }
 
     /// <summary>
-    /// Строит код профиля в формате <c>GROUP_MEMBER</c>.
+    /// Строит target-код в формате <c>GROUP_MEMBER</c>.
     /// </summary>
     /// <param name="groupFolder">Папка группы.</param>
     /// <param name="memberCode">Код участника.</param>
-    /// <returns>Нормализованный код профиля.</returns>
-    private static string BuildProfileCode(string groupFolder, string memberCode)
+    /// <returns>Нормализованный target-код.</returns>
+    private static string BuildTargetCode(string groupFolder, string memberCode)
     {
         return $"{groupFolder}_{memberCode}";
     }
@@ -297,8 +297,8 @@ public class JsonCatalogService : ICatalogService
     /// <summary>
     /// Строит базовую часть имени выходного файла по правилам формата выгрузки.
     /// </summary>
-    /// <param name="memberCode">Код участника профиля.</param>
-    /// <param name="groupFolder">Папка группы профиля.</param>
+    /// <param name="memberCode">Код участника target-выборки.</param>
+    /// <param name="groupFolder">Папка группы target-выборки.</param>
     /// <param name="scriptCode">Код скрипта (имя SQL-файла без расширения).</param>
     /// <returns>Базовая часть имени выходного файла без суффикса чанка и расширения.</returns>
     private static string BuildOutputFileStem(string memberCode, string groupFolder, string scriptCode)

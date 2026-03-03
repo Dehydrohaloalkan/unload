@@ -4,8 +4,8 @@ namespace Unload.Api;
 /// Контракт HTTP-запроса на запуск выгрузки.
 /// Используется endpoint-ом <c>POST /api/runs</c>.
 /// </summary>
-/// <param name="ProfileCodes">Список кодов профилей, выбранных клиентом.</param>
-public record RunStartRequest(IReadOnlyCollection<string> ProfileCodes);
+/// <param name="TargetCodes">Список target-кодов, выбранных клиентом.</param>
+public record RunStartRequest(IReadOnlyCollection<string> TargetCodes);
 
 /// <summary>
 /// Контракт ответа на успешную постановку запуска в очередь.

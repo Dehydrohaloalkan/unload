@@ -10,8 +10,8 @@ var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
 var diagnosticsDirectory = ResolveDiagnosticsDirectory(root);
 
-var profileCodes = args.Length == 0
-    ? await PromptProfileCodesAsync(catalogPath, CancellationToken.None)
+var targetCodes = args.Length == 0
+    ? await PromptTargetCodesAsync(catalogPath, CancellationToken.None)
     : args.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
@@ -30,11 +30,11 @@ var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
 AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJustified());
 AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
 AnsiConsole.MarkupLine($"[grey]Scripts:[/] {Markup.Escape(scriptsDirectory)}");
-AnsiConsole.MarkupLine($"[grey]Profiles:[/] {Markup.Escape(string.Join(", ", profileCodes))}");
+AnsiConsole.MarkupLine($"[grey]Targets:[/] {Markup.Escape(string.Join(", ", targetCodes))}");
 AnsiConsole.MarkupLine($"[grey]Diagnostics:[/] {Markup.Escape(diagnosticsDirectory)}");
 AnsiConsole.MarkupLine(string.Empty);
 
-var request = requestFactory.Create(profileCodes, outputDirectory);
+var request = requestFactory.Create(targetCodes, outputDirectory);
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -94,49 +94,49 @@ static string ResolveWorkspaceRoot()
 }
 
 /// <summary>
-/// Показывает интерактивное меню выбора профилей и возвращает выбранные коды.
-/// Используется, когда профили не переданы аргументами командной строки.
+/// Показывает интерактивное меню выбора target-кодов и возвращает выбранные значения.
+/// Используется, когда target-коды не переданы аргументами командной строки.
 /// </summary>
-/// <param name="catalogPath">Путь к файлу каталога профилей.</param>
+/// <param name="catalogPath">Путь к файлу каталога target-выборок.</param>
 /// <param name="cancellationToken">Токен отмены операции.</param>
-/// <returns>Отсортированный список выбранных кодов профилей.</returns>
-static async Task<string[]> PromptProfileCodesAsync(string catalogPath, CancellationToken cancellationToken)
+/// <returns>Отсортированный список выбранных target-кодов.</returns>
+static async Task<string[]> PromptTargetCodesAsync(string catalogPath, CancellationToken cancellationToken)
 {
     var groups = await CatalogSelectionLoader.LoadAsync(catalogPath, cancellationToken);
-    var selectedProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var selectedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     foreach (var group in groups)
     {
-        if (group.Profiles.Count == 0)
+        if (group.Targets.Count == 0)
         {
             continue;
         }
 
-        var labelsToCodes = group.Profiles
+        var labelsToCodes = group.Targets
             .ToDictionary(
-                static x => $"{x.MemberName} [{x.MemberCode}] ({x.ProfileCode})",
-                static x => x.ProfileCode,
+                static x => $"{x.MemberName} [{x.MemberCode}] ({x.TargetCode})",
+                static x => x.TargetCode,
                 StringComparer.OrdinalIgnoreCase);
 
         var selectedInGroup = AnsiConsole.Prompt(
             new MultiSelectionPrompt<string>()
-                .Title($"[yellow]{Markup.Escape(group.GroupName)}[/] - выбери профили")
+                .Title($"[yellow]{Markup.Escape(group.GroupName)}[/] - выбери таргеты")
                 .NotRequired()
                 .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
                 .AddChoices(labelsToCodes.Keys));
 
         foreach (var label in selectedInGroup)
         {
-            selectedProfiles.Add(labelsToCodes[label]);
+            selectedTargets.Add(labelsToCodes[label]);
         }
     }
 
-    if (selectedProfiles.Count == 0)
+    if (selectedTargets.Count == 0)
     {
-        throw new InvalidOperationException("Не выбрано ни одного профиля для выгрузки.");
+        throw new InvalidOperationException("Не выбрано ни одного таргета для выгрузки.");
     }
 
-    return selectedProfiles.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    return selectedTargets.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
 }
 
 /// <summary>

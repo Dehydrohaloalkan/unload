@@ -34,7 +34,7 @@ app.MapPost("/api/runs", async (
     IHubContext<RunStatusHub> hubContext,
     CancellationToken cancellationToken) =>
 {
-    var correlationId = orchestrator.StartRun(request.ProfileCodes);
+    var correlationId = orchestrator.StartRun(request.TargetCodes);
     var runState = runStateStore.Get(correlationId);
     if (runState is not null)
     {

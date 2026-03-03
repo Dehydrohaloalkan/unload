@@ -22,7 +22,7 @@ public class RunnerEngine : IRunner
     /// <summary>
     /// Создает экземпляр раннера с инфраструктурными зависимостями.
     /// </summary>
-    /// <param name="catalogService">Сервис резолва профилей и скриптов.</param>
+    /// <param name="catalogService">Сервис резолва target-кодов и скриптов.</param>
     /// <param name="databaseClient">Клиент чтения данных из БД.</param>
     /// <param name="fileChunkWriter">Сервис записи чанков в файлы.</param>
     /// <param name="mqPublisher">Публикатор событий раннера в MQ.</param>
@@ -75,7 +75,7 @@ public class RunnerEngine : IRunner
     }
 
     /// <summary>
-    /// Выполняет полный пайплайн выгрузки: резолв профилей, обработка скриптов и финализация запуска.
+    /// Выполняет полный пайплайн выгрузки: резолв target-кодов, обработка скриптов и финализация запуска.
     /// </summary>
     /// <param name="request">Запрос запуска.</param>
     /// <param name="writer">Канал, в который пишутся события выполнения.</param>
@@ -101,29 +101,29 @@ public class RunnerEngine : IRunner
                 cancellationToken: cancellationToken);
 
             var resolveStopwatch = Stopwatch.StartNew();
-            var resolvedProfiles = await _catalogService.ResolveAsync(request.ProfileCodes, cancellationToken);
+            var resolvedTargets = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
             resolveStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
-                RunnerStep.ProfilesResolved,
-                $"Profiles resolved: {resolvedProfiles.Count}.",
-                records: resolvedProfiles.Count,
+                RunnerStep.TargetsResolved,
+                $"Targets resolved: {resolvedTargets.Count}.",
+                records: resolvedTargets.Count,
                 cancellationToken: cancellationToken);
             await _diagnosticsSink.WriteMetricAsync(
                 new RunMetricRecord(
                     DateTimeOffset.UtcNow,
                     request.CorrelationId,
-                    RunnerStep.ProfilesResolved,
+                    RunnerStep.TargetsResolved,
                     resolveStopwatch.ElapsedMilliseconds,
                     "success",
-                    Records: resolvedProfiles.Count,
-                    Details: "Catalog profiles resolved."),
+                    Records: resolvedTargets.Count,
+                    Details: "Catalog targets resolved."),
                 cancellationToken);
 
-            var scripts = resolvedProfiles
+            var scripts = resolvedTargets
                 .SelectMany(static x => x.Value)
-                .OrderBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static x => x.ScriptCode, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -134,7 +134,7 @@ public class RunnerEngine : IRunner
                     request,
                     RunnerStep.ScriptDiscovered,
                     $"Discovered script {script.ScriptCode}.",
-                    profileCode: script.ProfileCode,
+                    targetCode: script.TargetCode,
                     scriptCode: script.ScriptCode,
                     cancellationToken: cancellationToken);
             }
@@ -145,7 +145,7 @@ public class RunnerEngine : IRunner
                     writer,
                     request,
                     RunnerStep.Completed,
-                    "No scripts found for selected profiles.",
+                    "No scripts found for selected targets.",
                     cancellationToken: cancellationToken);
                 return;
             }
@@ -241,7 +241,7 @@ public class RunnerEngine : IRunner
             request,
             RunnerStep.QueryStarted,
             $"Running query for script {script.ScriptCode}.",
-            profileCode: script.ProfileCode,
+            targetCode: script.TargetCode,
             scriptCode: script.ScriptCode,
             cancellationToken: cancellationToken);
 
@@ -299,7 +299,7 @@ public class RunnerEngine : IRunner
             request,
             RunnerStep.QueryCompleted,
             $"Query finished for script {script.ScriptCode}.",
-            profileCode: script.ProfileCode,
+            targetCode: script.TargetCode,
             scriptCode: script.ScriptCode,
             records: rowsRead,
             cancellationToken: cancellationToken);
@@ -310,7 +310,7 @@ public class RunnerEngine : IRunner
                 RunnerStep.QueryCompleted,
                 queryStopwatch.ElapsedMilliseconds,
                 "success",
-                script.ProfileCode,
+                script.TargetCode,
                 script.ScriptCode,
                 rowsRead,
                 Details: "Database query execution completed."),
@@ -337,7 +337,7 @@ public class RunnerEngine : IRunner
                 RunnerStep.ScriptCompleted,
                 scriptStopwatch.ElapsedMilliseconds,
                 "success",
-                script.ProfileCode,
+                script.TargetCode,
                 script.ScriptCode,
                 rowsRead,
                 Details: "Script export completed (query + chunk writing)."),
@@ -371,7 +371,7 @@ public class RunnerEngine : IRunner
             request,
             RunnerStep.ChunkCreated,
             $"Chunk #{chunk.ChunkNumber} created for {script.ScriptCode}.",
-            profileCode: script.ProfileCode,
+            targetCode: script.TargetCode,
             scriptCode: script.ScriptCode,
             records: chunk.Rows.Count,
             cancellationToken: cancellationToken);
@@ -384,7 +384,7 @@ public class RunnerEngine : IRunner
             request,
             RunnerStep.FileWritten,
             $"File written: {Path.GetFileName(written.FilePath)}.",
-            profileCode: script.ProfileCode,
+            targetCode: script.TargetCode,
             scriptCode: script.ScriptCode,
             records: written.RowsCount,
             filePath: written.FilePath,
@@ -396,7 +396,7 @@ public class RunnerEngine : IRunner
                 RunnerStep.FileWritten,
                 writeStopwatch.ElapsedMilliseconds,
                 "success",
-                script.ProfileCode,
+                script.TargetCode,
                 script.ScriptCode,
                 written.RowsCount,
                 written.FilePath,
@@ -411,7 +411,7 @@ public class RunnerEngine : IRunner
     /// <param name="request">Запрос запуска.</param>
     /// <param name="step">Шаг выполнения.</param>
     /// <param name="message">Текст события.</param>
-    /// <param name="profileCode">Код профиля (опционально).</param>
+    /// <param name="targetCode">Target-код (опционально).</param>
     /// <param name="scriptCode">Код скрипта (опционально).</param>
     /// <param name="records">Количество записей (опционально).</param>
     /// <param name="filePath">Путь к файлу результата (опционально).</param>
@@ -421,7 +421,7 @@ public class RunnerEngine : IRunner
         RunRequest request,
         RunnerStep step,
         string message,
-        string? profileCode = null,
+        string? targetCode = null,
         string? scriptCode = null,
         int? records = null,
         string? filePath = null,
@@ -432,7 +432,7 @@ public class RunnerEngine : IRunner
             request.CorrelationId,
             step,
             message,
-            profileCode,
+            targetCode,
             scriptCode,
             records,
             filePath);
@@ -497,9 +497,9 @@ public class RunnerEngine : IRunner
             throw new InvalidOperationException("CorrelationId is required.");
         }
 
-        if (request.ProfileCodes.Count == 0)
+        if (request.TargetCodes.Count == 0)
         {
-            throw new InvalidOperationException("At least one profile code is required.");
+            throw new InvalidOperationException("At least one target code is required.");
         }
     }
 
