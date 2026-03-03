@@ -9,7 +9,7 @@
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
-  - Понимает структуру `groups` + `members` + `profiles` и строит код профиля как `<GROUP_FOLDER>_<MEMBER_CODE>`.
+  - Понимает структуру `groups` + `members` (у `member` есть `groups` и `file`) и строит код профиля как `<GROUP_FOLDER>_<MEMBER_CODE>`.
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты профиля по второй букве имени файла (`member.code`).
   - Валидирует `group.folder`, `member.code`, `profileCode` и защищает от выхода за границы директории скриптов.
 
@@ -19,9 +19,11 @@
   - В раннер передается `DbDataReader`, строки читаются потоково.
 
 - `backend/Unload.FileWriter`
-  - Запись чанков в `txt` с разделителем `|`.
+  - Запись чанков в файлы с расширением из `member.file` и разделителем `|`.
   - Первая строка файла — заголовок (имена колонок через `|`), далее строки данных.
-  - Пишет в `output/<runHash>/<profile>/<script>_<chunk>.txt`.
+  - Пишет в `output/<dd_MM_yyyy_HHmmss>/` без подпапок.
+  - Формат имени файла: `Y<member.code><3rd letter of group.folder>_<sql name after first 3 chars>_<chunk><member.file>`.
+  - `<chunk>` — base36 суффикс чанка (`00`, `01`, ..., `09`, `0A`, ..., `0Z`, `10`, ...).
 
 - `backend/Unload.MQ`
   - Заглушка MQ: `InMemoryMqPublisher`.

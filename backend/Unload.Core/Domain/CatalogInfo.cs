@@ -13,7 +13,8 @@ public record CatalogGroupInfo(
 public record CatalogMemberInfo(
     int Id,
     string Name,
-    string Code);
+    string Code,
+    string FileExtension);
 
 public record CatalogProfileInfo(
     string ProfileCode,
@@ -22,4 +23,5 @@ public record CatalogProfileInfo(
     string GroupName,
     string GroupFolder,
     string MemberName,
-    string MemberCode);
+    string MemberCode,
+    string MemberFileExtension);

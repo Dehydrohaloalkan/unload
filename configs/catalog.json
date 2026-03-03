@@ -15,22 +15,16 @@
         {
             "id": 1,
             "name": "first member",
-            "code": "M"
+            "code": "M",
+            "file": ".NAL",
+            "groups": [1]
         },
         {
             "id": 2,
             "name": "second member",
-            "code": "V"
-        }
-    ],
-    "profiles": [
-        {
-            "group_id": 1,
-            "member_id": 1
-        },
-        {
-            "group_id": 2,
-            "member_id": 2
+            "code": "V",
+            "file": ".VNA",
+            "groups": [2]
         }
     ]
 }

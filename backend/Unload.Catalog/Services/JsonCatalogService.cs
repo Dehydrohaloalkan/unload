@@ -7,8 +7,9 @@ namespace Unload.Catalog;
 public class JsonCatalogService : ICatalogService
 {
     private static readonly Regex ProfileCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
-    private static readonly Regex GroupFolderPattern = new("^[A-Z0-9_]{2,32}$", RegexOptions.Compiled);
+    private static readonly Regex GroupFolderPattern = new("^[A-Z0-9_]{3,32}$", RegexOptions.Compiled);
     private static readonly Regex MemberCodePattern = new("^[A-Z0-9]{1,8}$", RegexOptions.Compiled);
+    private static readonly Regex MemberFileExtensionPattern = new("^\\.[A-Z0-9]{1,8}$", RegexOptions.Compiled);
     private readonly string _catalogPath;
     private readonly string _scriptsDirectory;
 
@@ -22,32 +23,34 @@ public class JsonCatalogService : ICatalogService
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
         var groupsById = catalog.Groups.ToDictionary(static x => x.Id);
-        var membersById = catalog.Members.ToDictionary(static x => x.Id);
 
-        var profiles = catalog.Profiles
-            .Select(profile =>
+        var profiles = catalog.Members
+            .SelectMany(member => member.Groups.Distinct().Select(groupId => (Member: member, GroupId: groupId)))
+            .Select(entry =>
             {
-                if (!groupsById.TryGetValue(profile.GroupId, out var group))
+                if (!groupsById.TryGetValue(entry.GroupId, out var group))
                 {
-                    throw new InvalidOperationException($"Group '{profile.GroupId}' was not found in catalog.");
+                    throw new InvalidOperationException($"Group '{entry.GroupId}' was not found in catalog.");
                 }
 
-                if (!membersById.TryGetValue(profile.MemberId, out var member))
-                {
-                    throw new InvalidOperationException($"Member '{profile.MemberId}' was not found in catalog.");
-                }
-
+                var member = entry.Member;
                 ValidateGroupFolder(group.Folder);
                 ValidateMemberCode(member.Code);
+                ValidateMemberFileExtension(member.File);
+
+                var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
+                var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
+                var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
 
                 return new CatalogProfileInfo(
-                    BuildProfileCode(group.Folder, member.Code),
+                    BuildProfileCode(normalizedGroupFolder, normalizedMemberCode),
                     group.Id,
                     member.Id,
                     group.Name,
-                    group.Folder.ToUpperInvariant(),
+                    normalizedGroupFolder,
                     member.Name,
-                    member.Code.ToUpperInvariant());
+                    normalizedMemberCode,
+                    normalizedFileExtension);
             })
             .DistinctBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
             .OrderBy(static x => x.ProfileCode, StringComparer.OrdinalIgnoreCase)
@@ -65,7 +68,12 @@ public class JsonCatalogService : ICatalogService
                 .Select(member =>
                 {
                     ValidateMemberCode(member.Code);
-                    return new CatalogMemberInfo(member.Id, member.Name, member.Code.ToUpperInvariant());
+                    ValidateMemberFileExtension(member.File);
+                    return new CatalogMemberInfo(
+                        member.Id,
+                        member.Name,
+                        member.Code.Trim().ToUpperInvariant(),
+                        member.File.Trim().ToUpperInvariant());
                 })
                 .ToArray(),
             profiles);
@@ -144,7 +152,14 @@ public class JsonCatalogService : ICatalogService
 
             var sqlText = await File.ReadAllTextAsync(fullPath, cancellationToken);
             var scriptCode = Path.GetFileNameWithoutExtension(fullPath);
-            scripts.Add(new ScriptDefinition(profile.ProfileCode, scriptCode, fullPath, sqlText));
+            var outputFileStem = BuildOutputFileStem(profile.MemberCode, profile.GroupFolder, scriptCode);
+            scripts.Add(new ScriptDefinition(
+                profile.ProfileCode,
+                scriptCode,
+                outputFileStem,
+                profile.MemberFileExtension,
+                fullPath,
+                sqlText));
         }
 
         return scripts;
@@ -200,8 +215,33 @@ public class JsonCatalogService : ICatalogService
         }
     }
 
+    private static void ValidateMemberFileExtension(string memberFileExtension)
+    {
+        var normalized = memberFileExtension.Trim().ToUpperInvariant();
+        if (!MemberFileExtensionPattern.IsMatch(normalized))
+        {
+            throw new InvalidOperationException(
+                $"Member file extension '{memberFileExtension}' is invalid.");
+        }
+    }
+
     private static string BuildProfileCode(string groupFolder, string memberCode)
     {
-        return $"{groupFolder.Trim().ToUpperInvariant()}_{memberCode.Trim().ToUpperInvariant()}";
+        return $"{groupFolder}_{memberCode}";
+    }
+
+    private static string BuildOutputFileStem(string memberCode, string groupFolder, string scriptCode)
+    {
+        if (scriptCode.Length < 3)
+        {
+            throw new InvalidOperationException(
+                $"Script '{scriptCode}' must have at least 3 characters in file name.");
+        }
+
+        var tail = scriptCode[3..].TrimStart('_');
+        var groupThirdLetter = groupFolder[2];
+        return string.IsNullOrWhiteSpace(tail)
+            ? $"Y{memberCode}{groupThirdLetter}"
+            : $"Y{memberCode}{groupThirdLetter}_{tail}";
     }
 }

@@ -10,11 +10,11 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         string outputDirectory,
         CancellationToken cancellationToken)
     {
-        var profileDirectory = Path.Combine(outputDirectory, chunk.Script.ProfileCode);
-        Directory.CreateDirectory(profileDirectory);
+        Directory.CreateDirectory(outputDirectory);
 
-        var fileName = $"{chunk.Script.ScriptCode}_{chunk.ChunkNumber:D4}.txt";
-        var filePath = Path.Combine(profileDirectory, fileName);
+        var chunkSuffix = BuildChunkSuffix(chunk.ChunkNumber);
+        var fileName = $"{chunk.Script.OutputFileStem}_{chunkSuffix}{chunk.Script.OutputFileExtension}";
+        var filePath = Path.Combine(outputDirectory, fileName);
 
         await using var stream = File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
@@ -36,5 +36,25 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
             filePath,
             chunk.Rows.Count,
             chunk.ByteSize);
+    }
+
+    private static string BuildChunkSuffix(int chunkNumber)
+    {
+        if (chunkNumber <= 0)
+        {
+            throw new InvalidOperationException($"Chunk number '{chunkNumber}' is invalid.");
+        }
+
+        var value = chunkNumber - 1;
+        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var result = string.Empty;
+
+        do
+        {
+            result = alphabet[value % 36] + result;
+            value /= 36;
+        } while (value > 0);
+
+        return result.Length >= 2 ? result : result.PadLeft(2, '0');
     }
 }

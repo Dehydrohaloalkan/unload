@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -12,7 +13,6 @@ public class RunnerEngine : IRunner
     private readonly IFileChunkWriter _fileChunkWriter;
     private readonly IMqPublisher _mqPublisher;
     private readonly IRunDiagnosticsSink _diagnosticsSink;
-    private readonly IRequestHasher _requestHasher;
     private readonly RunnerOptions _options;
 
     public RunnerEngine(
@@ -21,7 +21,6 @@ public class RunnerEngine : IRunner
         IFileChunkWriter fileChunkWriter,
         IMqPublisher mqPublisher,
         IRunDiagnosticsSink diagnosticsSink,
-        IRequestHasher requestHasher,
         RunnerOptions options)
     {
         _catalogService = catalogService;
@@ -29,7 +28,6 @@ public class RunnerEngine : IRunner
         _fileChunkWriter = fileChunkWriter;
         _mqPublisher = mqPublisher;
         _diagnosticsSink = diagnosticsSink;
-        _requestHasher = requestHasher;
         _options = options;
     }
 
@@ -68,9 +66,7 @@ public class RunnerEngine : IRunner
             ValidateRequest(request);
             ValidateDatabaseConnectivity();
 
-            var runHash = _requestHasher.ComputeHash($"{request.CorrelationId}:{DateTimeOffset.UtcNow:O}")[..12];
-            var runOutputDirectory = Path.Combine(request.OutputDirectory, runHash);
-            Directory.CreateDirectory(runOutputDirectory);
+            var runOutputDirectory = CreateRunOutputDirectory(request.OutputDirectory);
 
             await EmitAsync(
                 writer,
@@ -431,5 +427,21 @@ public class RunnerEngine : IRunner
         {
             throw new InvalidOperationException("At least one profile code is required.");
         }
+    }
+
+    private static string CreateRunOutputDirectory(string baseOutputDirectory)
+    {
+        var timestamp = DateTime.Now.ToString("dd_MM_yyyy_HHmmss", CultureInfo.InvariantCulture);
+        var candidate = Path.Combine(baseOutputDirectory, timestamp);
+        var suffix = 1;
+
+        while (Directory.Exists(candidate))
+        {
+            candidate = Path.Combine(baseOutputDirectory, $"{timestamp}_{suffix:D2}");
+            suffix++;
+        }
+
+        Directory.CreateDirectory(candidate);
+        return candidate;
     }
 }

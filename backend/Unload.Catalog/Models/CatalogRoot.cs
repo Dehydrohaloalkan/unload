@@ -4,8 +4,7 @@ namespace Unload.Catalog;
 
 public record CatalogRoot(
     [property: JsonPropertyName("groups")] List<CatalogGroup> Groups,
-    [property: JsonPropertyName("members")] List<CatalogMember> Members,
-    [property: JsonPropertyName("profiles")] List<CatalogProfile> Profiles);
+    [property: JsonPropertyName("members")] List<CatalogMember> Members);
 
 public record CatalogGroup(
     [property: JsonPropertyName("id")] int Id,
@@ -15,8 +14,6 @@ public record CatalogGroup(
 public record CatalogMember(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("code")] string Code);
-
-public record CatalogProfile(
-    [property: JsonPropertyName("group_id")] int GroupId,
-    [property: JsonPropertyName("member_id")] int MemberId);
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("file")] string File,
+    [property: JsonPropertyName("groups")] List<int> Groups);

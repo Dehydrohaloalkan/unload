@@ -22,28 +22,13 @@ internal static class CatalogSelectionLoader
             .GroupBy(static x => x.Id)
             .ToDictionary(static x => x.Key, static x => x.First());
 
-        var groupsById = root.Groups
-            .GroupBy(static x => x.Id)
-            .ToDictionary(static x => x.Key, static x => x.First());
-
-        var groupedProfiles = root.Profiles
-            .GroupBy(static x => x.GroupId)
-            .Select(group =>
+        var groupedProfiles = root.Groups
+            .Select(groupData =>
             {
-                if (!groupsById.TryGetValue(group.Key, out var groupData))
-                {
-                    throw new InvalidOperationException($"Group '{group.Key}' not found in catalog.");
-                }
-
-                var profiles = group
-                    .Select(profile =>
+                var profiles = membersById.Values
+                    .Where(member => member.Groups.Contains(groupData.Id))
+                    .Select(member =>
                     {
-                        if (!membersById.TryGetValue(profile.MemberId, out var member))
-                        {
-                            throw new InvalidOperationException(
-                                $"Member '{profile.MemberId}' not found in catalog.");
-                        }
-
                         var normalizedFolder = groupData.Folder.Trim().ToUpperInvariant();
                         var normalizedCode = member.Code.Trim().ToUpperInvariant();
                         var profileCode = $"{normalizedFolder}_{normalizedCode}";
@@ -54,7 +39,7 @@ internal static class CatalogSelectionLoader
                     .OrderBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
-                return new CatalogSelectionGroup(group.Key, groupData.Name, profiles);
+                return new CatalogSelectionGroup(groupData.Id, groupData.Name, profiles);
             })
             .OrderBy(static x => x.GroupName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -65,8 +50,7 @@ internal static class CatalogSelectionLoader
 
 internal record SelectionCatalogRoot(
     [property: JsonPropertyName("groups")] List<SelectionGroup> Groups,
-    [property: JsonPropertyName("members")] List<SelectionMember> Members,
-    [property: JsonPropertyName("profiles")] List<SelectionProfile> Profiles);
+    [property: JsonPropertyName("members")] List<SelectionMember> Members);
 
 internal record SelectionGroup(
     [property: JsonPropertyName("id")] int Id,
@@ -76,11 +60,8 @@ internal record SelectionGroup(
 internal record SelectionMember(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("code")] string Code);
-
-internal record SelectionProfile(
-    [property: JsonPropertyName("group_id")] int GroupId,
-    [property: JsonPropertyName("member_id")] int MemberId);
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("groups")] List<int> Groups);
 
 [JsonSerializable(typeof(SelectionCatalogRoot))]
 internal partial class CatalogSelectionJsonContext : JsonSerializerContext;
