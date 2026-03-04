@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -78,12 +79,16 @@ public class RunnerEngine : IRunner
         ChannelWriter<RunnerEvent> writer,
         CancellationToken cancellationToken)
     {
+        string? runOutputDirectory = null;
+        var reportRows = new ConcurrentBag<RunReportRow>();
+
         try
         {
             RunnerEngineGuard.ValidateRequest(request);
             RunnerEngineGuard.ValidateDatabaseConnectivity(_databaseClient);
 
-            var runOutputDirectory = RunnerEngineGuard.CreateRunOutputDirectory(request.OutputDirectory);
+            runOutputDirectory = RunnerEngineGuard.CreateRunOutputDirectory(request.OutputDirectory);
+            var runFilesDirectory = RunnerEngineGuard.CreateRunFilesDirectory(runOutputDirectory);
 
             await EmitAsync(
                 writer,
@@ -138,7 +143,7 @@ public class RunnerEngine : IRunner
 
             await Parallel.ForEachAsync(scripts, parallelOptions, async (script, token) =>
             {
-                await ProcessScriptAsync(request, script, runOutputDirectory, writer, token);
+                await ProcessScriptAsync(request, script, runFilesDirectory, writer, reportRows, token);
             });
 
             await EmitAsync(
@@ -167,6 +172,14 @@ public class RunnerEngine : IRunner
                 ex.Message,
                 cancellationToken: CancellationToken.None);
         }
+        finally
+        {
+            if (runOutputDirectory is not null)
+            {
+                var reportPath = Path.Combine(runOutputDirectory, RunnerEngineGuard.RunReportFileName);
+                await RunReportCsvWriter.WriteAsync(reportPath, reportRows, CancellationToken.None);
+            }
+        }
     }
 
     /// <summary>
@@ -180,8 +193,9 @@ public class RunnerEngine : IRunner
     private async Task ProcessScriptAsync(
         RunRequest request,
         ScriptDefinition script,
-        string runOutputDirectory,
+        string runFilesDirectory,
         ChannelWriter<RunnerEvent> writer,
+        ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
         await EmitAsync(
@@ -225,11 +239,12 @@ public class RunnerEngine : IRunner
                 await FlushChunkAsync(
                     request,
                     script,
-                    runOutputDirectory,
+                    runFilesDirectory,
                     writer,
                     chunkNumber,
                     currentRows,
                     currentSize,
+                    reportRows,
                     cancellationToken);
                 chunkNumber++;
                 currentRows = [];
@@ -261,11 +276,12 @@ public class RunnerEngine : IRunner
             await FlushChunkAsync(
                 request,
                 script,
-                runOutputDirectory,
+                runFilesDirectory,
                 writer,
                 chunkNumber,
                 currentRows,
                 currentSize,
+                reportRows,
                 cancellationToken);
         }
 
@@ -285,11 +301,12 @@ public class RunnerEngine : IRunner
     private async Task FlushChunkAsync(
         RunRequest request,
         ScriptDefinition script,
-        string runOutputDirectory,
+        string runFilesDirectory,
         ChannelWriter<RunnerEvent> writer,
         int chunkNumber,
         IReadOnlyList<DatabaseRow> rows,
         int byteSize,
+        ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
         var chunk = new FileChunk(script, chunkNumber, rows.ToArray(), byteSize);
@@ -303,8 +320,8 @@ public class RunnerEngine : IRunner
             records: chunk.Rows.Count,
             cancellationToken: cancellationToken);
 
-        var written = await _fileChunkWriter.WriteChunkAsync(chunk, runOutputDirectory, cancellationToken);
-        await EmitAsync(
+        var written = await _fileChunkWriter.WriteChunkAsync(chunk, runFilesDirectory, cancellationToken);
+        var isSentToMq = await EmitAsync(
             writer,
             request,
             RunnerStep.FileWritten,
@@ -314,6 +331,14 @@ public class RunnerEngine : IRunner
             records: written.RowsCount,
             filePath: written.FilePath,
             cancellationToken: cancellationToken);
+
+        reportRows.Add(new RunReportRow(
+            script.MemberName,
+            script.ScriptType,
+            script.FirstCodeDigit,
+            Path.GetFileName(written.FilePath),
+            written.RowsCount,
+            isSentToMq));
     }
 
     /// <summary>
@@ -328,7 +353,7 @@ public class RunnerEngine : IRunner
     /// <param name="records">Количество записей (опционально).</param>
     /// <param name="filePath">Путь к файлу результата (опционально).</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    private async Task EmitAsync(
+    private async Task<bool> EmitAsync(
         ChannelWriter<RunnerEvent> writer,
         RunRequest request,
         RunnerStep step,
@@ -349,8 +374,26 @@ public class RunnerEngine : IRunner
             records,
             filePath);
 
-        await _mqPublisher.PublishAsync(@event, cancellationToken);
+        var isSentToMq = await TryPublishToMqAsync(@event, cancellationToken);
         await writer.WriteAsync(@event, cancellationToken);
+        return isSentToMq;
+    }
+
+    private async Task<bool> TryPublishToMqAsync(RunnerEvent @event, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _mqPublisher.PublishAsync(@event, cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
 }

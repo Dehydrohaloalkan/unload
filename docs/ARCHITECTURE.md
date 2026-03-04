@@ -25,7 +25,7 @@
   - Запись чанков в файлы с расширением из имени SQL/`member.file` и разделителем `|`.
   - Первая строка файла — служебный заголовок: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
   - Начиная со второй строки пишутся данные из БД через `|`.
-  - Пишет в `output/<dd_MM_yyyy_HHmmss>/` без подпапок.
+  - Пишет в `output/<dd_MM_yyyy_HHmmss>/output-files/`.
   - Формат имени файла: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{ext}` (без `_`).
 
 - `backend/Unload.MQ`
@@ -41,6 +41,9 @@
   - Шаги: resolve target-кодов -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
+  - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`.
+  - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
+  - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
   - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (проверки и output-путь), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
 
 - `backend/Unload.Application`
@@ -128,10 +131,20 @@ flowchart LR
 ### Формат выходного файла
 
 - Имя: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{extension}`
+- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear}{chunkNumber}_{NN}.{extension}`.
 - Первая строка:
   - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
 - Остальные строки:
   - данные из БД через `|`.
+
+### Структура output и CSV-отчета
+
+- Папка запуска: `output/<dd_MM_yyyy_HHmmss>/`
+- Выходные файлы чанков: `output/<dd_MM_yyyy_HHmmss>/output-files/`
+- CSV-отчет запуска: `output/<dd_MM_yyyy_HHmmss>/run-report.csv`
+- Формат CSV:
+  - `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`
+  - `mqStatus`: `отправлен` / `не отправлен`
 
 ## Run sequence diagram
 

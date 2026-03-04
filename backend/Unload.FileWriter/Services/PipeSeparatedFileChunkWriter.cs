@@ -24,10 +24,9 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         Directory.CreateDirectory(outputDirectory);
 
         var dayOfYear = DateTimeOffset.Now.DayOfYear;
-        var fileName = $"{chunk.Script.OutputFileStem}{dayOfYear}{chunk.ChunkNumber}{chunk.Script.OutputFileExtension}";
-        var filePath = Path.Combine(outputDirectory, fileName);
-
-        await using var stream = File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear}{chunk.ChunkNumber}";
+        var fileExtension = chunk.Script.OutputFileExtension;
+        var (stream, fileName, filePath) = OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
         var columns = PipeDelimitedFormatter.GetOrderedColumns(chunk.Rows);
@@ -49,5 +48,29 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
             filePath,
             chunk.Rows.Count,
             chunk.ByteSize);
+    }
+
+    private static (FileStream Stream, string FileName, string FilePath) OpenUniqueFile(
+        string outputDirectory,
+        string baseFileName,
+        string extension)
+    {
+        for (var attempt = 0; attempt < 10_000; attempt++)
+        {
+            var suffix = attempt == 0 ? string.Empty : $"_{attempt:D2}";
+            var fileName = $"{baseFileName}{suffix}{extension}";
+            var filePath = Path.Combine(outputDirectory, fileName);
+            try
+            {
+                var stream = File.Open(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                return (stream, fileName, filePath);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        throw new IOException(
+            $"Unable to allocate unique output file name for base '{baseFileName}{extension}' in '{outputDirectory}'.");
     }
 }

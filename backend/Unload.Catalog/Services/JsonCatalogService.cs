@@ -141,6 +141,7 @@ public class JsonCatalogService : ICatalogService
                 scriptNameParts.ScriptType,
                 scriptNameParts.ScriptCodes,
                 scriptNameParts.FirstCodeDigit,
+                target.MemberRawName,
                 fullPath,
                 sqlText));
         }
@@ -221,7 +222,8 @@ public class JsonCatalogService : ICatalogService
                         fileExtension,
                         [groupCode]),
                     memberCode,
-                    fileExtension);
+                    fileExtension,
+                    member.Name);
             }
         }
 
