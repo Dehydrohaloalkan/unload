@@ -49,7 +49,9 @@
   - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
   - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
   - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
-  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (guard-валидации), `RunnerOutputDirectoryFactory` (создание output-папок), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
+  - События раннера в большинстве шагов ставятся в очередь публикации без ожидания результата MQ (fire-and-forget относительно шага пайплайна); ожидание подтверждения MQ выполняется только для `FileWritten`, так как этот статус попадает в `run-report.csv`.
+  - `RunnerEventEmitter` использует токен запуска по умолчанию и позволяет точечно передать другой токен для отдельных шагов dataflow.
+  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEventEmitter` (публикация событий), `RunnerEngineGuard` (guard-валидации), `RunnerOutputDirectoryFactory` (создание output-папок), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.

@@ -84,7 +84,7 @@ public class RunnerEngine : IRunner
     {
         string? runOutputDirectory = null;
         var reportRows = new ConcurrentBag<RunReportRow>();
-        ActionBlock<PendingRunnerEvent>? eventBlock = null;
+        RunnerEventEmitter? eventEmitter = null;
 
         try
         {
@@ -93,25 +93,17 @@ public class RunnerEngine : IRunner
 
             runOutputDirectory = RunnerOutputDirectoryFactory.CreateRunOutputDirectory(request.OutputDirectory);
             var runFilesDirectory = RunnerOutputDirectoryFactory.CreateRunFilesDirectory(runOutputDirectory);
-            eventBlock = CreateEventBlock(writer, cancellationToken);
+            eventEmitter = new RunnerEventEmitter(_mqPublisher, _options, writer, request, cancellationToken);
 
-            await EmitViaDataflowAsync(
-                eventBlock,
-                writer,
-                request,
+            await eventEmitter.EmitAsync(
                 RunnerStep.RequestAccepted,
-                "Run request accepted.",
-                cancellationToken: cancellationToken);
+                "Run request accepted.");
 
             var resolvedTargets = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
-            await EmitViaDataflowAsync(
-                eventBlock,
-                writer,
-                request,
+            await eventEmitter.EmitAsync(
                 RunnerStep.TargetsResolved,
                 $"Targets resolved: {resolvedTargets.Count}.",
-                records: resolvedTargets.Count,
-                cancellationToken: cancellationToken);
+                records: resolvedTargets.Count);
 
             var scripts = resolvedTargets
                 .SelectMany(static x => x.Value)
@@ -121,26 +113,17 @@ public class RunnerEngine : IRunner
 
             foreach (var script in scripts)
             {
-                await EmitViaDataflowAsync(
-                    eventBlock,
-                    writer,
-                    request,
+                await eventEmitter.EmitForScriptAsync(
+                    script,
                     RunnerStep.ScriptDiscovered,
-                    $"Discovered script {script.ScriptCode}.",
-                    targetCode: script.TargetCode,
-                    scriptCode: script.ScriptCode,
-                    cancellationToken: cancellationToken);
+                    $"Discovered script {script.ScriptCode}.");
             }
 
             if (scripts.Length == 0)
             {
-                await EmitViaDataflowAsync(
-                    eventBlock,
-                    writer,
-                    request,
+                await eventEmitter.EmitAsync(
                     RunnerStep.Completed,
-                    "No scripts found for selected targets.",
-                    cancellationToken: cancellationToken);
+                    "No scripts found for selected targets.");
                 return;
             }
 
@@ -148,57 +131,32 @@ public class RunnerEngine : IRunner
                 request,
                 scripts,
                 runFilesDirectory,
-                writer,
-                eventBlock,
+                eventEmitter,
                 reportRows,
                 cancellationToken);
 
-            await EmitViaDataflowAsync(
-                eventBlock,
-                writer,
-                request,
+            await eventEmitter.EmitAsync(
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
-                filePath: runOutputDirectory,
-                cancellationToken: cancellationToken);
+                filePath: runOutputDirectory);
         }
         catch (OperationCanceledException)
         {
-            if (eventBlock is not null)
+            if (eventEmitter is not null)
             {
-                await TryEmitFailureAsync(
-                    eventBlock,
-                    writer,
-                    request,
-                    RunnerStep.Failed,
-                    "Run was cancelled.");
+                await eventEmitter.TryEmitFailureAsync(RunnerStep.Failed, "Run was cancelled.");
             }
         }
         catch (Exception ex)
         {
-            if (eventBlock is not null)
+            if (eventEmitter is not null)
             {
-                await TryEmitFailureAsync(
-                    eventBlock,
-                    writer,
-                    request,
-                    RunnerStep.Failed,
-                    ex.Message);
+                await eventEmitter.TryEmitFailureAsync(RunnerStep.Failed, ex.Message);
             }
         }
         finally
         {
-            if (eventBlock is not null)
-            {
-                eventBlock.Complete();
-                try
-                {
-                    await eventBlock.Completion;
-                }
-                catch
-                {
-                }
-            }
+            await (eventEmitter?.CompleteAsync() ?? Task.CompletedTask);
 
             if (runOutputDirectory is not null)
             {
@@ -212,8 +170,7 @@ public class RunnerEngine : IRunner
         RunRequest request,
         IReadOnlyList<ScriptDefinition> scripts,
         string runFilesDirectory,
-        ChannelWriter<RunnerEvent> writer,
-        ActionBlock<PendingRunnerEvent> eventBlock,
+        RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
@@ -229,10 +186,8 @@ public class RunnerEngine : IRunner
         var queryBlock = new ActionBlock<ScriptDefinition>(async script =>
         {
             await ProcessScriptQueryAsync(
-                request,
                 script,
-                writer,
-                eventBlock,
+                eventEmitter,
                 chunkQueue,
                 pipelineToken);
         }, new ExecutionDataflowBlockOptions
@@ -245,11 +200,9 @@ public class RunnerEngine : IRunner
         var fileBlock = new TransformBlock<ChunkWriteJob, WrittenChunkJob>(async chunkJob =>
         {
             return await WriteChunkAsync(
-                request,
                 chunkJob,
                 runFilesDirectory,
-                writer,
-                eventBlock,
+                eventEmitter,
                 cancellationToken);
         }, new ExecutionDataflowBlockOptions
         {
@@ -260,16 +213,13 @@ public class RunnerEngine : IRunner
 
         var publishBlock = new ActionBlock<WrittenChunkJob>(async written =>
         {
-            var isSentToMq = await EmitViaDataflowAsync(
-                eventBlock,
-                writer,
-                request,
+            var isSentToMq = await eventEmitter.EmitForScriptAsync(
+                written.Script,
                 RunnerStep.FileWritten,
                 $"File written: {Path.GetFileName(written.Written.FilePath)}.",
-                targetCode: written.Script.TargetCode,
-                scriptCode: written.Script.ScriptCode,
                 records: written.Written.RowsCount,
                 filePath: written.Written.FilePath,
+                awaitMqStatus: true,
                 cancellationToken: pipelineToken);
 
             reportRows.Add(new RunReportRow(
@@ -339,22 +289,12 @@ public class RunnerEngine : IRunner
     }
 
     private async Task ProcessScriptQueryAsync(
-        RunRequest request,
         ScriptDefinition script,
-        ChannelWriter<RunnerEvent> writer,
-        ActionBlock<PendingRunnerEvent> eventBlock,
+        RunnerEventEmitter eventEmitter,
         ITargetBlock<ChunkWriteJob> chunkQueue,
         CancellationToken cancellationToken)
     {
-        await EmitViaDataflowAsync(
-            eventBlock,
-            writer,
-            request,
-            RunnerStep.QueryStarted,
-            $"Running query for script {script.ScriptCode}.",
-            targetCode: script.TargetCode,
-            scriptCode: script.ScriptCode,
-            cancellationToken: cancellationToken);
+        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Running query for script {script.ScriptCode}.");
 
         await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
         var columns = RunnerEngineDataReader.GetColumns(reader);
@@ -414,36 +354,20 @@ public class RunnerEngine : IRunner
             }
         }
 
-        await EmitViaDataflowAsync(
-            eventBlock,
-            writer,
-            request,
-            RunnerStep.QueryCompleted,
-            $"Query finished for script {script.ScriptCode}.",
-            targetCode: script.TargetCode,
-            scriptCode: script.ScriptCode,
-            records: rowsRead,
-            cancellationToken: cancellationToken);
+        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Query finished for script {script.ScriptCode}.", rowsRead);
     }
 
     private async Task<WrittenChunkJob> WriteChunkAsync(
-        RunRequest request,
         ChunkWriteJob chunkJob,
         string runFilesDirectory,
-        ChannelWriter<RunnerEvent> writer,
-        ActionBlock<PendingRunnerEvent> eventBlock,
+        RunnerEventEmitter eventEmitter,
         CancellationToken cancellationToken)
     {
-        await EmitViaDataflowAsync(
-            eventBlock,
-            writer,
-            request,
+        await eventEmitter.EmitForScriptAsync(
+            chunkJob.Script,
             RunnerStep.ChunkCreated,
             $"Chunk #{chunkJob.ChunkNumber} created for {chunkJob.Script.ScriptCode}.",
-            targetCode: chunkJob.Script.TargetCode,
-            scriptCode: chunkJob.Script.ScriptCode,
-            records: chunkJob.Rows.Length,
-            cancellationToken: cancellationToken);
+            chunkJob.Rows.Length);
 
         var chunk = new FileChunk(
             chunkJob.Script,
@@ -456,114 +380,6 @@ public class RunnerEngine : IRunner
         return new WrittenChunkJob(chunkJob.Script, written, stopwatch.ElapsedMilliseconds);
     }
 
-    /// <summary>
-    /// Создает событие раннера и доставляет его в MQ и поток клиентских событий.
-    /// </summary>
-    /// <param name="writer">Канал публикации событий раннера.</param>
-    /// <param name="request">Запрос запуска.</param>
-    /// <param name="step">Шаг выполнения.</param>
-    /// <param name="message">Текст события.</param>
-    /// <param name="targetCode">Target-код (опционально).</param>
-    /// <param name="scriptCode">Код скрипта (опционально).</param>
-    /// <param name="records">Количество записей (опционально).</param>
-    /// <param name="filePath">Путь к файлу результата (опционально).</param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    private async Task<bool> EmitViaDataflowAsync(
-        ActionBlock<PendingRunnerEvent> eventBlock,
-        ChannelWriter<RunnerEvent> writer,
-        RunRequest request,
-        RunnerStep step,
-        string message,
-        string? targetCode = null,
-        string? scriptCode = null,
-        int? records = null,
-        string? filePath = null,
-        CancellationToken cancellationToken = default)
-    {
-        var @event = new RunnerEvent(
-            DateTimeOffset.UtcNow,
-            request.CorrelationId,
-            step,
-            message,
-            targetCode,
-            scriptCode,
-            records,
-            filePath);
-
-        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var accepted = await eventBlock.SendAsync(new PendingRunnerEvent(@event, completion), cancellationToken);
-        if (!accepted)
-        {
-            throw new InvalidOperationException("Event stage declined event message.");
-        }
-
-        return await completion.Task;
-    }
-
-    private ActionBlock<PendingRunnerEvent> CreateEventBlock(
-        ChannelWriter<RunnerEvent> writer,
-        CancellationToken cancellationToken)
-    {
-        return new ActionBlock<PendingRunnerEvent>(async pending =>
-        {
-            try
-            {
-                var isSentToMq = await TryPublishToMqAsync(pending.Event, cancellationToken);
-                await writer.WriteAsync(pending.Event, cancellationToken);
-                pending.Completion.TrySetResult(isSentToMq);
-            }
-            catch (Exception ex)
-            {
-                pending.Completion.TrySetException(ex);
-                throw;
-            }
-        }, new ExecutionDataflowBlockOptions
-        {
-            MaxDegreeOfParallelism = _options.QueuePublisherDegreeOfParallelism,
-            BoundedCapacity = _options.DataflowBoundedCapacity,
-            CancellationToken = cancellationToken
-        });
-    }
-
-    private async Task TryEmitFailureAsync(
-        ActionBlock<PendingRunnerEvent> eventBlock,
-        ChannelWriter<RunnerEvent> writer,
-        RunRequest request,
-        RunnerStep step,
-        string message)
-    {
-        try
-        {
-            await EmitViaDataflowAsync(
-                eventBlock,
-                writer,
-                request,
-                step,
-                message,
-                cancellationToken: CancellationToken.None);
-        }
-        catch
-        {
-        }
-    }
-
-    private async Task<bool> TryPublishToMqAsync(RunnerEvent @event, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _mqPublisher.PublishAsync(@event, cancellationToken);
-            return true;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private sealed record ChunkWriteJob(
         ScriptDefinition Script,
         int ChunkNumber,
@@ -574,9 +390,5 @@ public class RunnerEngine : IRunner
         ScriptDefinition Script,
         WrittenFile Written,
         long ExecutionTimeMs);
-
-    private sealed record PendingRunnerEvent(
-        RunnerEvent Event,
-        TaskCompletionSource<bool> Completion);
 
 }
