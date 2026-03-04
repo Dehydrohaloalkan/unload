@@ -19,7 +19,7 @@ public static class ServiceCollectionExtensions
     /// Регистрирует полный набор инфраструктурных и application сервисов выгрузки.
     /// </summary>
     /// <param name="services">Коллекция сервисов приложения.</param>
-    /// <param name="paths">Пути к каталогу, скриптам, output и диагностике.</param>
+    /// <param name="paths">Пути к каталогу, скриптам и output.</param>
     /// <returns>Та же коллекция сервисов для цепочки вызовов.</returns>
     public static IServiceCollection AddUnloadRuntime(this IServiceCollection services, UnloadRuntimePaths paths)
     {
@@ -27,7 +27,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
-        services.AddSingleton<IRunDiagnosticsSink>(_ => new CsvRunDiagnosticsSink(paths.DiagnosticsDirectory));
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
         services.AddSingleton(new RunnerOptions(
             ChunkSizeBytes: 10 * 1024 * 1024,

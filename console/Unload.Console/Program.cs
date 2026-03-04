@@ -7,7 +7,6 @@ var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
 var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
-var diagnosticsDirectory = Unload.Console.WorkspacePathResolver.ResolveDiagnosticsDirectory(root);
 
 var targetCodes = args.Length == 0
     ? await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogPath, CancellationToken.None)
@@ -19,8 +18,7 @@ var services = new ServiceCollection();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory,
-    DiagnosticsDirectory: diagnosticsDirectory));
+    OutputDirectory: outputDirectory));
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var requestFactory = provider.ServiceProvider.GetRequiredService<IRunRequestFactory>();
@@ -30,7 +28,6 @@ AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJu
 AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
 AnsiConsole.MarkupLine($"[grey]Scripts:[/] {Markup.Escape(scriptsDirectory)}");
 AnsiConsole.MarkupLine($"[grey]Targets:[/] {Markup.Escape(string.Join(", ", targetCodes))}");
-AnsiConsole.MarkupLine($"[grey]Diagnostics:[/] {Markup.Escape(diagnosticsDirectory)}");
 AnsiConsole.MarkupLine(string.Empty);
 
 var request = requestFactory.Create(targetCodes, outputDirectory);

@@ -9,14 +9,12 @@ var root = ApiWorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
 var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
-var diagnosticsDirectory = ApiWorkspacePathResolver.ResolveDiagnosticsDirectory(root);
 
 builder.Services.AddSignalR();
 builder.Services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory,
-    DiagnosticsDirectory: diagnosticsDirectory));
+    OutputDirectory: outputDirectory));
 builder.Services.AddHostedService<RunProcessingBackgroundService>();
 
 var app = builder.Build();

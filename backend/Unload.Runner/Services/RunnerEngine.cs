@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -14,7 +13,6 @@ public class RunnerEngine : IRunner
     private readonly IDatabaseClient _databaseClient;
     private readonly IFileChunkWriter _fileChunkWriter;
     private readonly IMqPublisher _mqPublisher;
-    private readonly IRunDiagnosticsSink _diagnosticsSink;
     private readonly RunnerOptions _options;
 
     /// <summary>
@@ -24,21 +22,18 @@ public class RunnerEngine : IRunner
     /// <param name="databaseClient">Клиент чтения данных из БД.</param>
     /// <param name="fileChunkWriter">Сервис записи чанков в файлы.</param>
     /// <param name="mqPublisher">Публикатор событий раннера в MQ.</param>
-    /// <param name="diagnosticsSink">Сервис записи диагностических событий и метрик.</param>
     /// <param name="options">Опции чанкования и параллелизма.</param>
     public RunnerEngine(
         ICatalogService catalogService,
         IDatabaseClient databaseClient,
         IFileChunkWriter fileChunkWriter,
         IMqPublisher mqPublisher,
-        IRunDiagnosticsSink diagnosticsSink,
         RunnerOptions options)
     {
         _catalogService = catalogService;
         _databaseClient = databaseClient;
         _fileChunkWriter = fileChunkWriter;
         _mqPublisher = mqPublisher;
-        _diagnosticsSink = diagnosticsSink;
         _options = options;
     }
 
@@ -83,7 +78,6 @@ public class RunnerEngine : IRunner
         ChannelWriter<RunnerEvent> writer,
         CancellationToken cancellationToken)
     {
-        var runStopwatch = Stopwatch.StartNew();
         try
         {
             RunnerEngineGuard.ValidateRequest(request);
@@ -98,9 +92,7 @@ public class RunnerEngine : IRunner
                 "Run request accepted.",
                 cancellationToken: cancellationToken);
 
-            var resolveStopwatch = Stopwatch.StartNew();
             var resolvedTargets = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
-            resolveStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
@@ -108,16 +100,6 @@ public class RunnerEngine : IRunner
                 $"Targets resolved: {resolvedTargets.Count}.",
                 records: resolvedTargets.Count,
                 cancellationToken: cancellationToken);
-            await _diagnosticsSink.WriteMetricAsync(
-                new RunMetricRecord(
-                    DateTimeOffset.UtcNow,
-                    request.CorrelationId,
-                    RunnerStep.TargetsResolved,
-                    resolveStopwatch.ElapsedMilliseconds,
-                    "success",
-                    Records: resolvedTargets.Count,
-                    Details: "Catalog targets resolved."),
-                cancellationToken);
 
             var scripts = resolvedTargets
                 .SelectMany(static x => x.Value)
@@ -159,7 +141,6 @@ public class RunnerEngine : IRunner
                 await ProcessScriptAsync(request, script, runOutputDirectory, writer, token);
             });
 
-            runStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
@@ -167,54 +148,24 @@ public class RunnerEngine : IRunner
                 $"Run completed successfully. Output: {runOutputDirectory}",
                 filePath: runOutputDirectory,
                 cancellationToken: cancellationToken);
-            await _diagnosticsSink.WriteMetricAsync(
-                new RunMetricRecord(
-                    DateTimeOffset.UtcNow,
-                    request.CorrelationId,
-                    RunnerStep.Completed,
-                    runStopwatch.ElapsedMilliseconds,
-                    "success",
-                    FilePath: runOutputDirectory,
-                    Details: "Run completed."),
-                cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            runStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
                 RunnerStep.Failed,
                 "Run was cancelled.",
                 cancellationToken: CancellationToken.None);
-            await _diagnosticsSink.WriteMetricAsync(
-                new RunMetricRecord(
-                    DateTimeOffset.UtcNow,
-                    request.CorrelationId,
-                    RunnerStep.Failed,
-                    runStopwatch.ElapsedMilliseconds,
-                    "cancelled",
-                    Details: "Run cancelled by cancellation token."),
-                CancellationToken.None);
         }
         catch (Exception ex)
         {
-            runStopwatch.Stop();
             await EmitAsync(
                 writer,
                 request,
                 RunnerStep.Failed,
                 ex.Message,
                 cancellationToken: CancellationToken.None);
-            await _diagnosticsSink.WriteMetricAsync(
-                new RunMetricRecord(
-                    DateTimeOffset.UtcNow,
-                    request.CorrelationId,
-                    RunnerStep.Failed,
-                    runStopwatch.ElapsedMilliseconds,
-                    "error",
-                    Details: ex.Message),
-                CancellationToken.None);
         }
     }
 
@@ -233,7 +184,6 @@ public class RunnerEngine : IRunner
         ChannelWriter<RunnerEvent> writer,
         CancellationToken cancellationToken)
     {
-        var scriptStopwatch = Stopwatch.StartNew();
         await EmitAsync(
             writer,
             request,
@@ -243,7 +193,6 @@ public class RunnerEngine : IRunner
             scriptCode: script.ScriptCode,
             cancellationToken: cancellationToken);
 
-        var queryStopwatch = Stopwatch.StartNew();
         await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
         var columns = RunnerEngineDataReader.GetColumns(reader);
 
@@ -292,7 +241,6 @@ public class RunnerEngine : IRunner
             rowsRead++;
         }
 
-        queryStopwatch.Stop();
         await EmitAsync(
             writer,
             request,
@@ -302,18 +250,6 @@ public class RunnerEngine : IRunner
             scriptCode: script.ScriptCode,
             records: rowsRead,
             cancellationToken: cancellationToken);
-        await _diagnosticsSink.WriteMetricAsync(
-            new RunMetricRecord(
-                DateTimeOffset.UtcNow,
-                request.CorrelationId,
-                RunnerStep.QueryCompleted,
-                queryStopwatch.ElapsedMilliseconds,
-                "success",
-                script.TargetCode,
-                script.ScriptCode,
-                rowsRead,
-                Details: "Database query execution completed."),
-            cancellationToken);
 
         if (currentRows.Count > 0)
         {
@@ -328,23 +264,10 @@ public class RunnerEngine : IRunner
                 cancellationToken);
         }
 
-        scriptStopwatch.Stop();
-        await _diagnosticsSink.WriteMetricAsync(
-            new RunMetricRecord(
-                DateTimeOffset.UtcNow,
-                request.CorrelationId,
-                RunnerStep.ScriptCompleted,
-                scriptStopwatch.ElapsedMilliseconds,
-                "success",
-                script.TargetCode,
-                script.ScriptCode,
-                rowsRead,
-                Details: "Script export completed (query + chunk writing)."),
-            cancellationToken);
     }
 
     /// <summary>
-    /// Формирует объект чанка, записывает его в файл и публикует соответствующие события и метрики.
+    /// Формирует объект чанка, записывает его в файл и публикует соответствующие события.
     /// </summary>
     /// <param name="request">Запрос запуска.</param>
     /// <param name="script">Скрипт, к которому относится чанк.</param>
@@ -375,9 +298,7 @@ public class RunnerEngine : IRunner
             records: chunk.Rows.Count,
             cancellationToken: cancellationToken);
 
-        var writeStopwatch = Stopwatch.StartNew();
         var written = await _fileChunkWriter.WriteChunkAsync(chunk, runOutputDirectory, cancellationToken);
-        writeStopwatch.Stop();
         await EmitAsync(
             writer,
             request,
@@ -388,23 +309,10 @@ public class RunnerEngine : IRunner
             records: written.RowsCount,
             filePath: written.FilePath,
             cancellationToken: cancellationToken);
-        await _diagnosticsSink.WriteMetricAsync(
-            new RunMetricRecord(
-                DateTimeOffset.UtcNow,
-                request.CorrelationId,
-                RunnerStep.FileWritten,
-                writeStopwatch.ElapsedMilliseconds,
-                "success",
-                script.TargetCode,
-                script.ScriptCode,
-                written.RowsCount,
-                written.FilePath,
-                "Chunk file written."),
-            cancellationToken);
     }
 
     /// <summary>
-    /// Создает событие раннера и доставляет его в диагностику, MQ и поток клиентских событий.
+    /// Создает событие раннера и доставляет его в MQ и поток клиентских событий.
     /// </summary>
     /// <param name="writer">Канал публикации событий раннера.</param>
     /// <param name="request">Запрос запуска.</param>
@@ -436,7 +344,6 @@ public class RunnerEngine : IRunner
             records,
             filePath);
 
-        await _diagnosticsSink.WriteEventAsync(@event, cancellationToken);
         await _mqPublisher.PublishAsync(@event, cancellationToken);
         await writer.WriteAsync(@event, cancellationToken);
     }

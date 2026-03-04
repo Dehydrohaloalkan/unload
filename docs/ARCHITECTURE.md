@@ -41,9 +41,7 @@
   - Шаги: resolve target-кодов -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
-  - Диагностика: пишет полный лог событий и метрики длительности шагов в CSV через `IRunDiagnosticsSink`.
   - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (проверки и output-путь), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
-  - CSV-диагностика разнесена по ответственности: `CsvRunDiagnosticsSink` (запись файлов), `CsvValueEscaper` (безопасное экранирование CSV), `DiagnosticsRunPathHelper` (безопасный путь папки запуска).
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.
@@ -111,7 +109,7 @@ flowchart LR
    - читать строки потоково;
    - собирать текущий чанк до лимита размера;
    - записывать чанк в файл и продолжать чтение.
-7. На каждом шаге публикуется событие в MQ-заглушку, сохраняется диагностика и обновляется статус запуска.
+7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска.
 8. В конце эмитится `Completed` или `Failed`.
 
 ## Форматы имен и выходных файлов
@@ -163,17 +161,6 @@ sequenceDiagram
     Worker->>State: ApplyEvent(event)
     Worker->>SignalR: status + run_status
 ```
-
-## Observability
-
-- Базовая папка диагностики по умолчанию: `observability` в корне workspace.
-- Можно переопределить через переменную окружения `UNLOAD_DIAGNOSTICS_DIR`.
-- Для каждого запуска (`correlationId`) создается отдельная папка:
-  - `events.csv`: полный лог событий (`RunnerEvent`).
-  - `metrics.csv`: длительность шагов (`duration_ms`) и итог (`outcome`).
-  - Для сравнения длительности скриптов используется строка с `step=ScriptCompleted`:
-    - `target_code` + `script_code` + `duration_ms` показывают полное время выгрузки скрипта (query + запись чанков).
-- Формат CSV безопасно экранируется, чтобы избежать CSV formula injection при открытии в табличных редакторах.
 
 ## Code documentation
 

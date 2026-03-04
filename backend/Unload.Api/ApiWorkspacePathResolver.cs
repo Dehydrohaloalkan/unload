@@ -26,11 +26,4 @@ internal static class ApiWorkspacePathResolver
             "Workspace root not found. Expected folders: 'configs' with 'catalog.json' and 'scripts'.");
     }
 
-    public static string ResolveDiagnosticsDirectory(string root)
-    {
-        var configured = Environment.GetEnvironmentVariable("UNLOAD_DIAGNOSTICS_DIR");
-        return string.IsNullOrWhiteSpace(configured)
-            ? Path.Combine(root, "observability")
-            : Path.GetFullPath(configured);
-    }
 }
