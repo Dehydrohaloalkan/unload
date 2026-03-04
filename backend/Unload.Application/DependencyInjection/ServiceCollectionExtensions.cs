@@ -31,6 +31,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new RunnerOptions(
             ChunkSizeBytes: 10 * 1024 * 1024,
             MaxDegreeOfParallelism: Math.Max(Environment.ProcessorCount / 2, 1),
+            FileWriterDegreeOfParallelism: 4,
+            QueuePublisherDegreeOfParallelism: 1,
             DataflowBoundedCapacity: 8));
         services.AddSingleton<IRunner, RunnerEngine>();
         services.AddSingleton<IRunRequestFactory, RunRequestFactory>();

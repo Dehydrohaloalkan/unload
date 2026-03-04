@@ -18,7 +18,7 @@ internal static class RunReportCsvWriter
         await using var stream = File.Open(reportPath, FileMode.Create, FileAccess.Write, FileShare.None);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
-        await writer.WriteLineAsync("memberName,fileType,operation,outputFileName,rowsCount,mqStatus");
+        await writer.WriteLineAsync("memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs");
         foreach (var row in orderedRows)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -28,7 +28,8 @@ internal static class RunReportCsvWriter
                 EscapeCsv(MapOperation(row.FirstCodeDigit)),
                 EscapeCsv(row.OutputFileName),
                 row.RowsCount.ToString(CultureInfo.InvariantCulture),
-                EscapeCsv(row.MqSent ? "отправлен" : "не отправлен"));
+                EscapeCsv(row.MqSent ? "отправлен" : "не отправлен"),
+                row.ExecutionTimeMs.ToString(CultureInfo.InvariantCulture));
             await writer.WriteLineAsync(csvLine);
         }
 
@@ -64,4 +65,5 @@ internal sealed record RunReportRow(
     int FirstCodeDigit,
     string OutputFileName,
     int RowsCount,
-    bool MqSent);
+    bool MqSent,
+    long ExecutionTimeMs);

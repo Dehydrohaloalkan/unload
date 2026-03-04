@@ -37,11 +37,16 @@
 
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
-  - Параллельно выполняет скрипты (`MaxDegreeOfParallelism`) и читает `DbDataReader` потоково.
-  - Шаги: resolve target-кодов -> запуск запроса -> on-the-fly разбиение на чанки до 10MB -> запись файлов.
+  - Выполняет пайплайн на `System.Threading.Tasks.Dataflow` с настраиваемыми worker-ами:
+    - `MaxDegreeOfParallelism` — чтение SQL и формирование чанков;
+    - `FileWriterDegreeOfParallelism` — запись чанков в файлы;
+    - `QueuePublisherDegreeOfParallelism` — публикация событий в MQ/канал.
+  - Шаги: resolve target-кодов -> очередь скриптов -> потоковое чтение `DbDataReader` и формирование чанков -> параллельная запись файлов -> последовательная публикация событий.
+  - Значения по умолчанию в DI: `MaxDegreeOfParallelism = max(CPU/2, 1)`, `FileWriterDegreeOfParallelism = 4`, `QueuePublisherDegreeOfParallelism = 1`, `DataflowBoundedCapacity = 8`.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
   - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`.
+  - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
   - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
   - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
   - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (guard-валидации), `RunnerOutputDirectoryFactory` (создание output-папок), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
@@ -73,6 +78,7 @@
   - DI через `Microsoft.Extensions.DependencyInjection`.
   - Переиспользует тот же runtime/use-case слой (`Unload.Application`), что и API.
   - Отображение событий в терминале через `Spectre.Console`.
+  - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
   - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
   - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор), `CatalogSelectionLoader` + `CatalogSelectionJsonModels` (чтение модели каталога).
@@ -108,11 +114,11 @@ flowchart LR
 4. `RunnerEngine` эмитит `RequestAccepted`.
 5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
 6. Для каждого скрипта:
-   - получить `DbDataReader` из БД;
-   - читать строки потоково;
-   - если скрипт вернул `0` строк, не создавать выходной файл и не публиковать события файла (`ChunkCreated`/`FileWritten`) в MQ;
-   - собирать текущий чанк до лимита размера;
-   - записывать чанк в файл и продолжать чтение.
+   - worker чтения получает `DbDataReader` из БД и читает строки потоково;
+   - worker чтения собирает текущий чанк до лимита размера и отправляет в очередь чанков;
+   - worker записи получает чанк из очереди, создает файл и пишет данные;
+   - если скрипт вернул `0` строк, выходной файл не создается и события файла (`ChunkCreated`/`FileWritten`) не публикуются;
+   - worker публикации отправляет события в MQ и клиентский канал (степень параллелизма задается `QueuePublisherDegreeOfParallelism`, по умолчанию 1).
 7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска.
 8. В конце эмитится `Completed` или `Failed`.
 
@@ -143,8 +149,9 @@ flowchart LR
 - Выходные файлы чанков: `output/<dd_MM_yyyy_HHmmss>/output-files/`
 - CSV-отчет запуска: `output/<dd_MM_yyyy_HHmmss>/run-report.csv`
 - Формат CSV:
-  - `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`
+  - `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`
   - `mqStatus`: `отправлен` / `не отправлен`
+  - `executionTimeMs`: время записи конкретного output-файла (чанка) в миллисекундах.
 
 ## Run sequence diagram
 

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Unload.Application;
 using Unload.Core;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
@@ -39,6 +40,7 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+var runStopwatch = Stopwatch.StartNew();
 await foreach (var @event in runner.RunAsync(request, cts.Token))
 {
     var color = @event.Step switch
@@ -62,4 +64,9 @@ await foreach (var @event in runner.RunAsync(request, cts.Token))
 
     AnsiConsole.MarkupLine(line);
 }
+runStopwatch.Stop();
+
+AnsiConsole.MarkupLine(string.Empty);
+AnsiConsole.MarkupLine(
+    $"[green]Total export time:[/] [white]{runStopwatch.Elapsed:hh\\:mm\\:ss\\.fff}[/]");
 
