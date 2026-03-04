@@ -24,7 +24,7 @@ public class JsonCatalogService : ICatalogService
     }
 
     /// <summary>
-    /// Загружает каталог, валидирует его и возвращает нормализованную модель.
+    /// Загружает каталог и возвращает модель без дополнительной нормализации значений.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены чтения.</param>
     /// <returns>Каталог групп, участников и вычисленных target-выборок.</returns>
@@ -56,8 +56,6 @@ public class JsonCatalogService : ICatalogService
 
         foreach (var targetCode in targetCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            CatalogValidation.ValidateTargetCode(targetCode);
-
             if (!targetMap.TryGetValue(targetCode, out var target))
             {
                 throw new InvalidOperationException($"Target '{targetCode}' not found in catalog.");
@@ -174,8 +172,7 @@ public class JsonCatalogService : ICatalogService
                     throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
                 }
 
-                CatalogValidation.ValidateGroupCode(group.Code);
-                uniqueGroupCodes.Add(group.Code.Trim().ToUpperInvariant());
+                uniqueGroupCodes.Add(group.Code);
             }
 
             result[member.Id] = uniqueGroupCodes
@@ -197,11 +194,8 @@ public class JsonCatalogService : ICatalogService
 
         foreach (var member in catalog.Members)
         {
-            CatalogValidation.ValidateMemberCode(member.Code);
-            CatalogValidation.ValidateMemberFileExtension(member.File);
-
-            var normalizedMemberCode = member.Code.Trim().ToUpperInvariant();
-            var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
+            var memberCode = member.Code;
+            var fileExtension = member.File;
 
             foreach (var groupId in member.Groups.Distinct())
             {
@@ -210,27 +204,24 @@ public class JsonCatalogService : ICatalogService
                     throw new InvalidOperationException($"Group '{groupId}' was not found in catalog.");
                 }
 
-                CatalogValidation.ValidateGroupFolder(group.Folder);
-                CatalogValidation.ValidateGroupCode(group.Code);
-
-                var normalizedGroupFolder = group.Folder.Trim().ToUpperInvariant();
-                var normalizedGroupCode = group.Code.Trim().ToUpperInvariant();
-                var targetCode = CatalogScriptPathHelper.BuildTargetCode(normalizedGroupFolder, normalizedMemberCode);
+                var groupFolder = group.Folder;
+                var groupCode = group.Code;
+                var targetCode = CatalogScriptPathHelper.BuildTargetCode(groupFolder, memberCode);
 
                 targetsByCode[targetCode] = new CatalogTargetInfo(
                     targetCode,
                     group.Id,
                     member.Id,
-                    BuildGroupDisplayName(group.Name, normalizedGroupFolder),
-                    normalizedGroupFolder,
-                    normalizedGroupCode,
+                    BuildGroupDisplayName(group.Name, groupFolder),
+                    groupFolder,
+                    groupCode,
                     BuildMemberDisplayName(
                         member.Name,
-                        normalizedMemberCode,
-                        normalizedFileExtension,
-                        [normalizedGroupCode]),
-                    normalizedMemberCode,
-                    normalizedFileExtension);
+                        memberCode,
+                        fileExtension,
+                        [groupCode]),
+                    memberCode,
+                    fileExtension);
             }
         }
 
@@ -240,7 +231,7 @@ public class JsonCatalogService : ICatalogService
     }
 
     /// <summary>
-    /// Формирует нормализованный список групп каталога.
+    /// Формирует список групп каталога.
     /// </summary>
     private static CatalogGroupInfo[] BuildGroups(CatalogRoot catalog)
     {
@@ -249,24 +240,21 @@ public class JsonCatalogService : ICatalogService
         for (var i = 0; i < catalog.Groups.Count; i++)
         {
             var group = catalog.Groups[i];
-            CatalogValidation.ValidateGroupFolder(group.Folder);
-            CatalogValidation.ValidateGroupCode(group.Code);
-
-            var normalizedFolder = group.Folder.Trim().ToUpperInvariant();
-            var normalizedCode = group.Code.Trim().ToUpperInvariant();
+            var folder = group.Folder;
+            var code = group.Code;
 
             groups[i] = new CatalogGroupInfo(
                 group.Id,
-                BuildGroupDisplayName(group.Name, normalizedFolder),
-                normalizedFolder,
-                normalizedCode);
+                BuildGroupDisplayName(group.Name, folder),
+                folder,
+                code);
         }
 
         return groups;
     }
 
     /// <summary>
-    /// Формирует нормализованный список участников каталога.
+    /// Формирует список участников каталога.
     /// </summary>
     private static CatalogMemberInfo[] BuildMembers(
         CatalogRoot catalog,
@@ -277,20 +265,17 @@ public class JsonCatalogService : ICatalogService
         for (var i = 0; i < catalog.Members.Count; i++)
         {
             var member = catalog.Members[i];
-            CatalogValidation.ValidateMemberCode(member.Code);
-            CatalogValidation.ValidateMemberFileExtension(member.File);
-
-            var normalizedCode = member.Code.Trim().ToUpperInvariant();
-            var normalizedFileExtension = member.File.Trim().ToUpperInvariant();
+            var code = member.Code;
+            var fileExtension = member.File;
             var groupCodes = memberGroupCodes.TryGetValue(member.Id, out var existingCodes)
                 ? existingCodes
                 : [];
 
             members[i] = new CatalogMemberInfo(
                 member.Id,
-                BuildMemberDisplayName(member.Name, normalizedCode, normalizedFileExtension, groupCodes),
-                normalizedCode,
-                normalizedFileExtension);
+                BuildMemberDisplayName(member.Name, code, fileExtension, groupCodes),
+                code,
+                fileExtension);
         }
 
         return members;
@@ -302,8 +287,10 @@ public class JsonCatalogService : ICatalogService
         string fileExtension,
         IReadOnlyList<string> groupCodes)
     {
-        var extensionWithoutDot = fileExtension.TrimStart('.');
+        var extensionSuffix = fileExtension.StartsWith(".", StringComparison.Ordinal)
+            ? fileExtension
+            : $".{fileExtension}";
         var groupCodeMask = groupCodes.Count > 0 ? groupCodes[0] : "*";
-        return $"{memberName} (Y{memberCode}{groupCodeMask}*.{extensionWithoutDot})";
+        return $"{memberName} (Y{memberCode}{groupCodeMask}*{extensionSuffix})";
     }
 }

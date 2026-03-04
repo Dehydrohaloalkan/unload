@@ -11,8 +11,9 @@
   - Читает `configs/catalog.json`.
   - Понимает структуру `groups` + `members` (у `group` есть `folder` и `code`, у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по формату имени `Y<member><group>_<type>_<codes>_<ext>.sql`.
-  - Валидирует `group.folder`, `member.code`, `targetCode` и защищает от выхода за границы директории скриптов.
-  - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogValidation` (валидации), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
+  - Значения `folder`, `code`, `file` используются как есть, без `trim`/приведения регистра.
+  - Проверки формата `group.folder`, `member.code`, `targetCode` отключены; защита от выхода за границы директории скриптов сохранена.
+  - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
   - Построение `CatalogInfo` внутри `JsonCatalogService` декомпозировано на небольшие шаги (`BuildMemberGroupCodes`, `BuildTargets`, `BuildGroups`, `BuildMembers`) вместо длинных LINQ-цепочек.
 
 - `backend/Unload.DataBase`
