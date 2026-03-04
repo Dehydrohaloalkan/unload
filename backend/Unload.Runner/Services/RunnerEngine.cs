@@ -251,6 +251,11 @@ public class RunnerEngine : IRunner
             records: rowsRead,
             cancellationToken: cancellationToken);
 
+        if (rowsRead == 0)
+        {
+            return;
+        }
+
         if (currentRows.Count > 0)
         {
             await FlushChunkAsync(
