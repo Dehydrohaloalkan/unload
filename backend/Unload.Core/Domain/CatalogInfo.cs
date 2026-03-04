@@ -53,7 +53,6 @@ public record CatalogMemberInfo(
 /// <param name="MemberName">Имя участника target-выборки.</param>
 /// <param name="MemberCode">Код участника target-выборки.</param>
 /// <param name="MemberFileExtension">Расширение итоговых файлов для target-выборки.</param>
-/// <param name="MemberRawName">Оригинальное имя участника без служебных суффиксов отображения.</param>
 public record CatalogTargetInfo(
     string TargetCode,
     int GroupId,
@@ -63,5 +62,4 @@ public record CatalogTargetInfo(
     string GroupCode,
     string MemberName,
     string MemberCode,
-    string MemberFileExtension,
-    string MemberRawName);
+    string MemberFileExtension);
