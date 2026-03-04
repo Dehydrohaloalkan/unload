@@ -44,7 +44,7 @@
   - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`.
   - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
   - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
-  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (проверки и output-путь), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
+  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEngineGuard` (guard-валидации), `RunnerOutputDirectoryFactory` (создание output-папок), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.

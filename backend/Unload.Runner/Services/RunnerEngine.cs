@@ -87,8 +87,8 @@ public class RunnerEngine : IRunner
             RunnerEngineGuard.ValidateRequest(request);
             RunnerEngineGuard.ValidateDatabaseConnectivity(_databaseClient);
 
-            runOutputDirectory = RunnerEngineGuard.CreateRunOutputDirectory(request.OutputDirectory);
-            var runFilesDirectory = RunnerEngineGuard.CreateRunFilesDirectory(runOutputDirectory);
+            runOutputDirectory = RunnerOutputDirectoryFactory.CreateRunOutputDirectory(request.OutputDirectory);
+            var runFilesDirectory = RunnerOutputDirectoryFactory.CreateRunFilesDirectory(runOutputDirectory);
 
             await EmitAsync(
                 writer,
@@ -176,7 +176,7 @@ public class RunnerEngine : IRunner
         {
             if (runOutputDirectory is not null)
             {
-                var reportPath = Path.Combine(runOutputDirectory, RunnerEngineGuard.RunReportFileName);
+                var reportPath = Path.Combine(runOutputDirectory, RunnerOutputDirectoryFactory.RunReportFileName);
                 await RunReportCsvWriter.WriteAsync(reportPath, reportRows, CancellationToken.None);
             }
         }
