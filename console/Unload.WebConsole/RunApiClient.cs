@@ -57,6 +57,19 @@ internal sealed class RunApiClient(HttpClient httpClient)
     }
 
     /// <summary>
+    /// Возвращает список мемберов, доступных для запуска выгрузки.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены запроса.</param>
+    /// <returns>Список мемберов каталога.</returns>
+    public async Task<IReadOnlyList<MemberCatalogItemDto>> GetMembersAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync("/api/members", cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<MemberCatalogItemDto[]>(cancellationToken: cancellationToken)
+            ?? Array.Empty<MemberCatalogItemDto>();
+    }
+
+    /// <summary>
     /// Возвращает идентификатор активного запуска из API.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены запроса.</param>

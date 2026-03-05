@@ -28,6 +28,16 @@ internal record RunConflictResponse(string Message, string? ActiveCorrelationId)
 internal record RunStartResult(RunAcceptedResponse? Accepted, RunConflictResponse? Conflict);
 
 /// <summary>
+/// Элемент каталога мемберов для выбора запуска в web-консоли.
+/// </summary>
+internal record MemberCatalogItemDto(
+    string Code,
+    string Name,
+    IReadOnlyCollection<string> TargetCodes,
+    string? ActiveRunCorrelationId,
+    MemberRunStatusInfoDto? ActiveRunStatus);
+
+/// <summary>
 /// Агрегированное состояние выполнения выгрузки.
 /// </summary>
 internal enum RunLifecycleStatus

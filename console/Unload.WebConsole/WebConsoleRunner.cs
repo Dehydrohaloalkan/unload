@@ -67,9 +67,13 @@ internal static class WebConsoleRunner
             .Spinner(Spinner.Known.Dots)
             .StartAsync("Connecting to SignalR...", async _ => await connection.StartAsync(cts.Token));
 
-        if (options.MemberCodes.Count > 0)
+        var selectedMemberCodes = options.MemberCodes.Count > 0
+            ? options.MemberCodes
+            : await PromptMemberCodesAsync(apiClient, cts.Token);
+
+        if (selectedMemberCodes.Count > 0)
         {
-            var startResult = await apiClient.StartRunAsync(options.MemberCodes, cts.Token);
+            var startResult = await apiClient.StartRunAsync(selectedMemberCodes, cts.Token);
             if (startResult.Accepted is not null)
             {
                 trackedCorrelationId = startResult.Accepted.CorrelationId;
@@ -198,5 +202,37 @@ internal static class WebConsoleRunner
                 return;
             }
         }
+    }
+
+    private static async Task<IReadOnlyCollection<string>> PromptMemberCodesAsync(
+        RunApiClient apiClient,
+        CancellationToken cancellationToken)
+    {
+        var members = await apiClient.GetMembersAsync(cancellationToken);
+        if (members.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow]No members available in API catalog. Switching to watch mode.[/]");
+            return Array.Empty<string>();
+        }
+
+        var selected = AnsiConsole.Prompt(
+            new MultiSelectionPrompt<MemberCatalogItemDto>()
+                .Title("Select [green]members[/] to run ([grey]Enter to watch active run[/])")
+                .NotRequired()
+                .PageSize(12)
+                .InstructionsText("[grey](Use [blue]<space>[/] to toggle, [blue]<enter>[/] to accept)[/]")
+                .UseConverter(static member =>
+                {
+                    var statusText = member.ActiveRunStatus is null
+                        ? "idle"
+                        : member.ActiveRunStatus.Status.ToString();
+                    return $"{member.Code} - {member.Name} (targets: {member.TargetCodes.Count}, status: {statusText})";
+                })
+                .AddChoices(members.OrderBy(static x => x.Name, StringComparer.OrdinalIgnoreCase)));
+
+        return selected
+            .Select(static x => x.Code)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 }

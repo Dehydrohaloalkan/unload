@@ -67,7 +67,7 @@
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
     - `group.name` отдается в формате `{имя (folder)}`;
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
-  - `GET /api/members` — отдает список мемберов для запуска (`code`, `name`, `targetCodes`).
+  - `GET /api/members` — отдает список мемберов для запуска (`code`, `name`, `targetCodes`) и, если есть активный запуск, текущий статус мембера (`activeRunCorrelationId`, `activeRunStatus`).
   - `POST /api/runs` — запускает выгрузку для выбранных мемберов (`memberCodes`) и возвращает `correlationId`.
   - Если запуск уже выполняется, `POST /api/runs` возвращает `409 Conflict` с `activeCorrelationId`.
   - `POST /api/runs/{correlationId}/stop` — останавливает активный запуск по `correlationId`.
@@ -98,6 +98,7 @@
   - Работает через HTTP (`/api/runs`, `/api/runs/active`, `/api/runs/{id}`) и SignalR (`/hubs/status`).
   - Умеет стартовать запуск по `memberCodes`, обрабатывать `409 Conflict` при активной выгрузке, останавливать активный запуск и подключаться к live-статусам.
   - Показывает отдельную таблицу статусов мемберов (pending/running/completed/failed/cancelled).
+  - Если `--members` не передан, показывает интерактивный multi-select мемберов из `GET /api/members`; пустой выбор включает режим наблюдения за активной выгрузкой.
 
 ## Module diagram
 

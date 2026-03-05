@@ -1,6 +1,4 @@
 using System.Text.RegularExpressions;
-using Spectre.Console;
-
 namespace Unload.WebConsole;
 
 /// <summary>
@@ -44,18 +42,13 @@ internal sealed class AppOptions
             }
         }
 
-        if (string.IsNullOrWhiteSpace(membersArgument))
-        {
-            membersArgument = AnsiConsole.Ask<string>(
-                "Member codes comma separated (empty to watch active run):",
-                string.Empty);
-        }
-
-        var memberCodes = membersArgument
-            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(static x => x.Trim().ToUpperInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var memberCodes = string.IsNullOrWhiteSpace(membersArgument)
+            ? Array.Empty<string>()
+            : membersArgument
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(static x => x.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         foreach (var code in memberCodes)
         {

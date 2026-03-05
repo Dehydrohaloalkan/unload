@@ -1,3 +1,5 @@
+using Unload.Application;
+
 namespace Unload.Api;
 
 /// <summary>
@@ -33,4 +35,11 @@ public record RunAcceptedResponse(
 /// <param name="Code">Код мембера.</param>
 /// <param name="Name">Отображаемое имя мембера.</param>
 /// <param name="TargetCodes">Список target-кодов, которые будут обработаны для мембера.</param>
-public record MemberCatalogItem(string Code, string Name, IReadOnlyCollection<string> TargetCodes);
+/// <param name="ActiveRunCorrelationId">Идентификатор активного запуска, если есть.</param>
+/// <param name="ActiveRunStatus">Текущий статус мембера в активном запуске, если есть.</param>
+public record MemberCatalogItem(
+    string Code,
+    string Name,
+    IReadOnlyCollection<string> TargetCodes,
+    string? ActiveRunCorrelationId,
+    MemberRunStatusInfo? ActiveRunStatus);

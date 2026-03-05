@@ -25,9 +25,18 @@ app.MapGet("/api/catalog", async (ICatalogService catalogService, CancellationTo
     return Results.Ok(catalog);
 });
 
-app.MapGet("/api/members", async (ICatalogService catalogService, CancellationToken cancellationToken) =>
+app.MapGet("/api/members", async (
+    ICatalogService catalogService,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    CancellationToken cancellationToken) =>
 {
     var catalog = await catalogService.GetCatalogAsync(cancellationToken);
+    var activeCorrelationId = runCoordinator.GetActiveCorrelationId();
+    var activeRun = string.IsNullOrWhiteSpace(activeCorrelationId)
+        ? null
+        : runStateStore.Get(activeCorrelationId);
+
     var members = catalog.Members
         .OrderBy(static x => x.Name, StringComparer.OrdinalIgnoreCase)
         .Select(member =>
@@ -38,7 +47,19 @@ app.MapGet("/api/members", async (ICatalogService catalogService, CancellationTo
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return new MemberCatalogItem(member.Code, member.Name, targetCodes);
+            MemberRunStatusInfo? activeStatus = null;
+            if (activeRun?.MemberStatuses is not null &&
+                activeRun.MemberStatuses.TryGetValue(member.Name, out var memberStatus))
+            {
+                activeStatus = memberStatus;
+            }
+
+            return new MemberCatalogItem(
+                member.Code,
+                member.Name,
+                targetCodes,
+                activeRun?.CorrelationId,
+                activeStatus);
         })
         .ToArray();
     return Results.Ok(members);
