@@ -26,7 +26,18 @@ public static class ServiceCollectionExtensions
         UnloadRuntimePaths paths,
         DatabaseRuntimeSettings? databaseSettings = null)
     {
-        var dbSettings = databaseSettings ?? new DatabaseRuntimeSettings();
+        var dbSettings = databaseSettings ?? throw new InvalidOperationException(
+            $"Database settings are required. Configure section '{DatabaseRuntimeSettings.SectionName}' in appsettings.");
+        if (dbSettings.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException("Database timeout must be greater than zero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(dbSettings.ConnectionString))
+        {
+            throw new InvalidOperationException("Database connection string is required.");
+        }
+
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
         services.AddSingleton<IDatabaseClient>(_ => new StubDatabaseClient(
             dbSettings.TimeoutSeconds,

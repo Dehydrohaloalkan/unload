@@ -18,5 +18,5 @@ public sealed class DatabaseRuntimeSettings
     /// <summary>
     /// Строка подключения (plain или формат dpapi:&lt;base64&gt;).
     /// </summary>
-    public string ConnectionString { get; init; } = "Server=localhost;Database=unload;User Id=stub;Password=stub;";
+    public string ConnectionString { get; init; } = string.Empty;
 }

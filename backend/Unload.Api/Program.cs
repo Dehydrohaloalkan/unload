@@ -10,7 +10,9 @@ var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
 var databaseSettings = builder.Configuration
     .GetSection(DatabaseRuntimeSettings.SectionName)
-    .Get<DatabaseRuntimeSettings>() ?? new DatabaseRuntimeSettings();
+    .Get<DatabaseRuntimeSettings>()
+    ?? throw new InvalidOperationException(
+        $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers();

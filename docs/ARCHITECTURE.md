@@ -65,13 +65,14 @@
   - In-memory диспетчер запусков (один активный run без очереди ожидания) и store статусов, общий `RunStatusInfo`.
   - `IRunCoordinator` поддерживает остановку активного запуска (`TryCancel`) и выдает активацию вместе с токеном отмены конкретного run.
   - `RunStatusInfo` хранит статусы мемберов (`MemberStatuses`) отдельно от общего статуса запуска.
-  - Общая DI-композиция через `AddUnloadRuntime(UnloadRuntimePaths)` для API и Console.
+  - Общая DI-композиция через `AddUnloadRuntime(UnloadRuntimePaths, DatabaseRuntimeSettings)` для API и Console.
+  - Настройки БД валидируются при старте (`TimeoutSeconds > 0`, непустой `ConnectionString`), fallback-значения не используются.
 
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
   - HTTP-эндпоинты вынесены в MVC-контроллеры: `CatalogController` (`/api/catalog`, `/api/members`) и `RunsController` (`/api/runs*`).
-  - Настройки БД читаются из секции `Database` (`TimeoutSeconds`, `ConnectionString`) в `appsettings.Development.json` / `appsettings.Production.json`.
+  - Настройки БД читаются из секции `Database` (`TimeoutSeconds`, `ConnectionString`) в `appsettings.Development.json` / `appsettings.Production.json`; секция обязательна.
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
     - `group.name` отдается в формате `{имя (folder)}`;
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
@@ -93,6 +94,7 @@
   - Точка входа.
   - DI через `Microsoft.Extensions.DependencyInjection`.
   - Переиспользует тот же runtime/use-case слой (`Unload.Application`), что и API.
+  - Настройки БД читаются из `appsettings.{Environment}.json` (переменные окружения `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`, по умолчанию `Production`); секция `Database` обязательна.
   - Запуск инициируется через `IRunOrchestrator` и тот же single-run диспетчер (`IRunCoordinator`), без очереди ожидания.
   - Отображение событий в терминале через `Spectre.Console`.
   - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).

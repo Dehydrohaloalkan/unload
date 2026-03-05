@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using Unload.Application;
 using Unload.Core;
@@ -8,6 +9,18 @@ var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
 var catalogPath = Path.Combine(root, "configs", "catalog.json");
 var outputDirectory = Path.Combine(root, "output");
+var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+    ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+    ?? "Production";
+var configuration = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile($"appsettings.{environment}.json", optional: false, reloadOnChange: false)
+    .Build();
+var databaseSettings = configuration
+    .GetSection(DatabaseRuntimeSettings.SectionName)
+    .Get<DatabaseRuntimeSettings>()
+    ?? throw new InvalidOperationException(
+        $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
 
 var targetCodes = args.Length == 0
     ? await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogPath, CancellationToken.None)
@@ -19,7 +32,7 @@ var services = new ServiceCollection();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory));
+    OutputDirectory: outputDirectory), databaseSettings);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var orchestrator = provider.ServiceProvider.GetRequiredService<IRunOrchestrator>();
