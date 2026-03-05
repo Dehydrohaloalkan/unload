@@ -12,7 +12,7 @@ internal sealed class RunApiClient(HttpClient httpClient)
     /// <summary>
     /// Пытается запустить выгрузку через API.
     /// </summary>
-    /// <param name="targetCodes">Target-коды запуска.</param>
+    /// <param name="memberCodes">Коды выбранных мемберов для запуска.</param>
     /// <param name="cancellationToken">Токен отмены запроса.</param>
     /// <returns>Результат старта с данными accepted или conflict.</returns>
     public async Task<RunStartResult> StartRunAsync(

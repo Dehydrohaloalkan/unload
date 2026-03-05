@@ -9,6 +9,27 @@ namespace Unload.WebConsole;
 internal static class WebConsoleRunner
 {
     /// <summary>
+    /// Сессионное состояние клиента web-консоли.
+    /// </summary>
+    private sealed class RunnerSessionState
+    {
+        /// <summary>
+        /// CorrelationId запуска, за которым ведется наблюдение.
+        /// </summary>
+        public string TrackedCorrelationId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Признак, что пользователь запросил остановку (Ctrl+C).
+        /// </summary>
+        public bool StopRequestedByUser { get; set; }
+
+        /// <summary>
+        /// Признак, что запрос на остановку уже отправлен в API.
+        /// </summary>
+        public bool StopRequestSent { get; set; }
+    }
+
+    /// <summary>
     /// Запускает приложение web-консоли и отслеживает жизненный цикл выгрузки.
     /// </summary>
     /// <param name="args">Аргументы командной строки.</param>
@@ -16,31 +37,89 @@ internal static class WebConsoleRunner
     {
         var options = AppOptions.Parse(args);
         using var cts = new CancellationTokenSource();
-
-        var trackedCorrelationId = string.Empty;
-        var stopRequestedByUser = false;
-        var stopRequestSent = false;
+        var sessionState = new RunnerSessionState();
         var runCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var uiState = new UiState();
         using var httpClient = new HttpClient { BaseAddress = new Uri(options.ApiBaseUrl) };
         var apiClient = new RunApiClient(httpClient);
-        Console.CancelKeyPress += (_, e) =>
+
+        ConsoleCancelEventHandler onCancelKeyPress = (_, e) =>
         {
             e.Cancel = true;
-            stopRequestedByUser = true;
+            sessionState.StopRequestedByUser = true;
         };
+        Console.CancelKeyPress += onCancelKeyPress;
+
         await using var connection = new HubConnectionBuilder()
             .WithUrl($"{options.ApiBaseUrl.TrimEnd('/')}/hubs/status")
             .WithAutomaticReconnect()
             .Build();
 
+        try
+        {
+            RenderHeader(options);
+            RegisterConnectionHandlers(connection, sessionState, uiState, runCompleted);
+            await ConnectToHubAsync(connection, cts.Token);
+            await ResolveTrackedRunAsync(options, apiClient, sessionState, cts.Token);
+
+            if (string.IsNullOrWhiteSpace(sessionState.TrackedCorrelationId))
+            {
+                AnsiConsole.MarkupLine("[yellow]No active run found. Nothing to watch.[/]");
+                return;
+            }
+
+            await TrySubscribeToRunAsync(connection, sessionState.TrackedCorrelationId, cts.Token);
+            AnsiConsole.MarkupLine($"[grey]Watching run:[/] {Markup.Escape(sessionState.TrackedCorrelationId)}");
+
+            var initialStatus = await LoadInitialStatusAsync(
+                apiClient,
+                sessionState.TrackedCorrelationId,
+                uiState,
+                cts.Token);
+            if (initialStatus is not null && IsTerminalStatus(initialStatus.Status))
+            {
+                AnsiConsole.Write(RunDashboardBuilder.BuildFinal(uiState.GetSnapshot(), sessionState.TrackedCorrelationId));
+                AnsiConsole.MarkupLine($"[green]Run already finished with status:[/] {initialStatus.Status}");
+                return;
+            }
+
+            await RenderLiveDashboardAsync(apiClient, sessionState, uiState, runCompleted, cts);
+            await WaitForRunCompletionAsync(apiClient, sessionState.TrackedCorrelationId, runCompleted, cts.Token);
+            await RefreshFinalStateAsync(apiClient, sessionState.TrackedCorrelationId, uiState, cts.Token);
+            RenderFinalSummary(uiState.GetSnapshot(), sessionState.TrackedCorrelationId);
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancelKeyPress;
+        }
+    }
+
+    /// <summary>
+    /// Печатает заголовок приложения и целевой API endpoint.
+    /// </summary>
+    /// <param name="options">Параметры запуска web-консоли.</param>
+    private static void RenderHeader(AppOptions options)
+    {
         AnsiConsole.Write(new Rule("[green]Unload WebConsole[/]").RuleStyle("green").LeftJustified());
         AnsiConsole.MarkupLine($"[grey]API:[/] {Markup.Escape(options.ApiBaseUrl)}");
+    }
 
+    /// <summary>
+    /// Регистрирует обработчики входящих SignalR-сообщений.
+    /// </summary>
+    /// <param name="connection">Подключение к SignalR hub.</param>
+    /// <param name="sessionState">Состояние текущей сессии клиента.</param>
+    /// <param name="uiState">Потокобезопасное состояние UI.</param>
+    /// <param name="runCompleted">Сигнал завершения запуска.</param>
+    private static void RegisterConnectionHandlers(
+        HubConnection connection,
+        RunnerSessionState sessionState,
+        UiState uiState,
+        TaskCompletionSource<bool> runCompleted)
+    {
         connection.On<RunnerEventDto>("status", @event =>
         {
-            if (!string.IsNullOrWhiteSpace(trackedCorrelationId) &&
-                !string.Equals(@event.CorrelationId, trackedCorrelationId, StringComparison.OrdinalIgnoreCase))
+            if (!ShouldProcessCorrelation(sessionState.TrackedCorrelationId, @event.CorrelationId))
             {
                 return;
             }
@@ -50,124 +129,178 @@ internal static class WebConsoleRunner
 
         connection.On<RunStatusInfoDto>("run_status", status =>
         {
-            if (!string.IsNullOrWhiteSpace(trackedCorrelationId) &&
-                !string.Equals(status.CorrelationId, trackedCorrelationId, StringComparison.OrdinalIgnoreCase))
+            if (!ShouldProcessCorrelation(sessionState.TrackedCorrelationId, status.CorrelationId))
             {
                 return;
             }
 
             uiState.SetStatus(status);
-            if (status.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
+            if (IsTerminalStatus(status.Status))
             {
                 runCompleted.TrySetResult(true);
             }
         });
+    }
 
+    /// <summary>
+    /// Подключается к SignalR с визуальным индикатором ожидания.
+    /// </summary>
+    /// <param name="connection">Подключение к SignalR hub.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    private static async Task ConnectToHubAsync(HubConnection connection, CancellationToken cancellationToken)
+    {
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
-            .StartAsync("Connecting to SignalR...", async _ => await connection.StartAsync(cts.Token));
+            .StartAsync("Connecting to SignalR...", async _ => await connection.StartAsync(cancellationToken));
+    }
 
-        var selectedMemberCodes = options.MemberCodes.Count > 0
-            ? options.MemberCodes
-            : await PromptMemberCodesAsync(apiClient, cts.Token);
-
-        if (selectedMemberCodes.Count > 0)
+    /// <summary>
+    /// Определяет запуск для отслеживания: либо активный, либо новый, если активного нет.
+    /// </summary>
+    /// <param name="options">Параметры запуска web-консоли.</param>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="sessionState">Состояние текущей сессии клиента.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    private static async Task ResolveTrackedRunAsync(
+        AppOptions options,
+        RunApiClient apiClient,
+        RunnerSessionState sessionState,
+        CancellationToken cancellationToken)
+    {
+        sessionState.TrackedCorrelationId = await apiClient.ResolveActiveCorrelationIdAsync(cancellationToken) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(sessionState.TrackedCorrelationId))
         {
-            var startResult = await apiClient.StartRunAsync(selectedMemberCodes, cts.Token);
-            if (startResult.Accepted is not null)
-            {
-                trackedCorrelationId = startResult.Accepted.CorrelationId;
-                AnsiConsole.MarkupLine($"[green]Run started:[/] {Markup.Escape(trackedCorrelationId)}");
-            }
-            else
-            {
-                trackedCorrelationId = startResult.Conflict?.ActiveCorrelationId ?? string.Empty;
-                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(startResult.Conflict?.Message ?? "Run is already in progress.")}[/]");
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(trackedCorrelationId))
-        {
-            trackedCorrelationId = await apiClient.ResolveActiveCorrelationIdAsync(cts.Token) ?? string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(trackedCorrelationId))
-        {
-            AnsiConsole.MarkupLine("[yellow]No active run found. Nothing to watch.[/]");
+            AnsiConsole.MarkupLine($"[yellow]Active run detected:[/] {Markup.Escape(sessionState.TrackedCorrelationId)}");
+            AnsiConsole.MarkupLine("[grey]Starting a new run is disabled until the active run is finished.[/]");
             return;
         }
 
+        var selectedMemberCodes = options.MemberCodes.Count > 0
+            ? options.MemberCodes
+            : await PromptMemberCodesAsync(apiClient, cancellationToken);
+        if (selectedMemberCodes.Count == 0)
+        {
+            return;
+        }
+
+        var startResult = await apiClient.StartRunAsync(selectedMemberCodes, cancellationToken);
+        if (startResult.Accepted is not null)
+        {
+            sessionState.TrackedCorrelationId = startResult.Accepted.CorrelationId;
+            AnsiConsole.MarkupLine($"[green]Run started:[/] {Markup.Escape(sessionState.TrackedCorrelationId)}");
+            return;
+        }
+
+        sessionState.TrackedCorrelationId = startResult.Conflict?.ActiveCorrelationId ?? string.Empty;
+        AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(startResult.Conflict?.Message ?? "Run is already in progress.")}[/]");
+    }
+
+    /// <summary>
+    /// Пытается подписаться на конкретный запуск в SignalR hub.
+    /// </summary>
+    /// <param name="connection">Подключение к SignalR hub.</param>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    private static async Task TrySubscribeToRunAsync(
+        HubConnection connection,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            await connection.InvokeAsync("SubscribeRun", trackedCorrelationId, cts.Token);
+            await connection.InvokeAsync("SubscribeRun", correlationId, cancellationToken);
         }
         catch
         {
         }
+    }
 
-        AnsiConsole.MarkupLine($"[grey]Watching run:[/] {Markup.Escape(trackedCorrelationId)}");
-        var initialStatus = await apiClient.GetRunStatusAsync(trackedCorrelationId, cts.Token);
+    /// <summary>
+    /// Загружает исходный статус запуска и синхронизирует его в UI state.
+    /// </summary>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="uiState">Потокобезопасное состояние UI.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Загруженный статус или <c>null</c>, если запуск не найден.</returns>
+    private static async Task<RunStatusInfoDto?> LoadInitialStatusAsync(
+        RunApiClient apiClient,
+        string correlationId,
+        UiState uiState,
+        CancellationToken cancellationToken)
+    {
+        var initialStatus = await apiClient.GetRunStatusAsync(correlationId, cancellationToken);
         if (initialStatus is not null)
         {
             uiState.SetStatus(initialStatus);
         }
 
-        if (initialStatus is not null &&
-            initialStatus.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
-        {
-            AnsiConsole.MarkupLine($"[green]Run already finished with status:[/] {initialStatus.Status}");
-            return;
-        }
+        return initialStatus;
+    }
 
-        await AnsiConsole.Live(RunDashboardBuilder.Build(uiState.GetSnapshot(), trackedCorrelationId))
-            .AutoClear(false)
+    /// <summary>
+    /// Рендерит live-дашборд до завершения запуска или отмены.
+    /// </summary>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="sessionState">Состояние текущей сессии клиента.</param>
+    /// <param name="uiState">Потокобезопасное состояние UI.</param>
+    /// <param name="runCompleted">Сигнал завершения запуска.</param>
+    /// <param name="cancellationTokenSource">Источник токена отмены.</param>
+    private static async Task RenderLiveDashboardAsync(
+        RunApiClient apiClient,
+        RunnerSessionState sessionState,
+        UiState uiState,
+        TaskCompletionSource<bool> runCompleted,
+        CancellationTokenSource cancellationTokenSource)
+    {
+        await AnsiConsole.Live(RunDashboardBuilder.Build(uiState.GetSnapshot(), sessionState.TrackedCorrelationId))
+            .AutoClear(true)
             .StartAsync(async context =>
             {
-                while (!cts.IsCancellationRequested)
+                while (!cancellationTokenSource.IsCancellationRequested)
                 {
-                    if (stopRequestedByUser && !stopRequestSent && !string.IsNullOrWhiteSpace(trackedCorrelationId))
-                    {
-                        stopRequestSent = true;
-                        var accepted = await apiClient.StopRunAsync(trackedCorrelationId, cts.Token);
-                        if (accepted)
-                        {
-                            AnsiConsole.MarkupLine("[yellow]Stop requested.[/]");
-                        }
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[red]Stop request was rejected by API.[/]");
-                            cts.Cancel();
-                        }
-                    }
+                    await TrySendStopRequestAsync(apiClient, sessionState, cancellationTokenSource);
 
-                    context.UpdateTarget(RunDashboardBuilder.Build(uiState.GetSnapshot(), trackedCorrelationId));
+                    context.UpdateTarget(RunDashboardBuilder.Build(uiState.GetSnapshot(), sessionState.TrackedCorrelationId));
                     context.Refresh();
 
-                    var done = await Task.WhenAny(runCompleted.Task, Task.Delay(300, cts.Token));
+                    var done = await Task.WhenAny(runCompleted.Task, Task.Delay(300, cancellationTokenSource.Token));
                     if (done == runCompleted.Task)
                     {
                         break;
                     }
                 }
             });
+    }
 
-        await WaitForRunCompletionAsync(apiClient, trackedCorrelationId, runCompleted, cts.Token);
-        var finalState = await apiClient.GetRunStatusAsync(trackedCorrelationId, cts.Token);
-        if (finalState is not null)
+    /// <summary>
+    /// При необходимости отправляет в API запрос на остановку активного запуска.
+    /// </summary>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="sessionState">Состояние текущей сессии клиента.</param>
+    /// <param name="cancellationTokenSource">Источник токена отмены.</param>
+    private static async Task TrySendStopRequestAsync(
+        RunApiClient apiClient,
+        RunnerSessionState sessionState,
+        CancellationTokenSource cancellationTokenSource)
+    {
+        if (!sessionState.StopRequestedByUser ||
+            sessionState.StopRequestSent ||
+            string.IsNullOrWhiteSpace(sessionState.TrackedCorrelationId))
         {
-            uiState.SetStatus(finalState);
+            return;
         }
 
-        var finalSnapshot = uiState.GetSnapshot();
-        var finalColor = finalSnapshot.Status switch
+        sessionState.StopRequestSent = true;
+        var accepted = await apiClient.StopRunAsync(sessionState.TrackedCorrelationId, cancellationTokenSource.Token);
+        if (accepted)
         {
-            RunLifecycleStatus.Completed => "green",
-            RunLifecycleStatus.Failed => "red",
-            RunLifecycleStatus.Cancelled => "yellow",
-            _ => "yellow"
-        };
-        AnsiConsole.MarkupLine(
-            $"[{finalColor}]Run finished:[/] {finalSnapshot.Status} {Markup.Escape(finalSnapshot.Message ?? string.Empty)}");
+            AnsiConsole.MarkupLine("[yellow]Stop requested.[/]");
+            return;
+        }
+
+        AnsiConsole.MarkupLine("[red]Stop request was rejected by API.[/]");
+        cancellationTokenSource.Cancel();
     }
 
     /// <summary>
@@ -183,10 +316,20 @@ internal static class WebConsoleRunner
         TaskCompletionSource<bool> runCompleted,
         CancellationToken cancellationToken)
     {
+        using var pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         while (!cancellationToken.IsCancellationRequested)
         {
-            var completedTask = await Task.WhenAny(runCompleted.Task, Task.Delay(TimeSpan.FromSeconds(2), cancellationToken));
-            if (completedTask == runCompleted.Task)
+            if (runCompleted.Task.IsCompleted)
+            {
+                return;
+            }
+
+            if (!await pollTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                return;
+            }
+
+            if (runCompleted.Task.IsCompleted)
             {
                 return;
             }
@@ -204,6 +347,73 @@ internal static class WebConsoleRunner
         }
     }
 
+    /// <summary>
+    /// Обновляет локальный UI state финальным статусом запуска из API.
+    /// </summary>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="uiState">Потокобезопасное состояние UI.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    private static async Task RefreshFinalStateAsync(
+        RunApiClient apiClient,
+        string correlationId,
+        UiState uiState,
+        CancellationToken cancellationToken)
+    {
+        var finalState = await apiClient.GetRunStatusAsync(correlationId, cancellationToken);
+        if (finalState is not null)
+        {
+            uiState.SetStatus(finalState);
+        }
+    }
+
+    /// <summary>
+    /// Выводит финальный snapshot запуска и итоговую строку статуса.
+    /// </summary>
+    /// <param name="finalSnapshot">Финальный снимок состояния запуска.</param>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    private static void RenderFinalSummary(UiSnapshot finalSnapshot, string correlationId)
+    {
+        AnsiConsole.Write(RunDashboardBuilder.BuildFinal(finalSnapshot, correlationId));
+        var finalColor = finalSnapshot.Status switch
+        {
+            RunLifecycleStatus.Completed => "green",
+            RunLifecycleStatus.Failed => "red",
+            RunLifecycleStatus.Cancelled => "yellow",
+            _ => "yellow"
+        };
+        AnsiConsole.MarkupLine(
+            $"[{finalColor}]Run finished:[/] {finalSnapshot.Status} {Markup.Escape(finalSnapshot.Message ?? string.Empty)}");
+    }
+
+    /// <summary>
+    /// Проверяет, что входящее событие относится к отслеживаемому запуску.
+    /// </summary>
+    /// <param name="trackedCorrelationId">Текущий отслеживаемый correlationId.</param>
+    /// <param name="incomingCorrelationId">CorrelationId входящего события/статуса.</param>
+    /// <returns><c>true</c>, если событие нужно обработать.</returns>
+    private static bool ShouldProcessCorrelation(string trackedCorrelationId, string incomingCorrelationId)
+    {
+        return string.IsNullOrWhiteSpace(trackedCorrelationId) ||
+               string.Equals(incomingCorrelationId, trackedCorrelationId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Возвращает признак terminal-статуса запуска.
+    /// </summary>
+    /// <param name="status">Статус запуска.</param>
+    /// <returns><c>true</c>, если запуск завершен.</returns>
+    private static bool IsTerminalStatus(RunLifecycleStatus status)
+    {
+        return status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled;
+    }
+
+    /// <summary>
+    /// Загружает список мемберов и запрашивает выбор у пользователя.
+    /// </summary>
+    /// <param name="apiClient">HTTP-клиент API.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Список выбранных кодов мемберов.</returns>
     private static async Task<IReadOnlyCollection<string>> PromptMemberCodesAsync(
         RunApiClient apiClient,
         CancellationToken cancellationToken)
