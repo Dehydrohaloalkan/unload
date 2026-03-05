@@ -1,5 +1,7 @@
 # Unload Architecture
 
+Краткое и прикладное описание проекта для быстрого старта: `README.md`.
+
 ## Solution modules
 
 - `backend/Unload.Core`
