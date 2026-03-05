@@ -197,6 +197,8 @@ sequenceDiagram
 ## Code documentation
 
 - Во всех ключевых классах и методах backend/console добавлены XML-комментарии.
+- В `backend/Unload.Application` дополнены XML-комментарии для `IRunCoordinator` и `InMemoryRunCoordinator`.
+- В `console/Unload.WebConsole` добавлены XML-комментарии для типов `AppOptions`, `RunApiClient`, `RunDashboardBuilder`, `UiState`, `WebConsoleRunner` и DTO/enum-моделей из `Models.cs`.
 - Комментарии описывают:
   - где используется компонент;
   - как работает метод или класс;

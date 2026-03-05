@@ -1,11 +1,18 @@
 namespace Unload.WebConsole;
 
+/// <summary>
+/// Потокобезопасное состояние UI для live-обновления панели web-консоли.
+/// </summary>
 internal sealed class UiState
 {
     private readonly object _sync = new();
     private readonly Queue<RunnerEventLine> _events = new();
     private RunStatusInfoDto? _status;
 
+    /// <summary>
+    /// Добавляет событие раннера в очередь отображаемых записей.
+    /// </summary>
+    /// <param name="event">Событие, полученное из SignalR.</param>
     public void AddEvent(RunnerEventDto @event)
     {
         lock (_sync)
@@ -22,6 +29,10 @@ internal sealed class UiState
         }
     }
 
+    /// <summary>
+    /// Обновляет снимок статуса выполнения.
+    /// </summary>
+    /// <param name="status">Текущий статус запуска.</param>
     public void SetStatus(RunStatusInfoDto status)
     {
         lock (_sync)
@@ -30,6 +41,10 @@ internal sealed class UiState
         }
     }
 
+    /// <summary>
+    /// Возвращает потокобезопасный снимок данных для отрисовки.
+    /// </summary>
+    /// <returns>Текущее состояние панели и ленты событий.</returns>
     public UiSnapshot GetSnapshot()
     {
         lock (_sync)

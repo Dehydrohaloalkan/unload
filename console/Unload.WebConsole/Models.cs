@@ -1,7 +1,13 @@
 namespace Unload.WebConsole;
 
+/// <summary>
+/// Тело запроса запуска выгрузки через API.
+/// </summary>
 internal record RunStartRequest(IReadOnlyCollection<string> TargetCodes);
 
+/// <summary>
+/// Успешный ответ API при создании нового запуска.
+/// </summary>
 internal record RunAcceptedResponse(
     string CorrelationId,
     string RunStatusPath,
@@ -10,10 +16,19 @@ internal record RunAcceptedResponse(
     string EventName,
     string RunStatusEventName);
 
+/// <summary>
+/// Ответ API при конфликте запуска, когда уже есть активная выгрузка.
+/// </summary>
 internal record RunConflictResponse(string Message, string? ActiveCorrelationId);
 
+/// <summary>
+/// Результат попытки запуска: либо accepted, либо conflict.
+/// </summary>
 internal record RunStartResult(RunAcceptedResponse? Accepted, RunConflictResponse? Conflict);
 
+/// <summary>
+/// Агрегированное состояние выполнения выгрузки.
+/// </summary>
 internal enum RunLifecycleStatus
 {
     Running,
@@ -21,6 +36,9 @@ internal enum RunLifecycleStatus
     Failed
 }
 
+/// <summary>
+/// Шаги пайплайна раннера, приходящие в статусных событиях.
+/// </summary>
 internal enum RunnerStep
 {
     RequestAccepted,
@@ -36,6 +54,9 @@ internal enum RunnerStep
     Failed
 }
 
+/// <summary>
+/// DTO статуса запуска, получаемый из API/SignalR.
+/// </summary>
 internal record RunStatusInfoDto(
     string CorrelationId,
     RunLifecycleStatus Status,
@@ -46,6 +67,9 @@ internal record RunStatusInfoDto(
     string? Message,
     string? OutputPath);
 
+/// <summary>
+/// DTO события раннера, транслируемого через SignalR.
+/// </summary>
 internal record RunnerEventDto(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -56,8 +80,14 @@ internal record RunnerEventDto(
     int? Records,
     string? FilePath);
 
+/// <summary>
+/// Строка события для отображения в live-таблице.
+/// </summary>
 internal record RunnerEventLine(DateTime Time, RunnerStep Step, string Message);
 
+/// <summary>
+/// Снимок UI-состояния для построения панели и ленты событий.
+/// </summary>
 internal record UiSnapshot(
     RunLifecycleStatus Status,
     RunnerStep? LastStep,

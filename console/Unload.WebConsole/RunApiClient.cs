@@ -4,8 +4,17 @@ using System.Text.Json;
 
 namespace Unload.WebConsole;
 
+/// <summary>
+/// HTTP-клиент для операций запуска и чтения статуса выгрузки.
+/// </summary>
 internal sealed class RunApiClient(HttpClient httpClient)
 {
+    /// <summary>
+    /// Пытается запустить выгрузку через API.
+    /// </summary>
+    /// <param name="targetCodes">Target-коды запуска.</param>
+    /// <param name="cancellationToken">Токен отмены запроса.</param>
+    /// <returns>Результат старта с данными accepted или conflict.</returns>
     public async Task<RunStartResult> StartRunAsync(
         IReadOnlyCollection<string> targetCodes,
         CancellationToken cancellationToken)
@@ -26,6 +35,12 @@ internal sealed class RunApiClient(HttpClient httpClient)
         return new RunStartResult(accepted, null);
     }
 
+    /// <summary>
+    /// Возвращает актуальный статус указанного запуска.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="cancellationToken">Токен отмены запроса.</param>
+    /// <returns>Статус запуска или <c>null</c>, если run не найден.</returns>
     public async Task<RunStatusInfoDto?> GetRunStatusAsync(string correlationId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync(
@@ -41,6 +56,11 @@ internal sealed class RunApiClient(HttpClient httpClient)
         return await response.Content.ReadFromJsonAsync<RunStatusInfoDto>(cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Возвращает идентификатор активного запуска из API.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены запроса.</param>
+    /// <returns>Correlation id активного запуска или <c>null</c>.</returns>
     public async Task<string?> ResolveActiveCorrelationIdAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync("/api/runs/active", cancellationToken);

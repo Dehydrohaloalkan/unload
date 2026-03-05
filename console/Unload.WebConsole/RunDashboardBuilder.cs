@@ -2,8 +2,17 @@ using Spectre.Console;
 
 namespace Unload.WebConsole;
 
+/// <summary>
+/// Строит визуальное представление текущего состояния запуска в консоли.
+/// </summary>
 internal static class RunDashboardBuilder
 {
+    /// <summary>
+    /// Формирует набор панелей для live-рендера статуса и последних событий.
+    /// </summary>
+    /// <param name="snapshot">Снимок состояния UI.</param>
+    /// <param name="correlationId">Идентификатор отслеживаемого запуска.</param>
+    /// <returns>Набор строк для отрисовки через Spectre.Console.</returns>
     public static Rows Build(UiSnapshot snapshot, string correlationId)
     {
         var statusColor = snapshot.Status switch

@@ -3,8 +3,15 @@ using Spectre.Console;
 
 namespace Unload.WebConsole;
 
+/// <summary>
+/// Точка оркестрации web-консоли: старт/подключение к запуску и live-мониторинг.
+/// </summary>
 internal static class WebConsoleRunner
 {
+    /// <summary>
+    /// Запускает приложение web-консоли и отслеживает жизненный цикл выгрузки.
+    /// </summary>
+    /// <param name="args">Аргументы командной строки.</param>
     public static async Task RunAsync(string[] args)
     {
         var options = AppOptions.Parse(args);
@@ -141,6 +148,13 @@ internal static class WebConsoleRunner
             $"[{finalColor}]Run finished:[/] {finalSnapshot.Status} {Markup.Escape(finalSnapshot.Message ?? string.Empty)}");
     }
 
+    /// <summary>
+    /// Ждет завершения запуска, периодически проверяя статус через API.
+    /// </summary>
+    /// <param name="apiClient">Клиент для запросов статуса.</param>
+    /// <param name="correlationId">Идентификатор отслеживаемого запуска.</param>
+    /// <param name="runCompleted">Сигнал о завершении из SignalR.</param>
+    /// <param name="cancellationToken">Токен отмены ожидания.</param>
     private static async Task WaitForRunCompletionAsync(
         RunApiClient apiClient,
         string correlationId,

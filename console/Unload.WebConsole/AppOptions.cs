@@ -3,13 +3,27 @@ using Spectre.Console;
 
 namespace Unload.WebConsole;
 
+/// <summary>
+/// Параметры запуска web-консоли и их валидация.
+/// </summary>
 internal sealed class AppOptions
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Базовый URL API для HTTP и SignalR-подключений.
+    /// </summary>
     public required string ApiBaseUrl { get; init; }
+    /// <summary>
+    /// Нормализованный список target-кодов для запуска.
+    /// </summary>
     public required IReadOnlyCollection<string> TargetCodes { get; init; }
 
+    /// <summary>
+    /// Разбирает аргументы командной строки и возвращает валидированные параметры приложения.
+    /// </summary>
+    /// <param name="args">Аргументы запуска процесса.</param>
+    /// <returns>Готовые параметры web-консоли.</returns>
     public static AppOptions Parse(string[] args)
     {
         var apiBaseUrl = "http://localhost:5000";
