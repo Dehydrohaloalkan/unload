@@ -10,6 +10,7 @@ public interface IRunOrchestrator
     /// Создает и запускает выгрузку.
     /// </summary>
     /// <param name="targetCodes">Target-коды, выбранные пользователем.</param>
+    /// <param name="memberNames">Имена мемберов, выбранных пользователем.</param>
     /// <returns>Идентификатор корреляции созданного запуска.</returns>
-    string StartRun(IReadOnlyCollection<string> targetCodes);
+    string StartRun(IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string>? memberNames = null);
 }

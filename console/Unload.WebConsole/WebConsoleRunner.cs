@@ -16,17 +16,19 @@ internal static class WebConsoleRunner
     {
         var options = AppOptions.Parse(args);
         using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = true;
-            cts.Cancel();
-        };
 
         var trackedCorrelationId = string.Empty;
+        var stopRequestedByUser = false;
+        var stopRequestSent = false;
         var runCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var uiState = new UiState();
         using var httpClient = new HttpClient { BaseAddress = new Uri(options.ApiBaseUrl) };
         var apiClient = new RunApiClient(httpClient);
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            stopRequestedByUser = true;
+        };
         await using var connection = new HubConnectionBuilder()
             .WithUrl($"{options.ApiBaseUrl.TrimEnd('/')}/hubs/status")
             .WithAutomaticReconnect()
@@ -55,7 +57,7 @@ internal static class WebConsoleRunner
             }
 
             uiState.SetStatus(status);
-            if (status.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed)
+            if (status.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
             {
                 runCompleted.TrySetResult(true);
             }
@@ -65,9 +67,9 @@ internal static class WebConsoleRunner
             .Spinner(Spinner.Known.Dots)
             .StartAsync("Connecting to SignalR...", async _ => await connection.StartAsync(cts.Token));
 
-        if (options.TargetCodes.Count > 0)
+        if (options.MemberCodes.Count > 0)
         {
-            var startResult = await apiClient.StartRunAsync(options.TargetCodes, cts.Token);
+            var startResult = await apiClient.StartRunAsync(options.MemberCodes, cts.Token);
             if (startResult.Accepted is not null)
             {
                 trackedCorrelationId = startResult.Accepted.CorrelationId;
@@ -107,7 +109,7 @@ internal static class WebConsoleRunner
         }
 
         if (initialStatus is not null &&
-            initialStatus.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed)
+            initialStatus.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
         {
             AnsiConsole.MarkupLine($"[green]Run already finished with status:[/] {initialStatus.Status}");
             return;
@@ -119,6 +121,21 @@ internal static class WebConsoleRunner
             {
                 while (!cts.IsCancellationRequested)
                 {
+                    if (stopRequestedByUser && !stopRequestSent && !string.IsNullOrWhiteSpace(trackedCorrelationId))
+                    {
+                        stopRequestSent = true;
+                        var accepted = await apiClient.StopRunAsync(trackedCorrelationId, cts.Token);
+                        if (accepted)
+                        {
+                            AnsiConsole.MarkupLine("[yellow]Stop requested.[/]");
+                        }
+                        else
+                        {
+                            AnsiConsole.MarkupLine("[red]Stop request was rejected by API.[/]");
+                            cts.Cancel();
+                        }
+                    }
+
                     context.UpdateTarget(RunDashboardBuilder.Build(uiState.GetSnapshot(), trackedCorrelationId));
                     context.Refresh();
 
@@ -142,6 +159,7 @@ internal static class WebConsoleRunner
         {
             RunLifecycleStatus.Completed => "green",
             RunLifecycleStatus.Failed => "red",
+            RunLifecycleStatus.Cancelled => "yellow",
             _ => "yellow"
         };
         AnsiConsole.MarkupLine(
@@ -175,7 +193,7 @@ internal static class WebConsoleRunner
                 continue;
             }
 
-            if (state.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed)
+            if (state.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
             {
                 return;
             }

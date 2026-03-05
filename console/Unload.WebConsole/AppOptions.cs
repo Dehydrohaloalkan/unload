@@ -15,9 +15,9 @@ internal sealed class AppOptions
     /// </summary>
     public required string ApiBaseUrl { get; init; }
     /// <summary>
-    /// Нормализованный список target-кодов для запуска.
+    /// Нормализованный список кодов мемберов для запуска.
     /// </summary>
-    public required IReadOnlyCollection<string> TargetCodes { get; init; }
+    public required IReadOnlyCollection<string> MemberCodes { get; init; }
 
     /// <summary>
     /// Разбирает аргументы командной строки и возвращает валидированные параметры приложения.
@@ -27,7 +27,7 @@ internal sealed class AppOptions
     public static AppOptions Parse(string[] args)
     {
         var apiBaseUrl = "http://localhost:5000";
-        var targetsArgument = string.Empty;
+        var membersArgument = string.Empty;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -37,31 +37,31 @@ internal sealed class AppOptions
                 continue;
             }
 
-            if (string.Equals(args[i], "--targets", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            if (string.Equals(args[i], "--members", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
-                targetsArgument = args[++i];
+                membersArgument = args[++i];
                 continue;
             }
         }
 
-        if (string.IsNullOrWhiteSpace(targetsArgument))
+        if (string.IsNullOrWhiteSpace(membersArgument))
         {
-            targetsArgument = AnsiConsole.Ask<string>(
-                "Target codes comma separated (empty to watch active run):",
+            membersArgument = AnsiConsole.Ask<string>(
+                "Member codes comma separated (empty to watch active run):",
                 string.Empty);
         }
 
-        var targetCodes = targetsArgument
+        var memberCodes = membersArgument
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(static x => x.Trim().ToUpperInvariant())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        foreach (var code in targetCodes)
+        foreach (var code in memberCodes)
         {
             if (!TargetCodePattern.IsMatch(code))
             {
-                throw new InvalidOperationException($"Target code '{code}' is invalid.");
+                throw new InvalidOperationException($"Member code '{code}' is invalid.");
             }
         }
 
@@ -74,7 +74,7 @@ internal sealed class AppOptions
         return new AppOptions
         {
             ApiBaseUrl = uri.ToString().TrimEnd('/'),
-            TargetCodes = targetCodes
+            MemberCodes = memberCodes
         };
     }
 }

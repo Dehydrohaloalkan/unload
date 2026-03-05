@@ -40,7 +40,7 @@ public class RunOrchestrator : IRunOrchestrator
     /// </summary>
     /// <param name="targetCodes">Target-коды от клиента.</param>
     /// <returns>Correlation id созданного запуска.</returns>
-    public string StartRun(IReadOnlyCollection<string> targetCodes)
+    public string StartRun(IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string>? memberNames = null)
     {
         var normalizedCodes = NormalizeTargetCodes(targetCodes);
         var request = _requestFactory.Create(normalizedCodes, _outputDirectory);
@@ -52,7 +52,13 @@ public class RunOrchestrator : IRunOrchestrator
 
         try
         {
-            _runStateStore.SetStarted(request.CorrelationId, normalizedCodes);
+            _runStateStore.SetStarted(
+                request.CorrelationId,
+                normalizedCodes,
+                memberNames?.Where(static x => !string.IsNullOrWhiteSpace(x))
+                    .Select(static x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? Array.Empty<string>());
         }
         catch
         {

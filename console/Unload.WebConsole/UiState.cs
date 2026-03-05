@@ -54,7 +54,10 @@ internal sealed class UiState
                 _status?.LastStep,
                 _status?.Message,
                 _status?.UpdatedAt,
-                _events.ToArray());
+                _events.ToArray(),
+                _status?.MemberStatuses?.Values
+                    .OrderBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? Array.Empty<MemberRunStatusInfoDto>());
         }
     }
 }

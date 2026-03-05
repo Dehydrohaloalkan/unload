@@ -62,7 +62,8 @@ var runStopwatch = Stopwatch.StartNew();
 try
 {
     runStateStore.SetRunning(correlationId);
-    await foreach (var @event in runner.RunAsync(request, cts.Token))
+    using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, request.CancellationToken);
+    await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
     {
         runStateStore.ApplyEvent(@event);
         var color = @event.Step switch
@@ -109,16 +110,17 @@ AnsiConsole.MarkupLine(
 
 return;
 
-static async Task<RunRequest?> WaitForRunRequestAsync(
+static async Task<RunActivation?> WaitForRunRequestAsync(
     IRunCoordinator runCoordinator,
     string correlationId,
     CancellationToken cancellationToken)
 {
-    await foreach (var request in runCoordinator.ReadActivationsAsync(cancellationToken))
+    await foreach (var activation in runCoordinator.ReadActivationsAsync(cancellationToken))
     {
+        var request = activation.Request;
         if (string.Equals(request.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
         {
-            return request;
+            return activation;
         }
     }
 

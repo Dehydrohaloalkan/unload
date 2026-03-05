@@ -57,6 +57,8 @@
   - Application-слой use-case запуска выгрузки.
   - Контракты и реализации orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
   - In-memory диспетчер запусков (один активный run без очереди ожидания) и store статусов, общий `RunStatusInfo`.
+  - `IRunCoordinator` поддерживает остановку активного запуска (`TryCancel`) и выдает активацию вместе с токеном отмены конкретного run.
+  - `RunStatusInfo` хранит статусы мемберов (`MemberStatuses`) отдельно от общего статуса запуска.
   - Общая DI-композиция через `AddUnloadRuntime(UnloadRuntimePaths)` для API и Console.
 
 - `backend/Unload.Api`
@@ -65,8 +67,10 @@
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
     - `group.name` отдается в формате `{имя (folder)}`;
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
-  - `POST /api/runs` — запускает выгрузку и возвращает `correlationId`.
+  - `GET /api/members` — отдает список мемберов для запуска (`code`, `name`, `targetCodes`).
+  - `POST /api/runs` — запускает выгрузку для выбранных мемберов (`memberCodes`) и возвращает `correlationId`.
   - Если запуск уже выполняется, `POST /api/runs` возвращает `409 Conflict` с `activeCorrelationId`.
+  - `POST /api/runs/{correlationId}/stop` — останавливает активный запуск по `correlationId`.
   - `GET /api/runs` — список запусков и их статусы.
   - `GET /api/runs/active` — текущий активный запуск (если есть).
   - `GET /api/runs/{correlationId}` — статус конкретного запуска.
@@ -74,7 +78,7 @@
   - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`.
   - SignalR события:
     - `status` — события раннера активного запуска для всех подключенных клиентов;
-    - `run_status` — обновления статуса запуска для всех подключенных клиентов.
+    - `run_status` — обновления статуса запуска и мемберов для всех подключенных клиентов.
   - `Program` оставлен как точка конфигурации endpoint-ов, резолв путей вынесен в `ApiWorkspacePathResolver`.
 
 - `console/Unload.Console`
@@ -92,7 +96,8 @@
   - Консольный клиент API (замена frontend для тестов).
   - Интерфейс построен на `Spectre.Console` (панель статуса + live-лента событий).
   - Работает через HTTP (`/api/runs`, `/api/runs/active`, `/api/runs/{id}`) и SignalR (`/hubs/status`).
-  - Умеет стартовать запуск, обрабатывать `409 Conflict` при активной выгрузке и подключаться к live-статусам.
+  - Умеет стартовать запуск по `memberCodes`, обрабатывать `409 Conflict` при активной выгрузке, останавливать активный запуск и подключаться к live-статусам.
+  - Показывает отдельную таблицу статусов мемберов (pending/running/completed/failed/cancelled).
 
 ## Module diagram
 
@@ -120,7 +125,7 @@ flowchart LR
 ## Execution flow
 
 1. Консоль или API вызывает `IRunOrchestrator` из `Unload.Application` для старта запуска.
-2. `IRunOrchestrator` валидирует target-коды, формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
+2. `IRunOrchestrator` валидирует target-коды (полученные из выбранных мемберов), формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
 3. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
 4. `RunnerEngine` эмитит `RequestAccepted`.
 5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
@@ -130,8 +135,8 @@ flowchart LR
    - worker записи получает чанк из очереди, создает файл и пишет данные;
    - если скрипт вернул `0` строк, выходной файл не создается и события файла (`ChunkCreated`/`FileWritten`) не публикуются;
    - worker публикации отправляет события в MQ и клиентский канал (степень параллелизма задается `QueuePublisherDegreeOfParallelism`, по умолчанию 1).
-7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска.
-8. В конце эмитится `Completed` или `Failed`.
+7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска/мембера.
+8. В конце эмитится `Completed` или `Failed`; при остановке пользователем статус становится `Cancelled`.
 
 ## Форматы имен и выходных файлов
 
@@ -204,6 +209,7 @@ sequenceDiagram
   - как работает метод или класс;
   - входные параметры (`param`) и выход (`returns`) для методов.
 - Этот формат документации следует поддерживать при добавлении новых публичных и приватных методов core runtime.
+- Для run-моделей рекомендуется поддерживать синхронность API-контрактов: если меняется payload (`memberCodes`, `MemberStatuses`, `stop` endpoint), обновлять docs и WebConsole одновременно.
 
 ## API run
 
@@ -216,10 +222,22 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 Пример запуска выгрузки:
 
 ```powershell
-curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"targetCodes\":[\"YSB_M\"]}"
+curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"memberCodes\":[\"M\"]}"
+```
+
+Получение списка доступных мемберов:
+
+```powershell
+curl http://localhost:5000/api/members
 ```
 
 Проверка статусов запусков:
+Остановка активной выгрузки:
+
+```powershell
+curl -X POST http://localhost:5000/api/runs/{correlationId}/stop
+```
+
 
 ```powershell
 curl http://localhost:5000/api/runs
@@ -257,7 +275,7 @@ dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- QQW,QQE
 Запуск web-клиента для API:
 
 ```powershell
-dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --targets YSB_M
+dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --members M
 ```
 
 Режим наблюдения за уже активной выгрузкой:

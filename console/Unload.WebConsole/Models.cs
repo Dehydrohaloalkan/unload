@@ -3,7 +3,7 @@ namespace Unload.WebConsole;
 /// <summary>
 /// Тело запроса запуска выгрузки через API.
 /// </summary>
-internal record RunStartRequest(IReadOnlyCollection<string> TargetCodes);
+internal record RunStartRequest(IReadOnlyCollection<string> MemberCodes);
 
 /// <summary>
 /// Успешный ответ API при создании нового запуска.
@@ -14,7 +14,8 @@ internal record RunAcceptedResponse(
     string HubPath,
     string SubscribeMethod,
     string EventName,
-    string RunStatusEventName);
+    string RunStatusEventName,
+    string StopPath);
 
 /// <summary>
 /// Ответ API при конфликте запуска, когда уже есть активная выгрузка.
@@ -33,7 +34,20 @@ internal enum RunLifecycleStatus
 {
     Running,
     Completed,
-    Failed
+    Failed,
+    Cancelled
+}
+
+/// <summary>
+/// Статус выполнения конкретного мембера.
+/// </summary>
+internal enum MemberRunLifecycleStatus
+{
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Cancelled
 }
 
 /// <summary>
@@ -65,7 +79,18 @@ internal record RunStatusInfoDto(
     DateTimeOffset UpdatedAt,
     RunnerStep? LastStep,
     string? Message,
-    string? OutputPath);
+    string? OutputPath,
+    IReadOnlyDictionary<string, MemberRunStatusInfoDto>? MemberStatuses);
+
+/// <summary>
+/// Статус конкретного мембера для отображения в UI.
+/// </summary>
+internal record MemberRunStatusInfoDto(
+    string MemberName,
+    MemberRunLifecycleStatus Status,
+    RunnerStep? LastStep,
+    string? Message,
+    DateTimeOffset UpdatedAt);
 
 /// <summary>
 /// DTO события раннера, транслируемого через SignalR.
@@ -93,4 +118,5 @@ internal record UiSnapshot(
     RunnerStep? LastStep,
     string? Message,
     DateTimeOffset? UpdatedAt,
-    IReadOnlyList<RunnerEventLine> Events);
+    IReadOnlyList<RunnerEventLine> Events,
+    IReadOnlyList<MemberRunStatusInfoDto> Members);

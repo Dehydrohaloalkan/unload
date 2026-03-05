@@ -16,12 +16,12 @@ internal sealed class RunApiClient(HttpClient httpClient)
     /// <param name="cancellationToken">Токен отмены запроса.</param>
     /// <returns>Результат старта с данными accepted или conflict.</returns>
     public async Task<RunStartResult> StartRunAsync(
-        IReadOnlyCollection<string> targetCodes,
+        IReadOnlyCollection<string> memberCodes,
         CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsJsonAsync(
             "/api/runs",
-            new RunStartRequest(targetCodes),
+            new RunStartRequest(memberCodes),
             cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.Conflict)
@@ -74,5 +74,20 @@ internal sealed class RunApiClient(HttpClient httpClient)
         return payload.TryGetProperty("correlationId", out var correlationIdElement)
             ? correlationIdElement.GetString()
             : null;
+    }
+
+    /// <summary>
+    /// Отправляет запрос на остановку указанного запуска.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="cancellationToken">Токен отмены запроса.</param>
+    /// <returns><c>true</c>, если запрос принят API.</returns>
+    public async Task<bool> StopRunAsync(string correlationId, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync(
+            $"/api/runs/{Uri.EscapeDataString(correlationId)}/stop",
+            content: null,
+            cancellationToken);
+        return response.StatusCode == HttpStatusCode.Accepted;
     }
 }

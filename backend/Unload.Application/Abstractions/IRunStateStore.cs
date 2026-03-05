@@ -13,7 +13,8 @@ public interface IRunStateStore
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды, связанные с запуском.</param>
-    void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes);
+    /// <param name="memberNames">Имена мемберов, выбранных для запуска.</param>
+    void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames);
 
     /// <summary>
     /// Помечает запуск как выполняющийся.
@@ -33,6 +34,13 @@ public interface IRunStateStore
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="message">Текст ошибки.</param>
     void SetFailed(string correlationId, string message);
+
+    /// <summary>
+    /// Помечает запуск как отмененный по запросу пользователя.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение о причине отмены.</param>
+    void SetCancelled(string correlationId, string message);
 
     /// <summary>
     /// Возвращает статус конкретного запуска.

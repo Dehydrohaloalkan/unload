@@ -16,16 +16,29 @@ public class InMemoryRunStateStore : IRunStateStore
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
-    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes)
+    /// <param name="memberNames">Мемберы, выбранные для выгрузки.</param>
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames)
     {
         var now = DateTimeOffset.UtcNow;
+        var memberStatuses = memberNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                static x => x,
+                x => new MemberRunStatusInfo(
+                    x,
+                    MemberRunLifecycleStatus.Pending,
+                    LastStep: null,
+                    Message: "Awaiting processing.",
+                    UpdatedAt: now),
+                StringComparer.OrdinalIgnoreCase);
         var snapshot = new RunStatusInfo(
             correlationId,
             RunLifecycleStatus.Running,
             targetCodes.ToArray(),
             now,
             now,
-            Message: "Run started.");
+            Message: "Run started.",
+            MemberStatuses: memberStatuses);
 
         _runs[correlationId] = snapshot;
     }
@@ -45,7 +58,8 @@ public class InMemoryRunStateStore : IRunStateStore
                 Array.Empty<string>(),
                 now,
                 now,
-                Message: "Run started."),
+                Message: "Run started.",
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) => current with
             {
                 Status = RunLifecycleStatus.Running,
@@ -71,14 +85,19 @@ public class InMemoryRunStateStore : IRunStateStore
                 now,
                 @event.Step,
                 @event.Message,
-                @event.FilePath),
+                @event.FilePath,
+                ApplyMemberEvent(
+                    new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                    @event,
+                    now)),
             (_, current) => current with
             {
                 Status = MapStatus(@event.Step),
                 UpdatedAt = now,
                 LastStep = @event.Step,
                 Message = @event.Message,
-                OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath
+                OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
+                MemberStatuses = ApplyMemberEvent(current.MemberStatuses, @event, now)
             });
     }
 
@@ -99,13 +118,54 @@ public class InMemoryRunStateStore : IRunStateStore
                 now,
                 now,
                 RunnerStep.Failed,
-                message),
+                message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) => current with
             {
                 Status = RunLifecycleStatus.Failed,
                 UpdatedAt = now,
                 LastStep = RunnerStep.Failed,
-                Message = message
+                Message = message,
+                MemberStatuses = UpdateAllMemberStatuses(
+                    current.MemberStatuses,
+                    MemberRunLifecycleStatus.Failed,
+                    RunnerStep.Failed,
+                    message,
+                    now)
+            });
+    }
+
+    /// <summary>
+    /// Помечает запуск как отмененный пользователем.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение об отмене.</param>
+    public void SetCancelled(string correlationId, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.Cancelled,
+                Array.Empty<string>(),
+                now,
+                now,
+                RunnerStep.Failed,
+                message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
+            (_, current) => current with
+            {
+                Status = RunLifecycleStatus.Cancelled,
+                UpdatedAt = now,
+                LastStep = RunnerStep.Failed,
+                Message = message,
+                MemberStatuses = UpdateAllMemberStatuses(
+                    current.MemberStatuses,
+                    MemberRunLifecycleStatus.Cancelled,
+                    RunnerStep.Failed,
+                    message,
+                    now)
             });
     }
 
@@ -143,5 +203,70 @@ public class InMemoryRunStateStore : IRunStateStore
             RunnerStep.Failed => RunLifecycleStatus.Failed,
             _ => RunLifecycleStatus.Running
         };
+    }
+
+    private static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyMemberEvent(
+        IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
+        RunnerEvent @event,
+        DateTimeOffset now)
+    {
+        var map = source is null
+            ? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, MemberRunStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
+
+        if (@event.Step == RunnerStep.Completed)
+        {
+            return UpdateAllMemberStatuses(map, MemberRunLifecycleStatus.Completed, @event.Step, @event.Message, now);
+        }
+
+        if (@event.Step == RunnerStep.Failed)
+        {
+            if (string.IsNullOrWhiteSpace(@event.MemberName))
+            {
+                return UpdateAllMemberStatuses(map, MemberRunLifecycleStatus.Failed, @event.Step, @event.Message, now);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(@event.MemberName))
+        {
+            return map;
+        }
+
+        var memberName = @event.MemberName.Trim();
+        var status = @event.Step == RunnerStep.Failed
+            ? MemberRunLifecycleStatus.Failed
+            : MemberRunLifecycleStatus.Running;
+        map[memberName] = new MemberRunStatusInfo(
+            memberName,
+            status,
+            @event.Step,
+            @event.Message,
+            now);
+
+        return map;
+    }
+
+    private static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateAllMemberStatuses(
+        IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
+        MemberRunLifecycleStatus status,
+        RunnerStep step,
+        string? message,
+        DateTimeOffset now)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return source.ToDictionary(
+            static x => x.Key,
+            x => x.Value with
+            {
+                Status = status,
+                LastStep = step,
+                Message = message,
+                UpdatedAt = now
+            },
+            StringComparer.OrdinalIgnoreCase);
     }
 }

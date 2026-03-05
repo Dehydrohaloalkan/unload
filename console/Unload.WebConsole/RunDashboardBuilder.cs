@@ -58,8 +58,37 @@ internal static class RunDashboardBuilder
             events.AddRow("-", "-", "Waiting for events...");
         }
 
+        var members = new Table().Border(TableBorder.Rounded).Title("Members");
+        members.AddColumn("Member");
+        members.AddColumn("Status");
+        members.AddColumn("Step");
+        members.AddColumn("Message");
+
+        foreach (var member in snapshot.Members)
+        {
+            var memberColor = member.Status switch
+            {
+                MemberRunLifecycleStatus.Completed => "green",
+                MemberRunLifecycleStatus.Failed => "red",
+                MemberRunLifecycleStatus.Cancelled => "yellow",
+                MemberRunLifecycleStatus.Running => "deepskyblue1",
+                _ => "grey"
+            };
+            members.AddRow(
+                Markup.Escape(member.MemberName),
+                $"[{memberColor}]{Markup.Escape(member.Status.ToString())}[/]",
+                Markup.Escape(member.LastStep?.ToString() ?? "-"),
+                Markup.Escape(member.Message ?? "-"));
+        }
+
+        if (snapshot.Members.Count == 0)
+        {
+            members.AddRow("-", "-", "-", "No member statuses yet.");
+        }
+
         return new Rows(
             new Panel(info).Header("Run Overview").RoundedBorder(),
+            members,
             events);
     }
 }

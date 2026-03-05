@@ -45,14 +45,17 @@ public class RunProcessingBackgroundService : BackgroundService
     /// <returns>Задача жизненного цикла фонового сервиса.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var request in _runCoordinator.ReadActivationsAsync(stoppingToken))
+        await foreach (var activation in _runCoordinator.ReadActivationsAsync(stoppingToken))
         {
+            var request = activation.Request;
+            using var runCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, activation.CancellationToken);
+            var runToken = runCts.Token;
             _runStateStore.SetRunning(request.CorrelationId);
             await PublishRunStateAsync(request.CorrelationId, stoppingToken);
 
             try
             {
-                await foreach (var @event in _runner.RunAsync(request, stoppingToken))
+                await foreach (var @event in _runner.RunAsync(request, runToken))
                 {
                     _runStateStore.ApplyEvent(@event);
 
@@ -66,6 +69,11 @@ public class RunProcessingBackgroundService : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException)
+            {
+                _runStateStore.SetCancelled(request.CorrelationId, "Run was cancelled by user.");
+                await PublishRunStateAsync(request.CorrelationId, stoppingToken);
             }
             catch (Exception ex)
             {

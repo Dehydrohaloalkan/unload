@@ -154,6 +154,7 @@ internal sealed class RunnerEventEmitter
             step,
             message,
             script?.TargetCode,
+            script?.MemberName,
             script?.ScriptCode,
             records,
             filePath);

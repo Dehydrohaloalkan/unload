@@ -9,16 +9,16 @@ namespace Unload.Application;
 /// </summary>
 public class InMemoryRunCoordinator : IRunCoordinator
 {
-    private readonly Channel<RunRequest> _channel;
+    private readonly Channel<RunActivation> _channel;
     private readonly object _sync = new();
-    private string? _activeCorrelationId;
+    private ActiveRunContext? _active;
 
     /// <summary>
     /// Инициализирует координатор с bounded-каналом на один элемент.
     /// </summary>
     public InMemoryRunCoordinator()
     {
-        _channel = Channel.CreateBounded<RunRequest>(new BoundedChannelOptions(1)
+        _channel = Channel.CreateBounded<RunActivation>(new BoundedChannelOptions(1)
         {
             FullMode = BoundedChannelFullMode.DropWrite,
             SingleReader = true,
@@ -35,18 +35,21 @@ public class InMemoryRunCoordinator : IRunCoordinator
     {
         lock (_sync)
         {
-            if (_activeCorrelationId is not null)
+            if (_active is not null)
             {
                 return false;
             }
 
-            _activeCorrelationId = request.CorrelationId;
-            if (_channel.Writer.TryWrite(request))
+            var runCts = new CancellationTokenSource();
+            var activation = new RunActivation(request, runCts.Token);
+            _active = new ActiveRunContext(request.CorrelationId, runCts);
+            if (_channel.Writer.TryWrite(activation))
             {
                 return true;
             }
 
-            _activeCorrelationId = null;
+            _active = null;
+            runCts.Dispose();
             return false;
         }
     }
@@ -56,7 +59,7 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// </summary>
     /// <param name="cancellationToken">Токен отмены чтения.</param>
     /// <returns>Асинхронный поток запросов запуска.</returns>
-    public IAsyncEnumerable<RunRequest> ReadActivationsAsync(CancellationToken cancellationToken)
+    public IAsyncEnumerable<RunActivation> ReadActivationsAsync(CancellationToken cancellationToken)
     {
         return _channel.Reader.ReadAllAsync(cancellationToken);
     }
@@ -69,9 +72,11 @@ public class InMemoryRunCoordinator : IRunCoordinator
     {
         lock (_sync)
         {
-            if (string.Equals(_activeCorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
+            if (_active is not null &&
+                string.Equals(_active.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
             {
-                _activeCorrelationId = null;
+                _active.Cancellation.Dispose();
+                _active = null;
             }
         }
     }
@@ -84,7 +89,34 @@ public class InMemoryRunCoordinator : IRunCoordinator
     {
         lock (_sync)
         {
-            return _activeCorrelationId;
+            return _active?.CorrelationId;
         }
     }
+
+    /// <summary>
+    /// Отправляет запрос отмены активного запуска по correlation id.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <returns><c>true</c>, если запрос отмены отправлен; иначе <c>false</c>.</returns>
+    public bool TryCancel(string correlationId)
+    {
+        lock (_sync)
+        {
+            if (_active is null ||
+                !string.Equals(_active.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (_active.Cancellation.IsCancellationRequested)
+            {
+                return true;
+            }
+
+            _active.Cancellation.Cancel();
+            return true;
+        }
+    }
+
+    private sealed record ActiveRunContext(string CorrelationId, CancellationTokenSource Cancellation);
 }

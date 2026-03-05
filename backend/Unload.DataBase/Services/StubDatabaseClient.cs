@@ -50,6 +50,7 @@ public class StubDatabaseClient : IDatabaseClient
                 DateTime.UtcNow.ToString("O"),
                 Math.Round((i * 1.137m) % 995, 2),
                 i % 2 == 0 ? "ACTIVE" : "PENDING");
+            Thread.Sleep(10);
         }
 
         DbDataReader reader = table.CreateDataReader();
