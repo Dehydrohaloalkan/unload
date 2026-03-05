@@ -8,7 +8,6 @@ namespace Unload.Application;
 /// </summary>
 public enum RunLifecycleStatus
 {
-    Queued,
     Running,
     Completed,
     Failed

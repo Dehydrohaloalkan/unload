@@ -5,33 +5,33 @@ using Unload.Core;
 namespace Unload.Api;
 
 /// <summary>
-/// Фоновый обработчик очереди запусков API.
+/// Фоновый обработчик запусков API.
 /// Используется для запуска раннера, обновления статусов и отправки SignalR-событий клиентам.
 /// </summary>
 public class RunProcessingBackgroundService : BackgroundService
 {
-    private readonly IRunQueue _runQueue;
+    private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
     private readonly IRunner _runner;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<RunProcessingBackgroundService> _logger;
 
     /// <summary>
-    /// Создает фоновый обработчик с зависимостями очереди, раннера и SignalR.
+    /// Создает фоновый обработчик с зависимостями диспетчера запусков, раннера и SignalR.
     /// </summary>
-    /// <param name="runQueue">Очередь запросов на выполнение.</param>
+    /// <param name="runCoordinator">Диспетчер запросов на выполнение.</param>
     /// <param name="runStateStore">Хранилище состояний запусков.</param>
     /// <param name="runner">Движок выполнения выгрузки.</param>
     /// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
     /// <param name="logger">Логгер фонового сервиса.</param>
     public RunProcessingBackgroundService(
-        IRunQueue runQueue,
+        IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
         IRunner runner,
         IHubContext<RunStatusHub> hubContext,
         ILogger<RunProcessingBackgroundService> logger)
     {
-        _runQueue = runQueue;
+        _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
         _runner = runner;
         _hubContext = hubContext;
@@ -39,13 +39,13 @@ public class RunProcessingBackgroundService : BackgroundService
     }
 
     /// <summary>
-    /// Основной цикл обработки очереди запусков.
+    /// Основной цикл обработки запусков.
     /// </summary>
     /// <param name="stoppingToken">Токен остановки фонового сервиса.</param>
     /// <returns>Задача жизненного цикла фонового сервиса.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var request in _runQueue.DequeueAllAsync(stoppingToken))
+        await foreach (var request in _runCoordinator.ReadActivationsAsync(stoppingToken))
         {
             _runStateStore.SetRunning(request.CorrelationId);
             await PublishRunStateAsync(request.CorrelationId, stoppingToken);
@@ -57,7 +57,7 @@ public class RunProcessingBackgroundService : BackgroundService
                     _runStateStore.ApplyEvent(@event);
 
                     await _hubContext.Clients
-                        .Group(@event.CorrelationId)
+                        .All
                         .SendAsync("status", @event, stoppingToken);
 
                     await PublishRunStateAsync(@event.CorrelationId, stoppingToken);
@@ -72,6 +72,10 @@ public class RunProcessingBackgroundService : BackgroundService
                 _logger.LogError(ex, "Run '{CorrelationId}' failed in background worker.", request.CorrelationId);
                 _runStateStore.SetFailed(request.CorrelationId, ex.Message);
                 await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+            }
+            finally
+            {
+                _runCoordinator.Complete(request.CorrelationId);
             }
         }
     }

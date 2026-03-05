@@ -36,11 +36,11 @@ public static class ServiceCollectionExtensions
             DataflowBoundedCapacity: 8));
         services.AddSingleton<IRunner, RunnerEngine>();
         services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
-        services.AddSingleton<IRunQueue, InMemoryRunQueue>();
+        services.AddSingleton<IRunCoordinator, InMemoryRunCoordinator>();
         services.AddSingleton<IRunStateStore, InMemoryRunStateStore>();
         services.AddSingleton<IRunOrchestrator>(_ => new RunOrchestrator(
             _.GetRequiredService<IRunRequestFactory>(),
-            _.GetRequiredService<IRunQueue>(),
+            _.GetRequiredService<IRunCoordinator>(),
             _.GetRequiredService<IRunStateStore>(),
             paths.OutputDirectory));
 

@@ -32,7 +32,20 @@ app.MapPost("/api/runs", async (
     IHubContext<RunStatusHub> hubContext,
     CancellationToken cancellationToken) =>
 {
-    var correlationId = orchestrator.StartRun(request.TargetCodes);
+    string correlationId;
+    try
+    {
+        correlationId = orchestrator.StartRun(request.TargetCodes);
+    }
+    catch (RunAlreadyInProgressException ex)
+    {
+        return Results.Conflict(new
+        {
+            message = ex.Message,
+            activeCorrelationId = ex.ActiveCorrelationId
+        });
+    }
+
     var runState = runStateStore.Get(correlationId);
     if (runState is not null)
     {
@@ -45,6 +58,20 @@ app.MapPost("/api/runs", async (
 });
 
 app.MapGet("/api/runs", (IRunStateStore runStateStore) => Results.Ok(runStateStore.List()));
+
+app.MapGet("/api/runs/active", (IRunCoordinator runCoordinator, IRunStateStore runStateStore) =>
+{
+    var correlationId = runCoordinator.GetActiveCorrelationId();
+    if (string.IsNullOrWhiteSpace(correlationId))
+    {
+        return Results.NotFound();
+    }
+
+    var run = runStateStore.Get(correlationId);
+    return run is null
+        ? Results.Ok(new { correlationId })
+        : Results.Ok(run);
+});
 
 app.MapGet("/api/runs/{correlationId}", (string correlationId, IRunStateStore runStateStore) =>
 {

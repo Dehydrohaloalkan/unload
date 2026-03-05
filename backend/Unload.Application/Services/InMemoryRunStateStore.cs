@@ -12,20 +12,20 @@ public class InMemoryRunStateStore : IRunStateStore
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Создает или перезаписывает запись запуска в статусе очереди.
+    /// Создает или перезаписывает запись запуска в статусе выполнения.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
-    public void SetQueued(string correlationId, IReadOnlyCollection<string> targetCodes)
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes)
     {
         var now = DateTimeOffset.UtcNow;
         var snapshot = new RunStatusInfo(
             correlationId,
-            RunLifecycleStatus.Queued,
+            RunLifecycleStatus.Running,
             targetCodes.ToArray(),
             now,
             now,
-            Message: "Run queued.");
+            Message: "Run started.");
 
         _runs[correlationId] = snapshot;
     }

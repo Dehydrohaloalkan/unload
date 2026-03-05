@@ -8,7 +8,7 @@ namespace Unload.Api;
 public record RunStartRequest(IReadOnlyCollection<string> TargetCodes);
 
 /// <summary>
-/// Контракт ответа на успешную постановку запуска в очередь.
+/// Контракт ответа на успешный запуск выгрузки.
 /// Используется клиентом для дальнейшего чтения статуса и подписки на SignalR.
 /// </summary>
 /// <param name="CorrelationId">Идентификатор созданного запуска.</param>

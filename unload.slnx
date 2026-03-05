@@ -12,5 +12,6 @@
   </Folder>
   <Folder Name="/console/">
     <Project Path="console/Unload.Console/Unload.Console.csproj" />
+    <Project Path="console/Unload.WebConsole/Unload.WebConsole.csproj" />
   </Folder>
 </Solution>

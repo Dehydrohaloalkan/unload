@@ -55,8 +55,8 @@
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.
-  - Контракты и реализации orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunQueue`, `IRunStateStore`.
-  - In-memory реализации очереди и store статусов, общий `RunStatusInfo`.
+  - Контракты и реализации orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
+  - In-memory диспетчер запусков (один активный run без очереди ожидания) и store статусов, общий `RunStatusInfo`.
   - Общая DI-композиция через `AddUnloadRuntime(UnloadRuntimePaths)` для API и Console.
 
 - `backend/Unload.Api`
@@ -65,13 +65,15 @@
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
     - `group.name` отдается в формате `{имя (folder)}`;
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
-  - `POST /api/runs` — ставит запуск в очередь и возвращает `correlationId`.
+  - `POST /api/runs` — запускает выгрузку и возвращает `correlationId`.
+  - Если запуск уже выполняется, `POST /api/runs` возвращает `409 Conflict` с `activeCorrelationId`.
   - `GET /api/runs` — список запусков и их статусы.
+  - `GET /api/runs/active` — текущий активный запуск (если есть).
   - `GET /api/runs/{correlationId}` — статус конкретного запуска.
-  - Запуски обрабатываются фоновым worker (`BackgroundService`) из общей in-memory очереди.
+  - Запуски обрабатываются фоновым worker (`BackgroundService`) без очереди ожидания: одновременно выполняется только один запуск.
   - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`.
   - SignalR события:
-    - `status` — события раннера конкретного запуска;
+    - `status` — события раннера активного запуска для всех подключенных клиентов;
     - `run_status` — обновления статуса запуска для всех подключенных клиентов.
   - `Program` оставлен как точка конфигурации endpoint-ов, резолв путей вынесен в `ApiWorkspacePathResolver`.
 
@@ -79,11 +81,18 @@
   - Точка входа.
   - DI через `Microsoft.Extensions.DependencyInjection`.
   - Переиспользует тот же runtime/use-case слой (`Unload.Application`), что и API.
+  - Запуск инициируется через `IRunOrchestrator` и тот же single-run диспетчер (`IRunCoordinator`), без очереди ожидания.
   - Отображение событий в терминале через `Spectre.Console`.
   - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
   - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
   - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор), `CatalogSelectionLoader` + `CatalogSelectionJsonModels` (чтение модели каталога).
+
+- `console/Unload.WebConsole`
+  - Консольный клиент API (замена frontend для тестов).
+  - Интерфейс построен на `Spectre.Console` (панель статуса + live-лента событий).
+  - Работает через HTTP (`/api/runs`, `/api/runs/active`, `/api/runs/{id}`) и SignalR (`/hubs/status`).
+  - Умеет стартовать запуск, обрабатывать `409 Conflict` при активной выгрузке и подключаться к live-статусам.
 
 ## Module diagram
 
@@ -110,9 +119,9 @@ flowchart LR
 
 ## Execution flow
 
-1. Консоль или API вызывает `IRunOrchestrator` из `Unload.Application` для постановки запуска в очередь.
-2. `IRunOrchestrator` валидирует target-коды, формирует `RunRequest` и сохраняет начальный статус.
-3. `RunProcessingBackgroundService` в API извлекает задачу из очереди и запускает `RunnerEngine`.
+1. Консоль или API вызывает `IRunOrchestrator` из `Unload.Application` для старта запуска.
+2. `IRunOrchestrator` валидирует target-коды, формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
+3. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
 4. `RunnerEngine` эмитит `RequestAccepted`.
 5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
 6. Для каждого скрипта:
@@ -162,7 +171,7 @@ sequenceDiagram
     participant Client as Console/API Client
     participant Transport as API/Console Transport
     participant App as Unload.Application
-    participant Queue as IRunQueue
+    participant Coordinator as IRunCoordinator (single active run)
     participant Worker as BackgroundService
     participant Runner as RunnerEngine
     participant Infra as Catalog/DB/FileWriter/MQ
@@ -172,11 +181,11 @@ sequenceDiagram
     Client->>Transport: start run(targetCodes)
     Transport->>App: IRunOrchestrator.StartRun(...)
     App->>App: normalize + validate target codes
-    App->>Queue: TryEnqueue(RunRequest)
-    App->>State: SetQueued(...)
+    App->>Coordinator: TryActivate(RunRequest)
+    App->>State: SetStarted(...)
     Transport-->>Client: correlationId
 
-    Worker->>Queue: DequeueAllAsync()
+    Worker->>Coordinator: ReadActivationsAsync()
     Worker->>State: SetRunning(correlationId)
     Worker->>Runner: RunAsync(request)
     Runner->>Infra: catalog/db/file/mq operations
@@ -214,11 +223,17 @@ curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" 
 curl http://localhost:5000/api/runs
 ```
 
+Проверка активного запуска:
+
+```powershell
+curl http://localhost:5000/api/runs/active
+```
+
 Подписка клиента SignalR:
 
 - Подключиться к `/hubs/status`.
-- Вызвать `SubscribeRun(correlationId)`.
-- Слушать событие `status` с payload `RunnerEvent`.
+- Вызвать `SubscribeRun(correlationId)` (опционально для обратной совместимости).
+- Слушать событие `status` с payload `RunnerEvent` (событие отправляется всем подключенным клиентам).
 - Для общей ленты запусков слушать событие `run_status` с payload `RunStatusInfo`.
 
 ## Run
@@ -233,4 +248,18 @@ dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 
 ```powershell
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- QQW,QQE
+```
+
+## WebConsole
+
+Запуск web-клиента для API:
+
+```powershell
+dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --targets YSB_M
+```
+
+Режим наблюдения за уже активной выгрузкой:
+
+```powershell
+dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000
 ```

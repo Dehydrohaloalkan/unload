@@ -9,11 +9,11 @@ namespace Unload.Application;
 public interface IRunStateStore
 {
     /// <summary>
-    /// Помечает запуск как поставленный в очередь.
+    /// Создает запись нового запуска в статусе выполнения.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды, связанные с запуском.</param>
-    void SetQueued(string correlationId, IReadOnlyCollection<string> targetCodes);
+    void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes);
 
     /// <summary>
     /// Помечает запуск как выполняющийся.
