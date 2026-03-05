@@ -18,6 +18,10 @@
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
+  - `StubDatabaseClient` поддерживает конструктор `StubDatabaseClient(int timeout, string connectionString)`.
+  - `connectionString` может быть:
+    - plain-text строкой подключения;
+    - строкой формата `dpapi:<base64>`, которая расшифровывается через Windows DPAPI (`CurrentUser`).
   - Контракт БД: `IDatabaseClient` с `IsConnected` и `GetDataReaderAsync(query, cancellationToken)`.
   - В раннер передается `DbDataReader`, строки читаются потоково.
 
@@ -64,6 +68,8 @@
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
+  - HTTP-эндпоинты вынесены в MVC-контроллеры: `CatalogController` (`/api/catalog`, `/api/members`) и `RunsController` (`/api/runs*`).
+  - Настройки БД читаются из секции `Database` (`TimeoutSeconds`, `ConnectionString`) в `appsettings.Development.json` / `appsettings.Production.json`.
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
     - `group.name` отдается в формате `{имя (folder)}`;
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
@@ -79,7 +85,7 @@
   - SignalR события:
     - `status` — события раннера активного запуска для всех подключенных клиентов;
     - `run_status` — обновления статуса запуска и мемберов для всех подключенных клиентов.
-  - `Program` оставлен как точка конфигурации endpoint-ов, резолв путей вынесен в `ApiWorkspacePathResolver`.
+  - `Program` оставлен как точка конфигурации DI/маршрутизации (`AddControllers`, `MapControllers`), резолв путей вынесен в `ApiWorkspacePathResolver`.
 
 - `console/Unload.Console`
   - Точка входа.

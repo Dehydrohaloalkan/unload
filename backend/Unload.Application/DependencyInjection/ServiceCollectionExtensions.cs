@@ -21,10 +21,16 @@ public static class ServiceCollectionExtensions
     /// <param name="services">Коллекция сервисов приложения.</param>
     /// <param name="paths">Пути к каталогу, скриптам и output.</param>
     /// <returns>Та же коллекция сервисов для цепочки вызовов.</returns>
-    public static IServiceCollection AddUnloadRuntime(this IServiceCollection services, UnloadRuntimePaths paths)
+    public static IServiceCollection AddUnloadRuntime(
+        this IServiceCollection services,
+        UnloadRuntimePaths paths,
+        DatabaseRuntimeSettings? databaseSettings = null)
     {
+        var dbSettings = databaseSettings ?? new DatabaseRuntimeSettings();
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
-        services.AddSingleton<IDatabaseClient, StubDatabaseClient>();
+        services.AddSingleton<IDatabaseClient>(_ => new StubDatabaseClient(
+            dbSettings.TimeoutSeconds,
+            dbSettings.ConnectionString));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();

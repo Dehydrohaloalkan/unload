@@ -1,5 +1,7 @@
 using System.Data;
 using System.Data.Common;
+using System.Security.Cryptography;
+using System.Text;
 using Unload.Core;
 
 namespace Unload.DataBase;
@@ -10,10 +12,35 @@ namespace Unload.DataBase;
 /// </summary>
 public class StubDatabaseClient : IDatabaseClient
 {
+    private readonly int _timeoutSeconds;
+    private readonly string _connectionString;
+
+    /// <summary>
+    /// Создает заглушку клиента БД с настройками таймаута и строки подключения.
+    /// Поддерживает plain строку и формат шифрования <c>dpapi:&lt;base64&gt;</c>.
+    /// </summary>
+    /// <param name="timeout">Таймаут в секундах.</param>
+    /// <param name="connectionString">Строка подключения в plain или зашифрованном виде.</param>
+    public StubDatabaseClient(int timeout, string connectionString)
+    {
+        if (timeout <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be greater than zero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new ArgumentException("Connection string must not be empty.", nameof(connectionString));
+        }
+
+        _timeoutSeconds = timeout;
+        _connectionString = ResolveConnectionString(connectionString);
+    }
+
     /// <summary>
     /// Всегда сообщает о доступности подключения в заглушке.
     /// </summary>
-    public bool IsConnected => true;
+    public bool IsConnected => _timeoutSeconds > 0 && !string.IsNullOrWhiteSpace(_connectionString);
 
     /// <summary>
     /// Возвращает синтетический набор данных для переданного запроса.
@@ -55,5 +82,46 @@ public class StubDatabaseClient : IDatabaseClient
 
         DbDataReader reader = table.CreateDataReader();
         return Task.FromResult(reader);
+    }
+
+    private static string ResolveConnectionString(string source)
+    {
+        const string dpapiPrefix = "dpapi:";
+        if (!source.StartsWith(dpapiPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return source;
+        }
+
+        var payload = source[dpapiPrefix.Length..];
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            throw new InvalidOperationException("Encrypted connection string payload is empty.");
+        }
+
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                throw new PlatformNotSupportedException("DPAPI decryption is supported only on Windows.");
+            }
+
+            var encryptedBytes = Convert.FromBase64String(payload);
+            var decryptedBytes = ProtectedData.Unprotect(encryptedBytes, optionalEntropy: null, DataProtectionScope.CurrentUser);
+            var decrypted = Encoding.UTF8.GetString(decryptedBytes);
+            if (string.IsNullOrWhiteSpace(decrypted))
+            {
+                throw new InvalidOperationException("Decrypted connection string is empty.");
+            }
+
+            return decrypted;
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException("Encrypted connection string must contain valid Base64 after 'dpapi:'.", ex);
+        }
+        catch (CryptographicException ex)
+        {
+            throw new InvalidOperationException("Failed to decrypt connection string using DPAPI CurrentUser scope.", ex);
+        }
     }
 }
