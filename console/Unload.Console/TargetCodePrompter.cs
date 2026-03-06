@@ -1,5 +1,5 @@
 using Spectre.Console;
-using Unload.Console.CatalogSelection;
+using Unload.Core;
 
 namespace Unload.Console;
 
@@ -8,27 +8,45 @@ namespace Unload.Console;
 /// </summary>
 internal static class TargetCodePrompter
 {
-    public static async Task<string[]> PromptTargetCodesAsync(string catalogPath, CancellationToken cancellationToken)
+    public static async Task<string[]> PromptTargetCodesAsync(
+        ICatalogService catalogService,
+        CancellationToken cancellationToken)
     {
-        var groups = await CatalogSelectionLoader.LoadAsync(catalogPath, cancellationToken);
+        ArgumentNullException.ThrowIfNull(catalogService);
+        var catalog = await catalogService.GetCatalogAsync(cancellationToken);
         var selectedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var group in groups)
+        var groupedTargets = catalog.Targets
+            .GroupBy(static target => new { target.GroupId, target.GroupName })
+            .OrderBy(static group => group.Key.GroupName, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groupedTargets)
         {
-            if (group.Targets.Count == 0)
+            var targets = group
+                .Select(static target => new
+                {
+                    target.TargetCode,
+                    target.MemberName,
+                    target.MemberCode
+                })
+                .DistinctBy(static target => target.TargetCode, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static target => target.MemberName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (targets.Length == 0)
             {
                 continue;
             }
 
-            var labelsToCodes = group.Targets
+            var labelsToCodes = targets
                 .ToDictionary(
-                    static x => $"{x.MemberName} [{x.MemberCode}] ({x.TargetCode})",
-                    static x => x.TargetCode,
+                    static target => $"{target.MemberName} [{target.MemberCode}] ({target.TargetCode})",
+                    static target => target.TargetCode,
                     StringComparer.OrdinalIgnoreCase);
 
             var selectedInGroup = AnsiConsole.Prompt(
                 new MultiSelectionPrompt<string>()
-                    .Title($"[yellow]{Markup.Escape(group.GroupName)}[/] - выбери таргеты")
+                    .Title($"[yellow]{Markup.Escape(group.Key.GroupName)}[/] - выбери таргеты")
                     .NotRequired()
                     .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
                     .AddChoices(labelsToCodes.Keys));

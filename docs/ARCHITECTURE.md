@@ -99,8 +99,8 @@
   - Отображение событий в терминале через `Spectre.Console`.
   - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
-  - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам из `catalog.json` и позволяет выбрать выгрузку через мультиселект.
-  - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор), `CatalogSelectionLoader` + `CatalogSelectionJsonModels` (чтение модели каталога).
+  - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам через `ICatalogService.GetCatalogAsync()` из `backend/Unload.Catalog` и позволяет выбрать выгрузку через мультиселект.
+  - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор на основе `CatalogInfo`).
 
 - `console/Unload.WebConsole`
   - Консольный клиент API (замена frontend для тестов).

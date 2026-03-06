@@ -22,12 +22,6 @@ var databaseSettings = configuration
     ?? throw new InvalidOperationException(
         $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
 
-var targetCodes = args.Length == 0
-    ? await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogPath, CancellationToken.None)
-    : args.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-
 var services = new ServiceCollection();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
@@ -35,6 +29,12 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
     OutputDirectory: outputDirectory), databaseSettings);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
+var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
+var targetCodes = args.Length == 0
+    ? await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, CancellationToken.None)
+    : args.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 var orchestrator = provider.ServiceProvider.GetRequiredService<IRunOrchestrator>();
 var runCoordinator = provider.ServiceProvider.GetRequiredService<IRunCoordinator>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
