@@ -39,7 +39,7 @@ public static class PipeDelimitedFormatter
     /// <returns>Строка заголовка для первой строки выходного файла.</returns>
     public static string BuildHeaderLine(IReadOnlyList<string> columns)
     {
-        return string.Join('|', columns.Select(Escape));
+        return string.Join('|', columns);
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public static class PipeDelimitedFormatter
         {
             var key = columns[i];
             row.Columns.TryGetValue(key, out var rawValue);
-            values[i] = Escape(rawValue?.ToString() ?? string.Empty);
+            values[i] = rawValue?.ToString() ?? string.Empty;
         }
 
         return string.Join('|', values);
@@ -70,13 +70,5 @@ public static class PipeDelimitedFormatter
     public static int EstimateLineBytes(string line)
     {
         return Encoding.UTF8.GetByteCount(line) + 1;
-    }
-
-    private static string Escape(string value)
-    {
-        return value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("\r", "\\r", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal);
     }
 }
