@@ -189,6 +189,7 @@ public class RunnerEngine : IRunner
                 script,
                 eventEmitter,
                 chunkQueue,
+                reportRows,
                 pipelineToken);
         }, new ExecutionDataflowBlockOptions
         {
@@ -292,6 +293,7 @@ public class RunnerEngine : IRunner
         ScriptDefinition script,
         RunnerEventEmitter eventEmitter,
         ITargetBlock<ChunkWriteJob> chunkQueue,
+        ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
         await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Running query for script {script.ScriptCode}.");
@@ -352,6 +354,17 @@ public class RunnerEngine : IRunner
             {
                 throw new InvalidOperationException("File stage declined final chunk message.");
             }
+        }
+        else if (rowsRead == 0)
+        {
+            reportRows.Add(new RunReportRow(
+                script.MemberName,
+                script.ScriptType,
+                script.FirstCodeDigit,
+                string.Empty,
+                0,
+                false,
+                0));
         }
 
         await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Query finished for script {script.ScriptCode}.", rowsRead);

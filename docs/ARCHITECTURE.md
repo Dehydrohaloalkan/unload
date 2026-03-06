@@ -51,8 +51,8 @@
   - Значения по умолчанию в DI: `MaxDegreeOfParallelism = max(CPU/2, 1)`, `FileWriterDegreeOfParallelism = 4`, `QueuePublisherDegreeOfParallelism = 1`, `DataflowBoundedCapacity = 8`.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
-  - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus`.
-  - Для каждого записанного файла формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
+  - Формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
+  - Для скриптов с `0` строк также добавляет запись в отчет (`outputFileName` пустой, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`).
   - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
   - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
   - События раннера в большинстве шагов ставятся в очередь публикации без ожидания результата MQ (fire-and-forget относительно шага пайплайна); ожидание подтверждения MQ выполняется только для `FileWritten`, так как этот статус попадает в `run-report.csv`.
@@ -185,6 +185,7 @@ flowchart LR
   - `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`
   - `mqStatus`: `отправлен` / `не отправлен`
   - `executionTimeMs`: время записи конкретного output-файла (чанка) в миллисекундах.
+  - Для скриптов без строк: `outputFileName=""`, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`.
 
 ## Run sequence diagram
 
