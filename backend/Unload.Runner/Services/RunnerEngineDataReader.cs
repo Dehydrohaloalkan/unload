@@ -24,7 +24,7 @@ internal static class RunnerEngineDataReader
         var values = new Dictionary<string, object?>(columns.Count, StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < columns.Count; i++)
         {
-            values[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            values[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i).ToString();
         }
 
         return new DatabaseRow(values);

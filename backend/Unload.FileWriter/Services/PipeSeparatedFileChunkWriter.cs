@@ -9,6 +9,8 @@ namespace Unload.FileWriter;
 /// </summary>
 public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 {
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
+
     /// <summary>
     /// Записывает служебный заголовок и строки чанка в выходной файл нового формата.
     /// </summary>
@@ -21,33 +23,41 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         string outputDirectory,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(outputDirectory);
-
-        var dayOfYear = DateTimeOffset.Now.DayOfYear;
-        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
-        var fileExtension = chunk.Script.OutputFileExtension;
-        var (stream, fileName, filePath) = OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
-        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
-
-        var columns = PipeDelimitedFormatter.GetOrderedColumns(chunk.Rows);
-        var metadataHeader =
-            $"#|{chunk.Script.ScriptType}|{fileName}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{chunk.Rows.Count}|{chunk.Script.FirstCodeDigit}";
-        await writer.WriteLineAsync(metadataHeader);
-
-        foreach (var row in chunk.Rows)
+        await _writeGate.WaitAsync(cancellationToken);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await writer.WriteLineAsync(PipeDelimitedFormatter.BuildDataLine(row, columns));
+            Directory.CreateDirectory(outputDirectory);
+
+            var dayOfYear = DateTimeOffset.Now.DayOfYear;
+            var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
+            var fileExtension = chunk.Script.OutputFileExtension;
+            var (stream, fileName, filePath) = OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
+            await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+
+            var columns = PipeDelimitedFormatter.GetOrderedColumns(chunk.Rows);
+            var metadataHeader =
+                $"#|{chunk.Script.ScriptType}|{fileName}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{chunk.Rows.Count}|{chunk.Script.FirstCodeDigit}";
+            await writer.WriteLineAsync(metadataHeader);
+
+            foreach (var row in chunk.Rows)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await writer.WriteLineAsync(PipeDelimitedFormatter.BuildDataLine(row, columns));
+            }
+
+            await writer.FlushAsync(cancellationToken);
+
+            return new WrittenFile(
+                chunk.Script,
+                chunk.ChunkNumber,
+                filePath,
+                chunk.Rows.Count,
+                chunk.ByteSize);
         }
-
-        await writer.FlushAsync(cancellationToken);
-
-        return new WrittenFile(
-            chunk.Script,
-            chunk.ChunkNumber,
-            filePath,
-            chunk.Rows.Count,
-            chunk.ByteSize);
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     private static (FileStream Stream, string FileName, string FilePath) OpenUniqueFile(
