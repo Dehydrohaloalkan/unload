@@ -40,7 +40,7 @@ internal static class TargetCodePrompter
 
             var labelsToCodes = targets
                 .ToDictionary(
-                    static target => $"{target.MemberName} [{target.MemberCode}] ({target.TargetCode})",
+                    static target => $"{target.MemberName} (code: {target.MemberCode}, target: {target.TargetCode})",
                     static target => target.TargetCode,
                     StringComparer.OrdinalIgnoreCase);
 
