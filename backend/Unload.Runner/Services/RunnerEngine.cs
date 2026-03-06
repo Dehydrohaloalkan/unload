@@ -176,6 +176,7 @@ public class RunnerEngine : IRunner
     {
         using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pipelineToken = pipelineCts.Token;
+        var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         var chunkQueue = new BufferBlock<ChunkWriteJob>(new DataflowBlockOptions
         {
@@ -183,14 +184,18 @@ public class RunnerEngine : IRunner
             CancellationToken = pipelineToken
         });
 
-        var queryBlock = new ActionBlock<ScriptDefinition>(async script =>
+        var queryBlock = new ActionBlock<IReadOnlyList<ScriptDefinition>>(async memberScripts =>
         {
-            await ProcessScriptQueryAsync(
-                script,
-                eventEmitter,
-                chunkQueue,
-                reportRows,
-                pipelineToken);
+            foreach (var script in memberScripts)
+            {
+                await ProcessScriptQueryAsync(
+                    script,
+                    eventEmitter,
+                    chunkQueue,
+                    memberChunkCounters,
+                    reportRows,
+                    pipelineToken);
+            }
         }, new ExecutionDataflowBlockOptions
         {
             BoundedCapacity = _options.DataflowBoundedCapacity,
@@ -276,9 +281,14 @@ public class RunnerEngine : IRunner
             }
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
-        foreach (var script in scripts)
+        var scriptsByMember = scripts
+            .GroupBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => (IReadOnlyList<ScriptDefinition>)group.ToArray())
+            .ToArray();
+
+        foreach (var memberScripts in scriptsByMember)
         {
-            var accepted = await queryBlock.SendAsync(script, pipelineToken);
+            var accepted = await queryBlock.SendAsync(memberScripts, pipelineToken);
             if (!accepted)
             {
                 throw new InvalidOperationException("Query stage declined script message.");
@@ -293,6 +303,7 @@ public class RunnerEngine : IRunner
         ScriptDefinition script,
         RunnerEventEmitter eventEmitter,
         ITargetBlock<ChunkWriteJob> chunkQueue,
+        ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
@@ -307,10 +318,10 @@ public class RunnerEngine : IRunner
         }
 
         var rowsRead = 0;
-        var chunkNumber = 1;
         var currentRows = new List<DatabaseRow>();
+        var dayOfYear = DateTimeOffset.Now.DayOfYear;
         var headerLine =
-            $"#|{script.ScriptType}|{script.OutputFileStem}{DateTimeOffset.Now.DayOfYear}{chunkNumber}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
+            $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
         var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
         var currentSize = headerSize;
 
@@ -327,6 +338,7 @@ public class RunnerEngine : IRunner
 
             if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
             {
+                var chunkNumber = GetNextChunkNumberForMember(script.MemberName, memberChunkCounters);
                 var accepted = await chunkQueue.SendAsync(
                     new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize),
                     cancellationToken);
@@ -335,7 +347,6 @@ public class RunnerEngine : IRunner
                     throw new InvalidOperationException("File stage declined chunk message.");
                 }
 
-                chunkNumber++;
                 currentRows = [];
                 currentSize = headerSize;
             }
@@ -347,6 +358,7 @@ public class RunnerEngine : IRunner
 
         if (currentRows.Count > 0)
         {
+            var chunkNumber = GetNextChunkNumberForMember(script.MemberName, memberChunkCounters);
             var accepted = await chunkQueue.SendAsync(
                 new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize),
                 cancellationToken);
@@ -403,5 +415,12 @@ public class RunnerEngine : IRunner
         ScriptDefinition Script,
         WrittenFile Written,
         long ExecutionTimeMs);
+
+    private static int GetNextChunkNumberForMember(
+        string memberName,
+        ConcurrentDictionary<string, int> memberChunkCounters)
+    {
+        return memberChunkCounters.AddOrUpdate(memberName, 1, static (_, current) => checked(current + 1));
+    }
 
 }

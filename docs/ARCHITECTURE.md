@@ -33,6 +33,7 @@
   - Начиная со второй строки пишутся данные из БД через `|`.
   - Пишет в `output/<dd_MM_yyyy_HHmmss>/output-files/`.
   - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{ext}` (без `_`).
+  - `chunkNumber` ведется сквозной нумерацией по мемберу в рамках запуска (между скриптами одного мембера).
 
 - `backend/Unload.MQ`
   - Заглушка MQ: `InMemoryMqPublisher`.
@@ -47,6 +48,7 @@
     - `MaxDegreeOfParallelism` — чтение SQL и формирование чанков;
     - `FileWriterDegreeOfParallelism` — запись чанков в файлы;
     - `QueuePublisherDegreeOfParallelism` — публикация событий в MQ/канал.
+  - Скрипты одного мембера выполняются последовательно (в порядке сортировки), скрипты разных мемберов могут выполняться параллельно.
   - Шаги: resolve target-кодов -> очередь скриптов -> потоковое чтение `DbDataReader` и формирование чанков -> параллельная запись файлов -> последовательная публикация событий.
   - Значения по умолчанию в DI: `MaxDegreeOfParallelism = max(CPU/2, 1)`, `FileWriterDegreeOfParallelism = 4`, `QueuePublisherDegreeOfParallelism = 1`, `DataflowBoundedCapacity = 8`.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
@@ -169,6 +171,7 @@ flowchart LR
 ### Формат выходного файла
 
 - Имя: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{extension}`
+- `chunkNumber` — сквозной номер чанка для конкретного мембера в рамках запуска.
 - При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}_{NN}.{extension}`.
 - Первая строка:
   - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
