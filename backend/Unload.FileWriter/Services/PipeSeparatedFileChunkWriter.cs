@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Unload.Core;
 
@@ -9,7 +10,8 @@ namespace Unload.FileWriter;
 /// </summary>
 public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 {
-    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> FileWriteLocks =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Записывает служебный заголовок и строки чанка в выходной файл нового формата.
@@ -23,14 +25,17 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         string outputDirectory,
         CancellationToken cancellationToken)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        Directory.CreateDirectory(outputDirectory);
+
+        var dayOfYear = DateTimeOffset.Now.DayOfYear;
+        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
+        var fileExtension = chunk.Script.OutputFileExtension;
+        var lockKey = Path.GetFullPath(Path.Combine(outputDirectory, $"{baseFileName}{fileExtension}"));
+        var fileLock = FileWriteLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
+
+        await fileLock.WaitAsync(cancellationToken);
         try
         {
-            Directory.CreateDirectory(outputDirectory);
-
-            var dayOfYear = DateTimeOffset.Now.DayOfYear;
-            var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
-            var fileExtension = chunk.Script.OutputFileExtension;
             var (stream, fileName, filePath) = OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
             await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
 
@@ -56,7 +61,7 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         }
         finally
         {
-            _writeGate.Release();
+            fileLock.Release();
         }
     }
 

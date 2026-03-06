@@ -17,7 +17,6 @@ public class RunnerEngine : IRunner
     private readonly IFileChunkWriter _fileChunkWriter;
     private readonly IMqPublisher _mqPublisher;
     private readonly RunnerOptions _options;
-    private readonly SemaphoreSlim _databaseReaderGate = new(1, 1);
 
     /// <summary>
     /// Создает экземпляр раннера с инфраструктурными зависимостями.
@@ -310,58 +309,35 @@ public class RunnerEngine : IRunner
     {
         await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Running query for script {script.ScriptCode}.");
 
-        await _databaseReaderGate.WaitAsync(cancellationToken);
-        try
-        {
-            await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
-            var columns = RunnerEngineDataReader.GetColumns(reader);
+        await using var reader = await _databaseClient.GetDataReaderAsync(script.SqlText, cancellationToken);
+        var columns = RunnerEngineDataReader.GetColumns(reader);
 
-            if (columns.Count == 0)
+        if (columns.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Query for script '{script.ScriptCode}' returned no columns.");
+        }
+
+        var rowsRead = 0;
+        var currentRows = new List<DatabaseRow>();
+        var dayOfYear = DateTimeOffset.Now.DayOfYear;
+        var headerLine =
+            $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
+        var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
+        var currentSize = headerSize;
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var row = RunnerEngineDataReader.ReadRow(reader, columns);
+            var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
+            var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
+            if (rowSize + headerSize > _options.ChunkSizeBytes)
             {
                 throw new InvalidOperationException(
-                    $"Query for script '{script.ScriptCode}' returned no columns.");
+                    $"Single row size {rowSize} bytes exceeds chunk size {_options.ChunkSizeBytes} bytes.");
             }
 
-            var rowsRead = 0;
-            var currentRows = new List<DatabaseRow>();
-            var dayOfYear = DateTimeOffset.Now.DayOfYear;
-            var headerLine =
-                $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
-            var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
-            var currentSize = headerSize;
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var row = RunnerEngineDataReader.ReadRow(reader, columns);
-                var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
-                var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
-                if (rowSize + headerSize > _options.ChunkSizeBytes)
-                {
-                    throw new InvalidOperationException(
-                        $"Single row size {rowSize} bytes exceeds chunk size {_options.ChunkSizeBytes} bytes.");
-                }
-
-                if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
-                {
-                    var chunkNumber = GetNextChunkNumberForMember(script.MemberName, memberChunkCounters);
-                    var accepted = await chunkQueue.SendAsync(
-                        new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize),
-                        cancellationToken);
-                    if (!accepted)
-                    {
-                        throw new InvalidOperationException("File stage declined chunk message.");
-                    }
-
-                    currentRows = [];
-                    currentSize = headerSize;
-                }
-
-                currentRows.Add(row);
-                currentSize += rowSize;
-                rowsRead++;
-            }
-
-            if (currentRows.Count > 0)
+            if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
             {
                 var chunkNumber = GetNextChunkNumberForMember(script.MemberName, memberChunkCounters);
                 var accepted = await chunkQueue.SendAsync(
@@ -369,27 +345,42 @@ public class RunnerEngine : IRunner
                     cancellationToken);
                 if (!accepted)
                 {
-                    throw new InvalidOperationException("File stage declined final chunk message.");
+                    throw new InvalidOperationException("File stage declined chunk message.");
                 }
-            }
-            else if (rowsRead == 0)
-            {
-                reportRows.Add(new RunReportRow(
-                    script.MemberName,
-                    script.ScriptType,
-                    script.FirstCodeDigit,
-                    string.Empty,
-                    0,
-                    false,
-                    0));
+
+                currentRows = [];
+                currentSize = headerSize;
             }
 
-            await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Query finished for script {script.ScriptCode}.", rowsRead);
+            currentRows.Add(row);
+            currentSize += rowSize;
+            rowsRead++;
         }
-        finally
+
+        if (currentRows.Count > 0)
         {
-            _databaseReaderGate.Release();
+            var chunkNumber = GetNextChunkNumberForMember(script.MemberName, memberChunkCounters);
+            var accepted = await chunkQueue.SendAsync(
+                new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize),
+                cancellationToken);
+            if (!accepted)
+            {
+                throw new InvalidOperationException("File stage declined final chunk message.");
+            }
         }
+        else if (rowsRead == 0)
+        {
+            reportRows.Add(new RunReportRow(
+                script.MemberName,
+                script.ScriptType,
+                script.FirstCodeDigit,
+                string.Empty,
+                0,
+                false,
+                0));
+        }
+
+        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Query finished for script {script.ScriptCode}.", rowsRead);
     }
 
     private async Task<WrittenChunkJob> WriteChunkAsync(
