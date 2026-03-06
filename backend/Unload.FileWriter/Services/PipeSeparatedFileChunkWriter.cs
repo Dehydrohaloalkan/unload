@@ -24,7 +24,7 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         Directory.CreateDirectory(outputDirectory);
 
         var dayOfYear = DateTimeOffset.Now.DayOfYear;
-        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear}{chunk.ChunkNumber}";
+        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
         var fileExtension = chunk.Script.OutputFileExtension;
         var (stream, fileName, filePath) = OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
         await using var writer = new StreamWriter(stream, new UTF8Encoding(false));

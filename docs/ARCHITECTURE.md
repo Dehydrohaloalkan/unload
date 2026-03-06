@@ -32,7 +32,7 @@
   - Первая строка файла — служебный заголовок: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
   - Начиная со второй строки пишутся данные из БД через `|`.
   - Пишет в `output/<dd_MM_yyyy_HHmmss>/output-files/`.
-  - Формат имени файла: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{ext}` (без `_`).
+  - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{ext}` (без `_`).
 
 - `backend/Unload.MQ`
   - Заглушка MQ: `InMemoryMqPublisher`.
@@ -168,12 +168,13 @@ flowchart LR
 
 ### Формат выходного файла
 
-- Имя: `{first3charsOfScript}{dayOfYear}{chunkNumber}.{extension}`
-- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear}{chunkNumber}_{NN}.{extension}`.
+- Имя: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{extension}`
+- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}_{NN}.{extension}`.
 - Первая строка:
   - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
 - Остальные строки:
   - данные из БД через `|`.
+  - символ `|` не экранируется обратным слешом.
 
 ### Структура output и CSV-отчета
 
