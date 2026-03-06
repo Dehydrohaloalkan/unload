@@ -52,7 +52,7 @@
     - `FileWriterDegreeOfParallelism` — запись чанков в файлы;
     - `QueuePublisherDegreeOfParallelism` — публикация событий в MQ/канал.
   - Скрипты одного мембера выполняются последовательно (в порядке сортировки), скрипты разных мемберов могут выполняться параллельно.
-  - Чтение `DbDataReader`, запись файлов и публикация событий выполняются параллельно в рамках настроек dataflow (`MaxDegreeOfParallelism`, `FileWriterDegreeOfParallelism`, `QueuePublisherDegreeOfParallelism`).
+  - Чтение `DbDataReader` сериализовано (один активный reader в единицу времени) для совместимости с не-thread-safe реализациями `IDatabaseClient`/провайдеров БД; запись файлов и публикация событий остаются параллельными.
   - Шаги: resolve target-кодов -> очередь скриптов -> потоковое чтение `DbDataReader` и формирование чанков -> параллельная запись файлов -> последовательная публикация событий.
   - Значения по умолчанию в DI: `MaxDegreeOfParallelism = max(CPU/2, 1)`, `FileWriterDegreeOfParallelism = 4`, `QueuePublisherDegreeOfParallelism = 1`, `DataflowBoundedCapacity = 8`.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
