@@ -108,8 +108,9 @@ public class RunnerEngine : IRunner
             var memberQueue = new ConcurrentQueue<string>(scriptsByMember.Keys);
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            var workers = Enumerable.Range(0, _options.WorkerCount)
-                .Select(_ => RunWorkerAsync(
+            var workers = Enumerable.Range(1, _options.WorkerCount)
+                .Select(workerId => RunWorkerAsync(
+                    workerId,
                     memberQueue,
                     scriptsByMember,
                     runFilesDirectory,
@@ -148,6 +149,7 @@ public class RunnerEngine : IRunner
     }
 
     private async Task RunWorkerAsync(
+        int workerId,
         ConcurrentQueue<string> memberQueue,
         IReadOnlyDictionary<string, ScriptDefinition[]> scriptsByMember,
         string runFilesDirectory,
@@ -167,6 +169,7 @@ public class RunnerEngine : IRunner
                     cancellationToken.ThrowIfCancellationRequested();
                     await ProcessScriptAsync(
                         script,
+                        workerId,
                         client,
                         runFilesDirectory,
                         eventEmitter,
@@ -187,6 +190,7 @@ public class RunnerEngine : IRunner
 
     private async Task ProcessScriptAsync(
         ScriptDefinition script,
+        int workerId,
         IDatabaseClient client,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
@@ -194,7 +198,10 @@ public class RunnerEngine : IRunner
         ConcurrentDictionary<string, int> memberChunkCounters,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Running query for script {script.ScriptCode}.");
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.QueryStarted,
+            $"Worker #{workerId} running query for script {script.ScriptCode}.");
 
         await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
         var columns = RunnerEngineDataReader.GetColumns(reader);
@@ -244,7 +251,11 @@ public class RunnerEngine : IRunner
             reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
         }
 
-        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Query finished for script {script.ScriptCode}.", rowsRead);
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.QueryCompleted,
+            $"Worker #{workerId} finished query for script {script.ScriptCode}.",
+            rowsRead);
     }
 
     private async Task WriteAndPublishChunkAsync(
