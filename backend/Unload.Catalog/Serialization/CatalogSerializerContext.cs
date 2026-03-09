@@ -7,5 +7,4 @@ namespace Unload.Catalog;
 /// Используется сервисом каталога для безопасной и быстрой десериализации JSON.
 /// </summary>
 [JsonSerializable(typeof(CatalogRoot))]
-[JsonSerializable(typeof(CatalogBigScript))]
 internal partial class CatalogSerializerContext : JsonSerializerContext;
