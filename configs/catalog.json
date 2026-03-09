@@ -28,5 +28,11 @@
             "file": ".REP",
             "groups": [2]
         }
+    ],
+    "bigScripts": [
+        {
+            "memberId": 1,
+            "groupId": 1
+        }
     ]
 }

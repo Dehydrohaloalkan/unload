@@ -47,7 +47,7 @@ Use-case слой запуска и состояния run:
 
 ### `backend/Unload.Catalog`
 
-Читает `configs/catalog.json`, строит связи групп/мемберов/target-кодов и определяет набор SQL-скриптов для запуска.
+Читает `configs/catalog.json`, строит связи групп/мемберов/target-кодов и определяет набор SQL-скриптов. Опционально: `bigScripts` — target-выборки (memberId+groupId), чьи скрипты выполняются в n-1 потоках (1 поток всегда для легких).
 
 ### `backend/Unload.DataBase`
 
@@ -68,8 +68,9 @@ Use-case слой запуска и состояния run:
 ### `backend/Unload.Runner`
 
 Исполнитель пайплайна выгрузки:
-- N worker-потоков (настраиваемо), 1 клиент БД на поток;
-- мемберы в очереди, скрипты по `firstCodeDigit`, единый MQ;
+- N worker-потоков (n-1 для больших скриптов из `bigScripts`, 1 для легких), 1 клиент БД на поток;
+- `BatchReadMode`: при `true` — читать все данные в память, передавать на запись без ожидания; клиент сразу выполняет следующий запрос;
+- target-коды в очередях big/light, скрипты по `firstCodeDigit`, единый MQ;
 - генерирует `RunnerEvent`, формирует `run-report.csv`.
 
 ### `backend/Unload.Api`
@@ -134,6 +135,17 @@ WebConsole-клиент:
 ```powershell
 dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --members M
 ```
+
+## Конфигурация
+
+### `configs/catalog.json`
+
+- `bigScripts` (опционально): список `{memberId, groupId}` — target-выборки, чьи скрипты считаются «большими». Выполняются в n-1 потоках; 1 поток всегда для легких скриптов.
+
+### `appsettings` (Runner)
+
+- `WorkerCount`: количество worker-потоков (по умолчанию 4).
+- `BatchReadMode`: при `true` — читать все данные в память, передавать на запись без ожидания; клиент сразу выполняет следующий запрос.
 
 ## Ограничения и важные замечания
 

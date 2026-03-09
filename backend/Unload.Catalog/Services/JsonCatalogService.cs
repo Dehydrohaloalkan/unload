@@ -32,21 +32,18 @@ public class JsonCatalogService : ICatalogService
     {
         var catalog = await LoadCatalogAsync(cancellationToken);
         var groupsById = catalog.Groups.ToDictionary(static x => x.Id);
+        var membersById = catalog.Members.ToDictionary(static x => x.Id);
         var memberGroupCodes = BuildMemberGroupCodes(catalog, groupsById);
         var targets = BuildTargets(catalog, groupsById);
+        var bigTargetCodes = BuildBigScriptTargetCodes(catalog, groupsById, membersById);
         var groups = BuildGroups(catalog);
         var members = BuildMembers(catalog, memberGroupCodes);
 
-        return new CatalogInfo(groups, members, targets);
+        return new CatalogInfo(groups, members, targets, bigTargetCodes);
     }
 
-    /// <summary>
-    /// Резолвит выбранные target-коды в отсортированные списки SQL-скриптов.
-    /// </summary>
-    /// <param name="targetCodes">Target-коды для резолва.</param>
-    /// <param name="cancellationToken">Токен отмены операции.</param>
-    /// <returns>Словарь target-код -> список определений скриптов.</returns>
-    public async Task<IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>>> ResolveAsync(
+    /// <inheritdoc />
+    public async Task<(IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>> Scripts, IReadOnlySet<string> BigScriptTargetCodes)> ResolveAsync(
         IReadOnlyCollection<string> targetCodes,
         CancellationToken cancellationToken)
     {
@@ -57,14 +54,11 @@ public class JsonCatalogService : ICatalogService
         foreach (var targetCode in targetCodes.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!targetMap.TryGetValue(targetCode, out var target))
-            {
                 throw new InvalidOperationException($"Target '{targetCode}' not found in catalog.");
-            }
-
             resolved[targetCode] = await LoadScriptsForTargetAsync(target, cancellationToken);
         }
 
-        return resolved;
+        return (resolved, catalogInfo.BigScriptTargetCodes);
     }
 
     /// <summary>
@@ -229,6 +223,29 @@ public class JsonCatalogService : ICatalogService
         return targetsByCode.Values
             .OrderBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    /// <summary>
+    /// Строит множество target-кодов из <c>bigScripts</c> (memberId+groupId).
+    /// </summary>
+    private static IReadOnlySet<string> BuildBigScriptTargetCodes(
+        CatalogRoot catalog,
+        IReadOnlyDictionary<int, CatalogGroup> groupsById,
+        IReadOnlyDictionary<int, CatalogMember> membersById)
+    {
+        if (catalog.BigScripts is not { Count: > 0 })
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bs in catalog.BigScripts)
+        {
+            if (!groupsById.TryGetValue(bs.GroupId, out var group) ||
+                !membersById.TryGetValue(bs.MemberId, out var member))
+                continue;
+            var targetCode = CatalogScriptPathHelper.BuildTargetCode(group.Folder, member.Code);
+            set.Add(targetCode);
+        }
+        return set;
     }
 
     /// <summary>

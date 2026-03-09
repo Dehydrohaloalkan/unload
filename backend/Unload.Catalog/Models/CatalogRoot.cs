@@ -4,13 +4,21 @@ namespace Unload.Catalog;
 
 /// <summary>
 /// Корневая JSON-модель каталога из <c>configs/catalog.json</c>.
-/// Используется только на этапе десериализации каталога.
 /// </summary>
 /// <param name="Groups">Список групп каталога.</param>
 /// <param name="Members">Список участников каталога.</param>
+/// <param name="BigScripts">Опционально: target-выборки (member+group), скрипты которых считаются «большими» и выполняются в n-1 потоках.</param>
 public record CatalogRoot(
     [property: JsonPropertyName("groups")] List<CatalogGroup> Groups,
-    [property: JsonPropertyName("members")] List<CatalogMember> Members);
+    [property: JsonPropertyName("members")] List<CatalogMember> Members,
+    [property: JsonPropertyName("bigScripts")] List<CatalogBigScript>? BigScripts = null);
+
+/// <summary>
+/// Ссылка на target-выборку в каталоге (member+group), чьи скрипты считаются «большими».
+/// </summary>
+public record CatalogBigScript(
+    [property: JsonPropertyName("memberId")] int MemberId,
+    [property: JsonPropertyName("groupId")] int GroupId);
 
 /// <summary>
 /// JSON-модель группы каталога.

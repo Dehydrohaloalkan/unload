@@ -11,6 +11,7 @@
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
+  - Опциональная секция `bigScripts`: список `{memberId, groupId}` — target-выборки, чьи скрипты считаются «большими» и выполняются в n-1 потоках.
   - Понимает структуру `groups` + `members` (у `group` есть `folder` и `code`, у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по формату имени `Y<member><group>_<type>_<codes>_<ext>.sql`.
   - Значения `folder`, `code`, `file` используются как есть, без `trim`/приведения регистра.
@@ -49,13 +50,14 @@
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
   - N worker-потоков (настраиваемо через `WorkerCount`, по умолчанию 4), каждый с одним `IDatabaseClient`.
-  - Мемберы распределяются по worker-ам через очередь; каждый worker обрабатывает мембера полностью: выполняет скрипты в порядке `firstCodeDigit`, формирует чанки, пишет файлы, передает в единый MQ.
-  - В событиях `QueryStarted`/`QueryCompleted` в `message` указывается `Worker #N`, чтобы в консоли было видно, какой worker выполняет запрос.
-  - Файлы одного мембера пишутся подряд (один worker обрабатывает одного мембера за раз).
-  - Один MQ-публикатор: все worker-ы передают события в общий канал, один consumer пишет в MQ и в поток событий.
-  - Шаги: resolve target-кодов -> очередь мемберов -> worker-ы (запросы БД, чанки, запись файлов, MQ).
-  - Значения по умолчанию в DI: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`.
-  - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
+  - **Большие скрипты** (из `catalog.json` → `bigScripts`): target-выборки (memberId+groupId) выполняются в n-1 потоках; 1 поток всегда для легких скриптов.
+  - **BatchReadMode** (опция): при `true` — все данные читаются в память, передаются на запись без ожидания; клиент сразу выполняет следующий запрос. При `false` — потоковое чтение.
+  - Очереди: `bigQueue` (target-коды из `bigScripts`) и `lightQueue` (остальные); big workers (n-1) и light worker (1) работают параллельно.
+  - В событиях `QueryStarted`/`QueryCompleted` указывается `Worker #N`.
+  - Один MQ-публикатор: все worker-ы передают события в общий канал.
+  - Шаги: resolve target-кодов -> big/light очереди -> worker-ы (запросы БД, чанки, запись, MQ).
+  - Значения по умолчанию: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`, `BatchReadMode = false`.
+  - В stream-режиме буфер ограничен текущим чанком; в batch-режиме весь результат скрипта в памяти.
   - После каждого шага создается `RunnerEvent`.
   - Формирует CSV-отчет `run-report.csv` с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
   - Для скриптов с `0` строк добавляет запись в отчет (`outputFileName` пустой, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`).
@@ -149,14 +151,25 @@ flowchart LR
 3. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
 4. `RunnerEngine` эмитит `RequestAccepted`.
 5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
-6. Для каждого скрипта:
-   - worker чтения получает `DbDataReader` из БД и читает строки потоково;
-   - worker чтения собирает текущий чанк до лимита размера и отправляет в очередь чанков;
-   - worker записи получает чанк из очереди, создает файл и пишет данные;
-   - если скрипт вернул `0` строк, выходной файл не создается и события файла (`ChunkCreated`/`FileWritten`) не публикуются;
-   - worker публикации отправляет события в MQ и клиентский канал (степень параллелизма задается `QueuePublisherDegreeOfParallelism`, по умолчанию 1).
+6. Big scripts (из `bigScripts`) выполняются в n-1 потоках, light — в 1 потоке. Для каждого скрипта:
+   - worker получает `DbDataReader` из БД; в stream-режиме читает потоково, в batch-режиме — весь результат в память;
+   - worker формирует чанки и либо записывает (stream), либо отправляет в канал записи (batch);
+   - при batch-режиме отдельный consumer пишет чанки на диск; worker не ждет записи и сразу выполняет следующий запрос;
+   - если скрипт вернул `0` строк, выходной файл не создается.
 7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска/мембера.
 8. В конце эмитится `Completed` или `Failed`; при остановке пользователем статус становится `Cancelled`.
+
+## Каталог и bigScripts
+
+В `configs/catalog.json` опциональная секция `bigScripts` задает target-выборки (memberId+groupId), чьи скрипты считаются «большими»:
+
+```json
+"bigScripts": [
+  { "memberId": 1, "groupId": 1 }
+]
+```
+
+Скрипты таких target-кодов выполняются в n-1 потоках; 1 поток всегда резервируется для легких скриптов.
 
 ## Форматы имен и выходных файлов
 

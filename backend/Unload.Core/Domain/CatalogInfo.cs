@@ -2,15 +2,16 @@ namespace Unload.Core;
 
 /// <summary>
 /// Нормализованная модель каталога target-выборок, собираемая из <c>configs/catalog.json</c>.
-/// Используется API для выдачи каталога и раннером для резолва target-кодов в скрипты.
 /// </summary>
 /// <param name="Groups">Список групп каталога.</param>
 /// <param name="Members">Список участников/подсистем каталога.</param>
 /// <param name="Targets">Список вычисленных target-выборок вида <c>GROUP_MEMBER</c>.</param>
+/// <param name="BigScriptTargetCodes">Target-коды из <c>bigScripts</c>: скрипты выполняются в n-1 потоках, 1 поток всегда для легких.</param>
 public record CatalogInfo(
     IReadOnlyList<CatalogGroupInfo> Groups,
     IReadOnlyList<CatalogMemberInfo> Members,
-    IReadOnlyList<CatalogTargetInfo> Targets);
+    IReadOnlyList<CatalogTargetInfo> Targets,
+    IReadOnlySet<string> BigScriptTargetCodes);
 
 /// <summary>
 /// Описание группы в каталоге.

@@ -7,11 +7,13 @@ namespace Unload.Runner;
 
 /// <summary>
 /// Реализация движка выгрузки данных.
-/// N worker-потоков, каждый с одним клиентом БД, обрабатывают мемберов. Файлы пишутся в один MQ.
+/// N worker-потоков (n-1 для больших скриптов, 1 для легких), каждый с одним клиентом БД.
+/// При <c>BatchReadMode</c>: данные читаются в память целиком, передаются на запись без ожидания; клиент сразу выполняет следующий запрос.
 /// </summary>
 public class RunnerEngine : IRunner
 {
     private const int EventChannelCapacity = 64;
+    private const int WriteChannelCapacity = 32;
     private readonly ICatalogService _catalogService;
     private readonly IDatabaseClientFactory _databaseClientFactory;
     private readonly IFileChunkWriter _fileChunkWriter;
@@ -77,7 +79,7 @@ public class RunnerEngine : IRunner
 
             await eventEmitter.EmitAsync(RunnerStep.RequestAccepted, "Run request accepted.");
 
-            var resolvedTargets = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
+            var (resolvedTargets, bigScriptTargetCodes) = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
             await eventEmitter.EmitAsync(
                 RunnerStep.TargetsResolved,
                 $"Targets resolved: {resolvedTargets.Count}.",
@@ -91,9 +93,7 @@ public class RunnerEngine : IRunner
                 .ToArray();
 
             foreach (var script in scripts)
-            {
                 await eventEmitter.EmitForScriptAsync(script, RunnerStep.ScriptDiscovered, $"Discovered script {script.ScriptCode}.");
-            }
 
             if (scripts.Length == 0)
             {
@@ -101,26 +101,47 @@ public class RunnerEngine : IRunner
                 return;
             }
 
-            var scriptsByMember = scripts
-                .GroupBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
+            var scriptsByTarget = scripts
+                .GroupBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(static g => g.Key, static g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
 
-            var memberQueue = new ConcurrentQueue<string>(scriptsByMember.Keys);
+            var bigTargets = scriptsByTarget.Keys.Where(t => bigScriptTargetCodes.Contains(t)).ToArray();
+            var lightTargets = scriptsByTarget.Keys.Where(t => !bigScriptTargetCodes.Contains(t)).ToArray();
+
+            var bigQueue = new ConcurrentQueue<string>(bigTargets);
+            var lightQueue = new ConcurrentQueue<string>(lightTargets);
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            var workers = Enumerable.Range(1, _options.WorkerCount)
-                .Select(workerId => RunWorkerAsync(
-                    workerId,
-                    memberQueue,
-                    scriptsByMember,
-                    runFilesDirectory,
-                    eventEmitter,
-                    reportRows,
-                    memberChunkCounters,
-                    cancellationToken))
-                .ToArray();
+            ChannelWriter<ChunkWriteJob>? writeChannelWriter = null;
+            Task? writerTask = null;
+            if (_options.BatchReadMode)
+            {
+                var writeChannel = Channel.CreateBounded<ChunkWriteJob>(new BoundedChannelOptions(WriteChannelCapacity)
+                {
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = true,
+                    SingleWriter = false
+                });
+                writeChannelWriter = writeChannel.Writer;
+                writerTask = RunWriteConsumerAsync(writeChannel.Reader, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+            }
+
+            var bigWorkerCount = Math.Max(0, _options.WorkerCount - 1);
+            var lightWorkerCount = Math.Max(1, _options.WorkerCount - bigWorkerCount);
+
+            var workers = new List<Task>();
+            for (var i = 0; i < bigWorkerCount; i++)
+                workers.Add(RunWorkerAsync(i + 1, bigQueue, scriptsByTarget, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
+            for (var i = 0; i < lightWorkerCount; i++)
+                workers.Add(RunWorkerAsync(bigWorkerCount + i + 1, lightQueue, scriptsByTarget, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
 
             await Task.WhenAll(workers);
+
+            if (writeChannelWriter is not null)
+            {
+                writeChannelWriter.Complete();
+                await (writerTask ?? Task.CompletedTask);
+            }
 
             await eventEmitter.EmitAsync(
                 RunnerStep.Completed,
@@ -148,34 +169,38 @@ public class RunnerEngine : IRunner
         }
     }
 
+    private async Task RunWriteConsumerAsync(
+        ChannelReader<ChunkWriteJob> reader,
+        string runFilesDirectory,
+        RunnerEventEmitter eventEmitter,
+        ConcurrentBag<RunReportRow> reportRows,
+        CancellationToken cancellationToken)
+    {
+        await foreach (var job in reader.ReadAllAsync(cancellationToken))
+            await WriteAndPublishChunkAsync(job.Script, job.ChunkNumber, job.Rows, job.ByteSize, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+    }
+
     private async Task RunWorkerAsync(
         int workerId,
-        ConcurrentQueue<string> memberQueue,
-        IReadOnlyDictionary<string, ScriptDefinition[]> scriptsByMember,
+        ConcurrentQueue<string> targetQueue,
+        IReadOnlyDictionary<string, ScriptDefinition[]> scriptsByTarget,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
+        ChannelWriter<ChunkWriteJob>? writeChannel,
         CancellationToken cancellationToken)
     {
         var client = _databaseClientFactory.CreateClient();
         try
         {
-            while (memberQueue.TryDequeue(out var memberName) && !cancellationToken.IsCancellationRequested)
+            while (targetQueue.TryDequeue(out var targetCode) && !cancellationToken.IsCancellationRequested)
             {
-                var scripts = scriptsByMember[memberName];
+                var scripts = scriptsByTarget[targetCode];
                 foreach (var script in scripts)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await ProcessScriptAsync(
-                        script,
-                        workerId,
-                        client,
-                        runFilesDirectory,
-                        eventEmitter,
-                        reportRows,
-                        memberChunkCounters,
-                        cancellationToken);
+                    await ProcessScriptAsync(script, workerId, client, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannel, cancellationToken);
                 }
             }
         }
@@ -196,12 +221,10 @@ public class RunnerEngine : IRunner
         RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
+        ChannelWriter<ChunkWriteJob>? writeChannel,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.QueryStarted,
-            $"Worker #{workerId} running query for script {script.ScriptCode}.");
+        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Worker #{workerId} running query for script {script.ScriptCode}.");
 
         await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
         var columns = RunnerEngineDataReader.GetColumns(reader);
@@ -209,53 +232,75 @@ public class RunnerEngine : IRunner
         if (columns.Count == 0)
             throw new InvalidOperationException($"Query for script '{script.ScriptCode}' returned no columns.");
 
-        var rowsRead = 0;
-        var currentRows = new List<DatabaseRow>();
         var dayOfYear = DateTimeOffset.Now.DayOfYear;
         var headerLine =
             $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
         var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
+
+        var rowsRead = 0;
+        var currentRows = new List<DatabaseRow>();
         var currentSize = headerSize;
 
-        while (await reader.ReadAsync(cancellationToken))
+        if (_options.BatchReadMode)
         {
-            var row = RunnerEngineDataReader.ReadRow(reader, columns);
-            var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
-            var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
-            if (rowSize + headerSize > _options.ChunkSizeBytes)
-                throw new InvalidOperationException($"Single row size {rowSize} bytes exceeds chunk size {_options.ChunkSizeBytes} bytes.");
-
-            if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+            var allRows = new List<DatabaseRow>();
+            while (await reader.ReadAsync(cancellationToken))
             {
-                var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
-                await WriteAndPublishChunkAsync(script, chunkNumber, currentRows.ToArray(), currentSize,
-                    runFilesDirectory, eventEmitter, reportRows, cancellationToken);
-                currentRows = [];
-                currentSize = headerSize;
+                var row = RunnerEngineDataReader.ReadRow(reader, columns);
+                var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
+                if (PipeDelimitedFormatter.EstimateLineBytes(line) + headerSize > _options.ChunkSizeBytes)
+                    throw new InvalidOperationException($"Single row exceeds chunk size {_options.ChunkSizeBytes} bytes.");
+                allRows.Add(row);
             }
-
-            currentRows.Add(row);
-            currentSize += rowSize;
-            rowsRead++;
+            rowsRead = allRows.Count;
+            foreach (var row in allRows)
+            {
+                var rowSize = PipeDelimitedFormatter.EstimateLineBytes(PipeDelimitedFormatter.BuildDataLine(row, columns));
+                if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+                {
+                    var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
+                    await writeChannel!.WriteAsync(new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize), cancellationToken);
+                    currentRows = [];
+                    currentSize = headerSize;
+                }
+                currentRows.Add(row);
+                currentSize += rowSize;
+            }
+        }
+        else
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var row = RunnerEngineDataReader.ReadRow(reader, columns);
+                var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
+                var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
+                if (rowSize + headerSize > _options.ChunkSizeBytes)
+                    throw new InvalidOperationException($"Single row exceeds chunk size {_options.ChunkSizeBytes} bytes.");
+                if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+                {
+                    var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
+                    await WriteAndPublishChunkAsync(script, chunkNumber, currentRows.ToArray(), currentSize, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+                    currentRows = [];
+                    currentSize = headerSize;
+                }
+                currentRows.Add(row);
+                currentSize += rowSize;
+                rowsRead++;
+            }
         }
 
         if (currentRows.Count > 0)
         {
             var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
-            await WriteAndPublishChunkAsync(
-                script, chunkNumber, currentRows.ToArray(), currentSize,
-                runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+            if (writeChannel is not null)
+                await writeChannel.WriteAsync(new ChunkWriteJob(script, chunkNumber, currentRows.ToArray(), currentSize), cancellationToken);
+            else
+                await WriteAndPublishChunkAsync(script, chunkNumber, currentRows.ToArray(), currentSize, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
         }
         else if (rowsRead == 0)
-        {
             reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
-        }
 
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.QueryCompleted,
-            $"Worker #{workerId} finished query for script {script.ScriptCode}.",
-            rowsRead);
+        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Worker #{workerId} finished query for script {script.ScriptCode}.", rowsRead);
     }
 
     private async Task WriteAndPublishChunkAsync(
@@ -293,4 +338,6 @@ public class RunnerEngine : IRunner
             isSentToMq,
             stopwatch.ElapsedMilliseconds));
     }
+
+    private sealed record ChunkWriteJob(ScriptDefinition Script, int ChunkNumber, DatabaseRow[] Rows, int ByteSize);
 }

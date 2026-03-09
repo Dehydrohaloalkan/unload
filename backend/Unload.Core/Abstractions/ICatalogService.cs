@@ -14,12 +14,12 @@ public interface ICatalogService
     Task<CatalogInfo> GetCatalogAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Резолвит список target-кодов в набор SQL-скриптов для выполнения.
+    /// Резолвит список target-кодов в набор SQL-скриптов и возвращает множество «больших» target-кодов.
     /// </summary>
     /// <param name="targetCodes">Target-коды, которые нужно обработать.</param>
     /// <param name="cancellationToken">Токен отмены резолва.</param>
-    /// <returns>Словарь target-код -> список определений скриптов.</returns>
-    Task<IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>>> ResolveAsync(
+    /// <returns>Скрипты по target-кодам и множество target-кодов из <c>bigScripts</c>.</returns>
+    Task<(IReadOnlyDictionary<string, IReadOnlyList<ScriptDefinition>> Scripts, IReadOnlySet<string> BigScriptTargetCodes)> ResolveAsync(
         IReadOnlyCollection<string> targetCodes,
         CancellationToken cancellationToken);
 }
