@@ -1,46 +1,43 @@
 using System.Threading.Channels;
-using System.Threading.Tasks.Dataflow;
 using Unload.Core;
 
 namespace Unload.Runner;
 
-/// <summary>
-/// Helper для компактной публикации событий раннера через общий dataflow-блок.
-/// </summary>
 internal sealed class RunnerEventEmitter
 {
-    private readonly ActionBlock<PendingRunnerEvent> _eventBlock;
-    private readonly RunRequest _request;
-    private readonly CancellationToken _defaultCancellationToken;
+    private const int EventChannelCapacity = 64;
+    private readonly Channel<PendingRunnerEvent> _channel;
+    private readonly Task _consumerTask;
+    private readonly string _correlationId;
 
     public RunnerEventEmitter(
         IMqPublisher mqPublisher,
-        RunnerOptions options,
         ChannelWriter<RunnerEvent> writer,
         RunRequest request,
         CancellationToken cancellationToken)
     {
-        _request = request;
-        _defaultCancellationToken = cancellationToken;
-        _eventBlock = new ActionBlock<PendingRunnerEvent>(async pending =>
+        _correlationId = request.CorrelationId;
+        _channel = Channel.CreateBounded<PendingRunnerEvent>(new BoundedChannelOptions(EventChannelCapacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false
+        });
+        _consumerTask = Task.Run(async () =>
         {
             try
             {
-                var isSentToMq = await TryPublishToMqAsync(mqPublisher, pending.Event, cancellationToken);
-                await writer.WriteAsync(pending.Event, cancellationToken);
-                pending.Completion?.TrySetResult(isSentToMq);
+                await foreach (var pending in _channel.Reader.ReadAllAsync(cancellationToken))
+                {
+                    var isSentToMq = await TryPublishToMqAsync(mqPublisher, pending.Event, cancellationToken);
+                    await writer.WriteAsync(pending.Event, cancellationToken);
+                    pending.Completion?.TrySetResult(isSentToMq);
+                }
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                pending.Completion?.TrySetException(ex);
-                throw;
             }
-        }, new ExecutionDataflowBlockOptions
-        {
-            MaxDegreeOfParallelism = options.QueuePublisherDegreeOfParallelism,
-            BoundedCapacity = options.DataflowBoundedCapacity,
-            CancellationToken = cancellationToken
-        });
+        }, CancellationToken.None);
     }
 
     public Task EmitAsync(
@@ -49,14 +46,7 @@ internal sealed class RunnerEventEmitter
         int? records = null,
         string? filePath = null)
     {
-        return EmitCoreAsync(
-            step: step,
-            message: message,
-            script: null,
-            records: records,
-            filePath: filePath,
-            awaitMqStatus: false,
-            cancellationToken: _defaultCancellationToken).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, false, CancellationToken.None).AsTask();
     }
 
     public Task EmitAsync(
@@ -66,14 +56,7 @@ internal sealed class RunnerEventEmitter
         string? filePath,
         CancellationToken cancellationToken)
     {
-        return EmitCoreAsync(
-            step: step,
-            message: message,
-            script: null,
-            records: records,
-            filePath: filePath,
-            awaitMqStatus: false,
-            cancellationToken: cancellationToken).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, false, cancellationToken).AsTask();
     }
 
     public async Task<bool> EmitForScriptAsync(
@@ -84,14 +67,7 @@ internal sealed class RunnerEventEmitter
         string? filePath = null,
         bool awaitMqStatus = false)
     {
-        return await EmitCoreAsync(
-            step,
-            message,
-            script,
-            records,
-            filePath,
-            awaitMqStatus,
-            _defaultCancellationToken) ?? false;
+        return await EmitCoreAsync(step, message, script, records, filePath, awaitMqStatus, CancellationToken.None) ?? false;
     }
 
     public async Task<bool> EmitForScriptAsync(
@@ -103,14 +79,7 @@ internal sealed class RunnerEventEmitter
         bool awaitMqStatus,
         CancellationToken cancellationToken)
     {
-        return await EmitCoreAsync(
-            step,
-            message,
-            script,
-            records,
-            filePath,
-            awaitMqStatus,
-            cancellationToken) ?? false;
+        return await EmitCoreAsync(step, message, script, records, filePath, awaitMqStatus, cancellationToken) ?? false;
     }
 
     public async Task TryEmitFailureAsync(RunnerStep step, string message)
@@ -126,10 +95,10 @@ internal sealed class RunnerEventEmitter
 
     public async Task CompleteAsync()
     {
-        _eventBlock.Complete();
+        _channel.Writer.Complete();
         try
         {
-            await _eventBlock.Completion;
+            await _consumerTask;
         }
         catch
         {
@@ -150,7 +119,7 @@ internal sealed class RunnerEventEmitter
             : null;
         var @event = new RunnerEvent(
             DateTimeOffset.UtcNow,
-            _request.CorrelationId,
+            _correlationId,
             step,
             message,
             script?.TargetCode,
@@ -158,12 +127,7 @@ internal sealed class RunnerEventEmitter
             script?.ScriptCode,
             records,
             filePath);
-        var accepted = await _eventBlock.SendAsync(new PendingRunnerEvent(@event, completion), cancellationToken);
-        if (!accepted)
-        {
-            throw new InvalidOperationException("Event stage declined event message.");
-        }
-
+        await _channel.Writer.WriteAsync(new PendingRunnerEvent(@event, completion), cancellationToken);
         return completion is null ? null : await completion.Task;
     }
 

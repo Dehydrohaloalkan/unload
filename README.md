@@ -32,7 +32,7 @@
 
 Базовые доменные модели и контракты:
 - модели: `RunRequest`, `RunnerEvent`, `FileChunk`, `CatalogInfo` и др.;
-- интерфейсы: `IRunner`, `ICatalogService`, `IDatabaseClient`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
+- интерфейсы: `IRunner`, `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
 
 Это слой, от которого зависят остальные backend-модули.
 
@@ -68,10 +68,9 @@ Use-case слой запуска и состояния run:
 ### `backend/Unload.Runner`
 
 Исполнитель пайплайна выгрузки:
-- управляет шагами выполнения;
-- распараллеливает чтение/запись через Dataflow;
-- генерирует `RunnerEvent`;
-- формирует `run-report.csv`.
+- N worker-потоков (настраиваемо), 1 клиент БД на поток;
+- мемберы в очереди, скрипты по `firstCodeDigit`, единый MQ;
+- генерирует `RunnerEvent`, формирует `run-report.csv`.
 
 ### `backend/Unload.Api`
 

@@ -28,7 +28,8 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         Directory.CreateDirectory(outputDirectory);
 
         var dayOfYear = DateTimeOffset.Now.DayOfYear;
-        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunk.ChunkNumber:D2}";
+        var chunkNumberBase36 = ToBase36(chunk.ChunkNumber).PadLeft(2, '0');
+        var baseFileName = $"{chunk.Script.OutputFileStem}{dayOfYear:D3}{chunkNumberBase36}";
         var fileExtension = chunk.Script.OutputFileExtension;
         var lockKey = Path.GetFullPath(Path.Combine(outputDirectory, $"{baseFileName}{fileExtension}"));
         var fileLock = FileWriteLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
@@ -87,5 +88,26 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
 
         throw new IOException(
             $"Unable to allocate unique output file name for base '{baseFileName}{extension}' in '{outputDirectory}'.");
+    }
+
+    private static string ToBase36(int value)
+    {
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "Chunk number must be greater than zero.");
+        }
+
+        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        Span<char> buffer = stackalloc char[16];
+        var i = buffer.Length;
+        var current = value;
+
+        while (current > 0)
+        {
+            buffer[--i] = alphabet[current % 36];
+            current /= 36;
+        }
+
+        return new string(buffer[i..]);
     }
 }

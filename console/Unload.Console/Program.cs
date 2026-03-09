@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using Unload.Application;
 using Unload.Core;
+using Unload.Runner;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
@@ -21,12 +22,14 @@ var databaseSettings = configuration
     .Get<DatabaseRuntimeSettings>()
     ?? throw new InvalidOperationException(
         $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
+var runnerOptions = configuration.GetSection("Runner").Get<RunnerOptions>()
+    ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
 
 var services = new ServiceCollection();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory), databaseSettings);
+    OutputDirectory: outputDirectory), databaseSettings, runnerOptions);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();

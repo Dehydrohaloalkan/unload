@@ -7,7 +7,7 @@
 - `backend/Unload.Core`
   - Общие контракты и модели домена.
   - `Domain`: `RunRequest`, `ScriptDefinition`, `DatabaseRow`, `FileChunk`, `WrittenFile`, `RunnerEvent`, `RunnerStep`.
-  - `Abstractions`: интерфейсы `IRunner`, `ICatalogService`, `IDatabaseClient`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
+  - `Abstractions`: интерфейсы `IRunner`, `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
@@ -20,11 +20,12 @@
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
+  - Фабрика клиентов: `DatabaseClientFactory` (создает независимый клиент на каждый worker).
   - `StubDatabaseClient` поддерживает конструктор `StubDatabaseClient(int timeout, string connectionString)`.
   - `connectionString` может быть:
     - plain-text строкой подключения;
     - строкой формата `dpapi:<base64>`, которая расшифровывается через Windows DPAPI (`CurrentUser`).
-  - Контракт БД: `IDatabaseClient` с `IsConnected` и `GetDataReaderAsync(query, cancellationToken)`.
+  - Контракты БД: `IDatabaseClient` (`IsConnected`, `GetDataReaderAsync(...)`) и `IDatabaseClientFactory` (`CreateClient()`).
   - В раннер передается `DbDataReader`, строки читаются потоково.
 
 - `backend/Unload.FileWriter`
@@ -35,7 +36,7 @@
   - Первая строка файла — служебный заголовок: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
   - Начиная со второй строки пишутся данные из БД через `|`.
   - Пишет в `output/<dd_MM_yyyy_HHmmss>/output-files/`.
-  - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{ext}` (без `_`).
+  - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}.{ext}` (без `_`).
   - `chunkNumber` ведется сквозной нумерацией по мемберу в рамках запуска (между скриптами одного мембера).
 
 - `backend/Unload.MQ`
@@ -47,24 +48,19 @@
 
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
-  - Выполняет пайплайн на `System.Threading.Tasks.Dataflow` с настраиваемыми worker-ами:
-    - `MaxDegreeOfParallelism` — чтение SQL и формирование чанков;
-    - `FileWriterDegreeOfParallelism` — запись чанков в файлы;
-    - `QueuePublisherDegreeOfParallelism` — публикация событий в MQ/канал.
-  - Скрипты одного мембера выполняются последовательно (в порядке сортировки), скрипты разных мемберов могут выполняться параллельно.
-  - Чтение `DbDataReader` сериализовано (один активный reader в единицу времени) для совместимости с не-thread-safe реализациями `IDatabaseClient`/провайдеров БД; запись файлов и публикация событий остаются параллельными.
-  - Шаги: resolve target-кодов -> очередь скриптов -> потоковое чтение `DbDataReader` и формирование чанков -> параллельная запись файлов -> последовательная публикация событий.
-  - Значения по умолчанию в DI: `MaxDegreeOfParallelism = max(CPU/2, 1)`, `FileWriterDegreeOfParallelism = 4`, `QueuePublisherDegreeOfParallelism = 1`, `DataflowBoundedCapacity = 8`.
+  - N worker-потоков (настраиваемо через `WorkerCount`, по умолчанию 4), каждый с одним `IDatabaseClient`.
+  - Мемберы распределяются по worker-ам через очередь; каждый worker обрабатывает мембера полностью: выполняет скрипты в порядке `firstCodeDigit`, формирует чанки, пишет файлы, передает в единый MQ.
+  - Файлы одного мембера пишутся подряд (один worker обрабатывает одного мембера за раз).
+  - Один MQ-публикатор: все worker-ы передают события в общий канал, один consumer пишет в MQ и в поток событий.
+  - Шаги: resolve target-кодов -> очередь мемберов -> worker-ы (запросы БД, чанки, запись файлов, MQ).
+  - Значения по умолчанию в DI: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`.
   - Не держит все строки скрипта в памяти: буфер ограничен текущим чанком.
   - После каждого шага создается `RunnerEvent`.
-  - Формирует CSV-отчет запуска `run-report.csv` в папке запуска с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
-  - Для скриптов с `0` строк также добавляет запись в отчет (`outputFileName` пустой, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`).
-  - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные значения пишутся как число.
-  - `mqStatus` фиксирует факт отправки события в MQ (`отправлен`/`не отправлен`), при ошибке MQ пайплайн продолжает выполнение.
-  - События раннера в большинстве шагов ставятся в очередь публикации без ожидания результата MQ (fire-and-forget относительно шага пайплайна); ожидание подтверждения MQ выполняется только для `FileWritten`, так как этот статус попадает в `run-report.csv`.
-  - `RunnerEventEmitter` использует токен запуска по умолчанию и позволяет точечно передать другой токен для отдельных шагов dataflow.
-  - Внутренние детали разнесены: `RunnerEngine` (пайплайн), `RunnerEventEmitter` (публикация событий), `RunnerEngineGuard` (guard-валидации), `RunnerOutputDirectoryFactory` (создание output-папок), `RunnerEngineDataReader` (чтение колонок/строк из `DbDataReader`).
-  - Значения из `DbDataReader` материализуются в строки на этапе чтения (до передачи чанков в параллельную запись), чтобы исключить артефакты от provider-объектов между потоками.
+  - Формирует CSV-отчет `run-report.csv` с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
+  - Для скриптов с `0` строк добавляет запись в отчет (`outputFileName` пустой, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`).
+  - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные — число.
+  - `mqStatus` фиксирует факт отправки в MQ; при ошибке MQ пайплайн продолжает выполнение.
+  - Внутренние детали: `RunnerEngine`, `RunnerEventEmitter` (Channel + Task), `RunnerEngineGuard`, `RunnerOutputDirectoryFactory`, `RunnerEngineDataReader`.
 
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.
@@ -175,9 +171,9 @@ flowchart LR
 
 ### Формат выходного файла
 
-- Имя: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}.{extension}`
-- `chunkNumber` — сквозной номер чанка для конкретного мембера в рамках запуска.
-- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear:D3}{chunkNumber:D2}_{NN}.{extension}`.
+- Имя: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}.{extension}`
+- `chunkNumberBase36` — сквозной номер чанка для конкретного мембера в рамках запуска, в верхнем регистре base36 (`01`, `02`, ... `09`, `0A`, `0B`, ...).
+- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}_{NN}.{extension}`.
 - Первая строка:
   - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
 - Остальные строки:

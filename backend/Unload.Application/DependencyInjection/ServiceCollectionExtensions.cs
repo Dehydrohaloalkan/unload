@@ -24,7 +24,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddUnloadRuntime(
         this IServiceCollection services,
         UnloadRuntimePaths paths,
-        DatabaseRuntimeSettings? databaseSettings = null)
+        DatabaseRuntimeSettings? databaseSettings = null,
+        RunnerOptions? runnerOptions = null)
     {
         var dbSettings = databaseSettings ?? throw new InvalidOperationException(
             $"Database settings are required. Configure section '{DatabaseRuntimeSettings.SectionName}' in appsettings.");
@@ -39,18 +40,14 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
-        services.AddSingleton<IDatabaseClient>(_ => new StubDatabaseClient(
+        services.AddSingleton<IDatabaseClientFactory>(_ => new DatabaseClientFactory(
             dbSettings.TimeoutSeconds,
             dbSettings.ConnectionString));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-        services.AddSingleton(new RunnerOptions(
-            ChunkSizeBytes: 10 * 1024 * 1024,
-            MaxDegreeOfParallelism: Math.Max(Environment.ProcessorCount / 2, 1),
-            FileWriterDegreeOfParallelism: 4,
-            QueuePublisherDegreeOfParallelism: 1,
-            DataflowBoundedCapacity: 8));
+        var opts = runnerOptions ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
+        services.AddSingleton(opts);
         services.AddSingleton<IRunner, RunnerEngine>();
         services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
         services.AddSingleton<IRunCoordinator, InMemoryRunCoordinator>();
