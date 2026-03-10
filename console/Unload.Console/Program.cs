@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Spectre.Console;
+using System.Text.RegularExpressions;
 using Unload.Application;
 using Unload.Core;
 using Unload.Runner;
@@ -79,30 +80,23 @@ try
 {
     runStateStore.SetRunning(correlationId);
     using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, request.CancellationToken);
-    await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
+    var workerStatuses = Enumerable
+        .Range(1, runnerOptions.WorkerCount)
+        .ToDictionary(
+            static workerId => workerId,
+            static _ => "idle");
+
+    await AnsiConsole.Live(BuildWorkersTable(workerStatuses, string.Empty))
+        .StartAsync(async context =>
     {
-        runStateStore.ApplyEvent(@event);
-        var color = @event.Step switch
+        await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
         {
-            RunnerStep.Failed => "red",
-            RunnerStep.Completed => "green",
-            RunnerStep.FileWritten => "deepskyblue1",
-            RunnerStep.QueryCompleted => "yellow",
-            _ => "grey"
-        };
-
-        var line =
-            $"[{color}]{@event.OccurredAt:HH:mm:ss}[/] " +
-            $"[{color}]{Markup.Escape(@event.Step.ToString())}[/] " +
-            $"{Markup.Escape(@event.Message)}";
-
-        if (!string.IsNullOrWhiteSpace(@event.FilePath))
-        {
-            line += $" [grey]({Markup.Escape(@event.FilePath)})[/]";
+            runStateStore.ApplyEvent(@event);
+            ApplyWorkerStatusUpdate(workerStatuses, @event);
+            context.UpdateTarget(BuildWorkersTable(workerStatuses, FormatEventLine(@event)));
+            context.Refresh();
         }
-
-        AnsiConsole.MarkupLine(line);
-    }
+    });
 }
 catch (OperationCanceledException)
 {
@@ -141,4 +135,76 @@ static async Task<RunActivation?> WaitForRunRequestAsync(
     }
 
     return null;
+}
+
+static Table BuildWorkersTable(IReadOnlyDictionary<int, string> workerStatuses, string lastEventLine)
+{
+    var table = new Table().Expand();
+    foreach (var workerId in workerStatuses.Keys.Order())
+        table.AddColumn($"[yellow]Worker #{workerId}[/]");
+
+    table.AddRow(workerStatuses.Keys.Order().Select(workerId => Markup.Escape(workerStatuses[workerId])).ToArray());
+
+    if (!string.IsNullOrWhiteSpace(lastEventLine))
+    {
+        table.AddEmptyRow();
+        table.AddRow(workerStatuses.Keys
+            .Order()
+            .Select((_, index) => index == 0 ? lastEventLine : string.Empty)
+            .ToArray());
+    }
+
+    return table;
+}
+
+static void ApplyWorkerStatusUpdate(IDictionary<int, string> workerStatuses, RunnerEvent @event)
+{
+    var workerId = TryExtractWorkerId(@event.Message);
+    if (workerId is null || !workerStatuses.ContainsKey(workerId.Value))
+        return;
+
+    if (@event.Step == RunnerStep.QueryStarted)
+    {
+        var script = string.IsNullOrWhiteSpace(@event.ScriptCode) ? "unknown script" : @event.ScriptCode;
+        workerStatuses[workerId.Value] = $"running {script}";
+        return;
+    }
+
+    if (@event.Step == RunnerStep.QueryCompleted)
+    {
+        workerStatuses[workerId.Value] = "idle";
+    }
+}
+
+static int? TryExtractWorkerId(string message)
+{
+    var match = Regex.Match(message, @"Worker\s*#(?<id>\d+)", RegexOptions.CultureInvariant);
+    if (!match.Success)
+        return null;
+
+    return int.TryParse(match.Groups["id"].Value, out var workerId)
+        ? workerId
+        : null;
+}
+
+static string FormatEventLine(RunnerEvent @event)
+{
+    var color = @event.Step switch
+    {
+        RunnerStep.Failed => "red",
+        RunnerStep.Completed => "green",
+        RunnerStep.FileWritten => "deepskyblue1",
+        RunnerStep.QueryCompleted => "yellow",
+        _ => "grey"
+    };
+
+    var line =
+        $"[{color}]{@event.OccurredAt:HH:mm:ss}[/] " +
+        $"[{color}]{@event.Step}[/] " +
+        $"{Markup.Escape(@event.Message)}";
+
+    if (!string.IsNullOrWhiteSpace(@event.FilePath))
+        line += $" [grey]({Markup.Escape(@event.FilePath)})[/]";
+
+    return line;
 }

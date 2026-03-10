@@ -44,12 +44,16 @@ internal static class TargetCodePrompter
                     static target => target.TargetCode,
                     StringComparer.OrdinalIgnoreCase);
 
-            var selectedInGroup = AnsiConsole.Prompt(
-                new MultiSelectionPrompt<string>()
-                    .Title($"[yellow]{Markup.Escape(group.Key.GroupName)}[/] - выбери таргеты")
-                    .NotRequired()
-                    .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
-                    .AddChoices(labelsToCodes.Keys));
+            var prompt = new MultiSelectionPrompt<string>()
+                .Title($"[yellow]{Markup.Escape(group.Key.GroupName)}[/] - выбери таргеты")
+                .NotRequired()
+                .InstructionsText("[grey](Space - выбор, Enter - подтвердить)[/]")
+                .AddChoices(labelsToCodes.Keys);
+
+            foreach (var label in labelsToCodes.Keys)
+                prompt.Select(label);
+
+            var selectedInGroup = AnsiConsole.Prompt(prompt);
 
             foreach (var label in selectedInGroup)
             {

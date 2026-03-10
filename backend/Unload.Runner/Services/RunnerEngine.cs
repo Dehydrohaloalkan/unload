@@ -123,13 +123,26 @@ public class RunnerEngine : IRunner
             }
 
             var bigWorkerCount = Math.Max(0, _options.WorkerCount - 1);
-            var lightWorkerCount = Math.Max(1, _options.WorkerCount - bigWorkerCount);
 
-            var workers = new List<Task>();
-            for (var i = 0; i < bigWorkerCount; i++)
-                workers.Add(RunWorkerAsync(i + 1, bigQueue, lightQueue, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
-            for (var i = 0; i < lightWorkerCount; i++)
-                workers.Add(RunWorkerAsync(bigWorkerCount + i + 1, lightQueue, bigQueue, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
+            var workers = new List<Task>(_options.WorkerCount);
+            for (var workerId = 1; workerId <= _options.WorkerCount; workerId++)
+            {
+                var queuePreference = workerId <= bigWorkerCount
+                    ? WorkerQueuePreference.BigFirst
+                    : WorkerQueuePreference.LightFirst;
+
+                workers.Add(RunWorkerAsync(
+                    workerId,
+                    queuePreference,
+                    bigQueue,
+                    lightQueue,
+                    runFilesDirectory,
+                    eventEmitter,
+                    reportRows,
+                    memberChunkCounters,
+                    writeChannelWriter,
+                    cancellationToken));
+            }
 
             await Task.WhenAll(workers);
 
@@ -178,8 +191,9 @@ public class RunnerEngine : IRunner
 
     private async Task RunWorkerAsync(
         int workerId,
-        ConcurrentQueue<ScriptDefinition> primaryQueue,
-        ConcurrentQueue<ScriptDefinition> fallbackQueue,
+        WorkerQueuePreference queuePreference,
+        ConcurrentQueue<ScriptDefinition> bigQueue,
+        ConcurrentQueue<ScriptDefinition> lightQueue,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
@@ -192,7 +206,7 @@ public class RunnerEngine : IRunner
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (!TryDequeueScript(primaryQueue, fallbackQueue, out var script))
+                if (!TryDequeueScript(queuePreference, bigQueue, lightQueue, out var script))
                     break;
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -209,16 +223,17 @@ public class RunnerEngine : IRunner
     }
 
     private static bool TryDequeueScript(
-        ConcurrentQueue<ScriptDefinition> primaryQueue,
-        ConcurrentQueue<ScriptDefinition> fallbackQueue,
+        WorkerQueuePreference queuePreference,
+        ConcurrentQueue<ScriptDefinition> bigQueue,
+        ConcurrentQueue<ScriptDefinition> lightQueue,
         [NotNullWhen(true)]
         out ScriptDefinition? script)
     {
         script = null;
-        if (primaryQueue.TryDequeue(out script))
-            return true;
+        if (queuePreference == WorkerQueuePreference.BigFirst)
+            return bigQueue.TryDequeue(out script) || lightQueue.TryDequeue(out script);
 
-        return fallbackQueue.TryDequeue(out script);
+        return lightQueue.TryDequeue(out script) || bigQueue.TryDequeue(out script);
     }
 
     private async Task ProcessScriptAsync(
@@ -348,4 +363,9 @@ public class RunnerEngine : IRunner
     }
 
     private sealed record ChunkWriteJob(ScriptDefinition Script, int ChunkNumber, DatabaseRow[] Rows, int ByteSize);
+    private enum WorkerQueuePreference
+    {
+        BigFirst,
+        LightFirst
+    }
 }
