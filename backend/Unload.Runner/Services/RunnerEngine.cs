@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -101,15 +102,10 @@ public class RunnerEngine : IRunner
                 return;
             }
 
-            var scriptsByTarget = scripts
-                .GroupBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(static g => g.Key, static g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
-
-            var bigTargets = scriptsByTarget.Keys.Where(t => bigScriptTargetCodes.Contains(t)).ToArray();
-            var lightTargets = scriptsByTarget.Keys.Where(t => !bigScriptTargetCodes.Contains(t)).ToArray();
-
-            var bigQueue = new ConcurrentQueue<string>(bigTargets);
-            var lightQueue = new ConcurrentQueue<string>(lightTargets);
+            var bigQueue = new ConcurrentQueue<ScriptDefinition>(
+                scripts.Where(x => bigScriptTargetCodes.Contains(x.TargetCode)));
+            var lightQueue = new ConcurrentQueue<ScriptDefinition>(
+                scripts.Where(x => !bigScriptTargetCodes.Contains(x.TargetCode)));
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             ChannelWriter<ChunkWriteJob>? writeChannelWriter = null;
@@ -131,9 +127,9 @@ public class RunnerEngine : IRunner
 
             var workers = new List<Task>();
             for (var i = 0; i < bigWorkerCount; i++)
-                workers.Add(RunWorkerAsync(i + 1, bigQueue, scriptsByTarget, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
+                workers.Add(RunWorkerAsync(i + 1, bigQueue, lightQueue, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
             for (var i = 0; i < lightWorkerCount; i++)
-                workers.Add(RunWorkerAsync(bigWorkerCount + i + 1, lightQueue, scriptsByTarget, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
+                workers.Add(RunWorkerAsync(bigWorkerCount + i + 1, lightQueue, bigQueue, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannelWriter, cancellationToken));
 
             await Task.WhenAll(workers);
 
@@ -182,8 +178,8 @@ public class RunnerEngine : IRunner
 
     private async Task RunWorkerAsync(
         int workerId,
-        ConcurrentQueue<string> targetQueue,
-        IReadOnlyDictionary<string, ScriptDefinition[]> scriptsByTarget,
+        ConcurrentQueue<ScriptDefinition> primaryQueue,
+        ConcurrentQueue<ScriptDefinition> fallbackQueue,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
@@ -194,14 +190,13 @@ public class RunnerEngine : IRunner
         var client = _databaseClientFactory.CreateClient();
         try
         {
-            while (targetQueue.TryDequeue(out var targetCode) && !cancellationToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var scripts = scriptsByTarget[targetCode];
-                foreach (var script in scripts)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await ProcessScriptAsync(script, workerId, client, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannel, cancellationToken);
-                }
+                if (!TryDequeueScript(primaryQueue, fallbackQueue, out var script))
+                    break;
+
+                cancellationToken.ThrowIfCancellationRequested();
+                await ProcessScriptAsync(script, workerId, client, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, writeChannel, cancellationToken);
             }
         }
         finally
@@ -211,6 +206,19 @@ public class RunnerEngine : IRunner
             else if (client is IDisposable d)
                 d.Dispose();
         }
+    }
+
+    private static bool TryDequeueScript(
+        ConcurrentQueue<ScriptDefinition> primaryQueue,
+        ConcurrentQueue<ScriptDefinition> fallbackQueue,
+        [NotNullWhen(true)]
+        out ScriptDefinition? script)
+    {
+        script = null;
+        if (primaryQueue.TryDequeue(out script))
+            return true;
+
+        return fallbackQueue.TryDequeue(out script);
     }
 
     private async Task ProcessScriptAsync(

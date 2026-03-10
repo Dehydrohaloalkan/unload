@@ -52,7 +52,7 @@
   - N worker-потоков (настраиваемо через `WorkerCount`, по умолчанию 4), каждый с одним `IDatabaseClient`.
   - **Большие скрипты** (из `catalog.json` → `bigScripts`): target-выборки (memberId+groupId) выполняются в n-1 потоках; 1 поток всегда для легких скриптов.
   - **BatchReadMode** (опция): при `true` — все данные читаются в память, передаются на запись без ожидания; клиент сразу выполняет следующий запрос. При `false` — потоковое чтение.
-  - Очереди: `bigQueue` (target-коды из `bigScripts`) и `lightQueue` (остальные); big workers (n-1) и light worker (1) работают параллельно.
+  - Очереди: `bigQueue` (скрипты target-кодов из `bigScripts`) и `lightQueue` (остальные скрипты); при простое worker может забирать задачи из соседней очереди, чтобы не простаивать.
   - В событиях `QueryStarted`/`QueryCompleted` указывается `Worker #N`.
   - Один MQ-публикатор: все worker-ы передают события в общий канал.
   - Шаги: resolve target-кодов -> big/light очереди -> worker-ы (запросы БД, чанки, запись, MQ).
@@ -151,7 +151,7 @@ flowchart LR
 3. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
 4. `RunnerEngine` эмитит `RequestAccepted`.
 5. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
-6. Big scripts (из `bigScripts`) выполняются в n-1 потоках, light — в 1 потоке. Для каждого скрипта:
+6. Big scripts (из `bigScripts`) приоритетно выполняются в n-1 потоках, light — в 1 потоке; при пустой "своей" очереди worker берет скрипты из другой. Для каждого скрипта:
    - worker получает `DbDataReader` из БД; в stream-режиме читает потоково, в batch-режиме — весь результат в память;
    - worker формирует чанки и либо записывает (stream), либо отправляет в канал записи (batch);
    - при batch-режиме отдельный consumer пишет чанки на диск; worker не ждет записи и сразу выполняет следующий запрос;
