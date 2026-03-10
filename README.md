@@ -69,9 +69,7 @@ Use-case слой запуска и состояния run:
 
 Исполнитель пайплайна выгрузки:
 - N worker-потоков (n-1 для больших скриптов из `bigScripts`, 1 для легких), 1 клиент БД на поток;
-- `BatchReadMode`: при `true` — читать все данные в память, передавать на запись без ожидания; клиент сразу выполняет следующий запрос;
-- В `BatchReadMode=true` worker-ы складывают чанки в bounded-очередь, а запись файлов выполняет отдельный пул writer-consumer'ов (`FileWriterDegreeOfParallelism`), чтобы чтение из БД не простаивало на файловом I/O;
-- В `BatchReadMode=false` worker пишет чанки напрямую сам (без очереди записи);
+- потоковое чтение из БД и прямая запись чанков worker-потоком;
 - target-коды в очередях big/light, скрипты по `firstCodeDigit`, единый MQ;
 - генерирует `RunnerEvent`, формирует `run-report.csv`.
 
@@ -147,8 +145,6 @@ dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --a
 ### `appsettings` (Runner)
 
 - `WorkerCount`: количество worker-потоков (по умолчанию 4).
-- `BatchReadMode`: при `true` — читать все данные в память, передавать на запись без ожидания; клиент сразу выполняет следующий запрос.
-- `FileWriterDegreeOfParallelism`: количество параллельных consumer-задач записи в batch-режиме (по умолчанию 4).
 
 ## Ограничения и важные замечания
 

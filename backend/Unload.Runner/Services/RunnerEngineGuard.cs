@@ -27,7 +27,5 @@ internal static class RunnerEngineGuard
             throw new InvalidOperationException("ChunkSizeBytes must be greater than zero.");
         if (options.WorkerCount <= 0)
             throw new InvalidOperationException("WorkerCount must be greater than zero.");
-        if (options.FileWriterDegreeOfParallelism <= 0)
-            throw new InvalidOperationException("FileWriterDegreeOfParallelism must be greater than zero.");
     }
 }
