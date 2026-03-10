@@ -127,15 +127,19 @@ public class RunnerEngine : IRunner
                     ? WorkerQueuePreference.BigFirst
                     : WorkerQueuePreference.LightFirst;
 
-                workers.Add(RunWorkerAsync(
-                    workerId,
-                    queuePreference,
-                    distributor,
-                    runFilesDirectory,
-                    eventEmitter,
-                    reportRows,
-                    memberChunkCounters,
-                    writeChannelWriter,
+                var capturedWorkerId = workerId;
+                var capturedQueuePreference = queuePreference;
+                workers.Add(Task.Run(
+                    () => RunWorkerAsync(
+                        capturedWorkerId,
+                        capturedQueuePreference,
+                        distributor,
+                        runFilesDirectory,
+                        eventEmitter,
+                        reportRows,
+                        memberChunkCounters,
+                        writeChannelWriter,
+                        cancellationToken),
                     cancellationToken));
             }
 

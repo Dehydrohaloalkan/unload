@@ -50,13 +50,14 @@
 - `backend/Unload.Runner`
   - `RunnerEngine` + `RunnerOptions`.
   - N worker-потоков (настраиваемо через `WorkerCount`, по умолчанию 4), каждый с одним `IDatabaseClient`.
+  - Worker-задачи запускаются через `Task.Run`, чтобы стартовать параллельно даже при синхронно-блокирующих реализациях `IDatabaseClient`.
   - **Большие скрипты** (из `catalog.json` → `bigScripts`): target-выборки (memberId+groupId) выполняются в n-1 потоках; 1 поток всегда для легких скриптов.
   - **BatchReadMode** (опция): при `true` — все данные читаются в память, передаются на запись без ожидания; клиент сразу выполняет следующий запрос. При `false` — потоковое чтение.
 - Внутренний `ScriptDistributor` хранит две очереди (`big`, `light`) и выдает следующий скрипт по простому правилу: worker запрашивает задачу с предпочтением (`big-first`/`light-first`), если в предпочтительной очереди пусто — сразу получает скрипт из второй.
   - В событиях `QueryStarted`/`QueryCompleted` указывается `Worker #N`.
   - Один MQ-публикатор: все worker-ы передают события в общий канал.
   - Шаги: resolve target-кодов -> big/light очереди -> worker-ы (запросы БД, чанки, запись, MQ).
-  - Значения по умолчанию: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`, `BatchReadMode = false`.
+  - Значения по умолчанию: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`, `BatchReadMode = true`.
   - В stream-режиме буфер ограничен текущим чанком; в batch-режиме весь результат скрипта в памяти.
   - После каждого шага создается `RunnerEvent`.
   - Формирует CSV-отчет `run-report.csv` с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
