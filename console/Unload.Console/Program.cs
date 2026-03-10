@@ -7,6 +7,8 @@ using Unload.Core;
 using Unload.Runner;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
+const int WorkerColumnWidth = 26;
+
 var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
 var catalogPath = Path.Combine(root, "configs", "catalog.json");
@@ -141,16 +143,26 @@ static Table BuildWorkersTable(IReadOnlyDictionary<int, string> workerStatuses, 
 {
     var table = new Table().Expand();
     foreach (var workerId in workerStatuses.Keys.Order())
-        table.AddColumn($"[yellow]Worker #{workerId}[/]");
+    {
+        table.AddColumn(
+            new TableColumn($"[yellow]Worker #{workerId}[/]")
+                .Width(WorkerColumnWidth)
+                .NoWrap());
+    }
 
-    table.AddRow(workerStatuses.Keys.Order().Select(workerId => Markup.Escape(workerStatuses[workerId])).ToArray());
+    table.AddRow(workerStatuses.Keys
+        .Order()
+        .Select(workerId => Markup.Escape(TrimForCell(workerStatuses[workerId], WorkerColumnWidth)))
+        .ToArray());
 
     if (!string.IsNullOrWhiteSpace(lastEventLine))
     {
         table.AddEmptyRow();
         table.AddRow(workerStatuses.Keys
             .Order()
-            .Select((_, index) => index == 0 ? lastEventLine : string.Empty)
+            .Select((_, index) => index == 0
+                ? Markup.Escape(TrimForCell(lastEventLine, WorkerColumnWidth))
+                : string.Empty)
             .ToArray());
     }
 
@@ -189,22 +201,30 @@ static int? TryExtractWorkerId(string message)
 
 static string FormatEventLine(RunnerEvent @event)
 {
-    var color = @event.Step switch
-    {
-        RunnerStep.Failed => "red",
-        RunnerStep.Completed => "green",
-        RunnerStep.FileWritten => "deepskyblue1",
-        RunnerStep.QueryCompleted => "yellow",
-        _ => "grey"
-    };
-
     var line =
-        $"[{color}]{@event.OccurredAt:HH:mm:ss}[/] " +
-        $"[{color}]{@event.Step}[/] " +
-        $"{Markup.Escape(@event.Message)}";
+        $"{@event.OccurredAt:HH:mm:ss} " +
+        $"{@event.Step} " +
+        $"{@event.Message}";
 
     if (!string.IsNullOrWhiteSpace(@event.FilePath))
-        line += $" [grey]({Markup.Escape(@event.FilePath)})[/]";
+        line += $" ({@event.FilePath})";
 
     return line;
+}
+
+static string TrimForCell(string value, int width)
+{
+    if (string.IsNullOrEmpty(value))
+        return string.Empty;
+
+    if (value.Length <= width)
+        return value;
+
+    if (width <= 1)
+        return value[..width];
+
+    if (width <= 3)
+        return value[..width];
+
+    return value[..(width - 3)] + "...";
 }

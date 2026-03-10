@@ -102,10 +102,7 @@ public class RunnerEngine : IRunner
                 return;
             }
 
-            var bigQueue = new ConcurrentQueue<ScriptDefinition>(
-                scripts.Where(x => bigScriptTargetCodes.Contains(x.TargetCode)));
-            var lightQueue = new ConcurrentQueue<ScriptDefinition>(
-                scripts.Where(x => !bigScriptTargetCodes.Contains(x.TargetCode)));
+            var distributor = new ScriptDistributor(scripts, bigScriptTargetCodes);
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             ChannelWriter<ChunkWriteJob>? writeChannelWriter = null;
@@ -134,8 +131,7 @@ public class RunnerEngine : IRunner
                 workers.Add(RunWorkerAsync(
                     workerId,
                     queuePreference,
-                    bigQueue,
-                    lightQueue,
+                    distributor,
                     runFilesDirectory,
                     eventEmitter,
                     reportRows,
@@ -192,8 +188,7 @@ public class RunnerEngine : IRunner
     private async Task RunWorkerAsync(
         int workerId,
         WorkerQueuePreference queuePreference,
-        ConcurrentQueue<ScriptDefinition> bigQueue,
-        ConcurrentQueue<ScriptDefinition> lightQueue,
+        ScriptDistributor distributor,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
         ConcurrentBag<RunReportRow> reportRows,
@@ -206,7 +201,7 @@ public class RunnerEngine : IRunner
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (!TryDequeueScript(queuePreference, bigQueue, lightQueue, out var script))
+                if (!distributor.TryTakeNext(queuePreference, out var script))
                     break;
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -220,20 +215,6 @@ public class RunnerEngine : IRunner
             else if (client is IDisposable d)
                 d.Dispose();
         }
-    }
-
-    private static bool TryDequeueScript(
-        WorkerQueuePreference queuePreference,
-        ConcurrentQueue<ScriptDefinition> bigQueue,
-        ConcurrentQueue<ScriptDefinition> lightQueue,
-        [NotNullWhen(true)]
-        out ScriptDefinition? script)
-    {
-        script = null;
-        if (queuePreference == WorkerQueuePreference.BigFirst)
-            return bigQueue.TryDequeue(out script) || lightQueue.TryDequeue(out script);
-
-        return lightQueue.TryDequeue(out script) || bigQueue.TryDequeue(out script);
     }
 
     private async Task ProcessScriptAsync(
@@ -363,6 +344,70 @@ public class RunnerEngine : IRunner
     }
 
     private sealed record ChunkWriteJob(ScriptDefinition Script, int ChunkNumber, DatabaseRow[] Rows, int ByteSize);
+
+    private sealed class ScriptDistributor
+    {
+        private readonly Queue<ScriptDefinition> _bigScripts;
+        private readonly Queue<ScriptDefinition> _lightScripts;
+        private readonly Lock _lock = new();
+
+        public ScriptDistributor(
+            IEnumerable<ScriptDefinition> scripts,
+            IReadOnlySet<string> bigScriptTargetCodes)
+        {
+            _bigScripts = new Queue<ScriptDefinition>();
+            _lightScripts = new Queue<ScriptDefinition>();
+
+            foreach (var script in scripts)
+            {
+                if (bigScriptTargetCodes.Contains(script.TargetCode))
+                    _bigScripts.Enqueue(script);
+                else
+                    _lightScripts.Enqueue(script);
+            }
+        }
+
+        public bool TryTakeNext(
+            WorkerQueuePreference queuePreference,
+            [NotNullWhen(true)] out ScriptDefinition? script)
+        {
+            lock (_lock)
+            {
+                script = null;
+                if (queuePreference == WorkerQueuePreference.BigFirst)
+                {
+                    if (_bigScripts.Count > 0)
+                    {
+                        script = _bigScripts.Dequeue();
+                        return true;
+                    }
+
+                    if (_lightScripts.Count > 0)
+                    {
+                        script = _lightScripts.Dequeue();
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                if (_lightScripts.Count > 0)
+                {
+                    script = _lightScripts.Dequeue();
+                    return true;
+                }
+
+                if (_bigScripts.Count > 0)
+                {
+                    script = _bigScripts.Dequeue();
+                    return true;
+                }
+
+                return false;
+            }
+        }
+    }
+
     private enum WorkerQueuePreference
     {
         BigFirst,
