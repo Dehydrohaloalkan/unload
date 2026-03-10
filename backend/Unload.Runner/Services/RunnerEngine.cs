@@ -105,17 +105,25 @@ public class RunnerEngine : IRunner
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             ChannelWriter<ChunkWriteJob>? writeChannelWriter = null;
-            Task? writerTask = null;
+            Task[] writerTasks = [];
             if (_options.BatchReadMode)
             {
                 var writeChannel = Channel.CreateBounded<ChunkWriteJob>(new BoundedChannelOptions(WriteChannelCapacity)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
-                    SingleReader = true,
+                    SingleReader = _options.FileWriterDegreeOfParallelism == 1,
                     SingleWriter = false
                 });
                 writeChannelWriter = writeChannel.Writer;
-                writerTask = RunWriteConsumerAsync(writeChannel.Reader, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+                writerTasks = Enumerable
+                    .Range(0, _options.FileWriterDegreeOfParallelism)
+                    .Select(_ => RunWriteConsumerAsync(
+                        writeChannel.Reader,
+                        runFilesDirectory,
+                        eventEmitter,
+                        reportRows,
+                        cancellationToken))
+                    .ToArray();
             }
 
             var bigWorkerCount = Math.Max(0, _options.WorkerCount - 1);
@@ -148,7 +156,7 @@ public class RunnerEngine : IRunner
             if (writeChannelWriter is not null)
             {
                 writeChannelWriter.Complete();
-                await (writerTask ?? Task.CompletedTask);
+                await Task.WhenAll(writerTasks);
             }
 
             await eventEmitter.EmitAsync(
