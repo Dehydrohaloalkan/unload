@@ -8,6 +8,7 @@ using Unload.Runner;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 const int WorkerColumnWidth = 26;
+const int MaxGlobalLogs = 15;
 
 var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
 var scriptsDirectory = Path.Combine(root, "scripts");
@@ -87,15 +88,17 @@ try
         .ToDictionary(
             static workerId => workerId,
             static _ => "idle");
+    var globalLogs = new Queue<string>(MaxGlobalLogs);
 
-    await AnsiConsole.Live(BuildWorkersTable(workerStatuses, string.Empty))
+    await AnsiConsole.Live(BuildDashboard(workerStatuses, globalLogs))
         .StartAsync(async context =>
     {
         await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
         {
             runStateStore.ApplyEvent(@event);
             ApplyWorkerStatusUpdate(workerStatuses, @event);
-            context.UpdateTarget(BuildWorkersTable(workerStatuses, FormatEventLine(@event)));
+            AppendGlobalLog(globalLogs, FormatEventLine(@event));
+            context.UpdateTarget(BuildDashboard(workerStatuses, globalLogs));
             context.Refresh();
         }
     });
@@ -139,7 +142,16 @@ static async Task<RunActivation?> WaitForRunRequestAsync(
     return null;
 }
 
-static Table BuildWorkersTable(IReadOnlyDictionary<int, string> workerStatuses, string lastEventLine)
+static Rows BuildDashboard(
+    IReadOnlyDictionary<int, string> workerStatuses,
+    IReadOnlyCollection<string> globalLogs)
+{
+    return new Rows(
+        BuildWorkersTable(workerStatuses),
+        BuildGlobalLogsTable(globalLogs));
+}
+
+static Table BuildWorkersTable(IReadOnlyDictionary<int, string> workerStatuses)
 {
     var table = new Table().Expand();
     foreach (var workerId in workerStatuses.Keys.Order())
@@ -155,18 +167,34 @@ static Table BuildWorkersTable(IReadOnlyDictionary<int, string> workerStatuses, 
         .Select(workerId => Markup.Escape(TrimForCell(workerStatuses[workerId], WorkerColumnWidth)))
         .ToArray());
 
-    if (!string.IsNullOrWhiteSpace(lastEventLine))
+    return table;
+}
+
+static Table BuildGlobalLogsTable(IReadOnlyCollection<string> globalLogs)
+{
+    var logsTable = new Table()
+        .Expand()
+        .Border(TableBorder.Rounded)
+        .Title("Global Logs (last 15)");
+    logsTable.AddColumn(new TableColumn("Event").NoWrap(false));
+
+    if (globalLogs.Count == 0)
     {
-        table.AddEmptyRow();
-        table.AddRow(workerStatuses.Keys
-            .Order()
-            .Select((_, index) => index == 0
-                ? Markup.Escape(TrimForCell(lastEventLine, WorkerColumnWidth))
-                : string.Empty)
-            .ToArray());
+        logsTable.AddRow("[grey]Waiting for events...[/]");
+        return logsTable;
     }
 
-    return table;
+    foreach (var line in globalLogs)
+        logsTable.AddRow(Markup.Escape(line));
+
+    return logsTable;
+}
+
+static void AppendGlobalLog(Queue<string> globalLogs, string logLine)
+{
+    globalLogs.Enqueue(logLine);
+    while (globalLogs.Count > MaxGlobalLogs)
+        globalLogs.Dequeue();
 }
 
 static void ApplyWorkerStatusUpdate(IDictionary<int, string> workerStatuses, RunnerEvent @event)
