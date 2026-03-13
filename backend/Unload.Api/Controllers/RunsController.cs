@@ -18,7 +18,7 @@ public class RunsController : ControllerBase
     private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator;
     private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
-    private readonly PresetGateStateStore _presetGateStateStore;
+    private readonly IPresetGateService _presetGateService;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<RunsController> _logger;
 
@@ -36,7 +36,7 @@ public class RunsController : ControllerBase
         IScriptTaskOrchestrator scriptTaskOrchestrator,
         IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
-        PresetGateStateStore presetGateStateStore,
+        IPresetGateService presetGateService,
         IHubContext<RunStatusHub> hubContext,
         ILogger<RunsController> logger)
     {
@@ -45,7 +45,7 @@ public class RunsController : ControllerBase
         _scriptTaskOrchestrator = scriptTaskOrchestrator;
         _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
-        _presetGateStateStore = presetGateStateStore;
+        _presetGateService = presetGateService;
         _hubContext = hubContext;
         _logger = logger;
     }
@@ -59,7 +59,7 @@ public class RunsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> StartRunAsync([FromBody] RunStartRequest request, CancellationToken cancellationToken)
     {
-        if (!_presetGateStateStore.CanRunMainAndExtra(out var gateReason))
+        if (!_presetGateService.CanRunMainAndExtra(out var gateReason))
         {
             _logger.LogWarning("Run launch blocked by preset gate. Reason: {Reason}", gateReason);
             return ApiProblem(
@@ -175,7 +175,7 @@ public class RunsController : ControllerBase
     [HttpGet("preset/state")]
     public IActionResult GetPresetState()
     {
-        var state = _presetGateStateStore.Get();
+        var state = _presetGateService.Get();
         _logger.LogDebug(
             "Preset state requested. Enabled: {Enabled}, PollingStarted: {PollingStarted}, ReadyForPreset: {ReadyForPreset}, PresetCompleted: {PresetCompleted}",
             state.Enabled,
@@ -191,7 +191,7 @@ public class RunsController : ControllerBase
     [HttpPost("preset")]
     public async Task<IActionResult> RunPresetAsync(CancellationToken cancellationToken)
     {
-        if (!_presetGateStateStore.CanRunPreset(out var reason))
+        if (!_presetGateService.CanRunPreset(out var reason))
         {
             _logger.LogWarning("Preset launch blocked. Reason: {Reason}", reason);
             return ApiProblem(
@@ -217,10 +217,10 @@ public class RunsController : ControllerBase
                 "SCRIPT_TASK_CONFLICT");
         }
 
-        var changed = _presetGateStateStore.MarkPresetCompleted();
+        var changed = _presetGateService.MarkPresetCompleted();
         if (changed)
         {
-            await _hubContext.Clients.All.SendAsync("preset_state", _presetGateStateStore.Get(), cancellationToken);
+            await _hubContext.Clients.All.SendAsync("preset_state", _presetGateService.Get(), cancellationToken);
         }
 
         _logger.LogInformation(
@@ -236,7 +236,7 @@ public class RunsController : ControllerBase
     [HttpPost("extra")]
     public async Task<IActionResult> RunExtraAsync(CancellationToken cancellationToken)
     {
-        if (!_presetGateStateStore.CanRunMainAndExtra(out var gateReason))
+        if (!_presetGateService.CanRunMainAndExtra(out var gateReason))
         {
             _logger.LogWarning("Extra launch blocked by preset gate. Reason: {Reason}", gateReason);
             return ApiProblem(

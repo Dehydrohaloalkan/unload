@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Application;
 using Unload.Core;
 
 namespace Unload.Api;
@@ -9,20 +10,20 @@ namespace Unload.Api;
 public sealed class PresetGateBackgroundService : BackgroundService
 {
     private readonly PresetGateOptions _options;
-    private readonly PresetGateStateStore _stateStore;
+    private readonly IPresetGateService _presetGateService;
     private readonly IDatabaseClientFactory _databaseClientFactory;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<PresetGateBackgroundService> _logger;
 
     public PresetGateBackgroundService(
         PresetGateOptions options,
-        PresetGateStateStore stateStore,
+        IPresetGateService presetGateService,
         IDatabaseClientFactory databaseClientFactory,
         IHubContext<RunStatusHub> hubContext,
         ILogger<PresetGateBackgroundService> logger)
     {
         _options = options;
-        _stateStore = stateStore;
+        _presetGateService = presetGateService;
         _databaseClientFactory = databaseClientFactory;
         _hubContext = hubContext;
         _logger = logger;
@@ -30,7 +31,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _stateStore.ApplyInitialOptions(_options);
+        _presetGateService.ApplyInitialOptions(_options);
         _logger.LogInformation(
             "Preset gate service initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
             _options.Enabled,
@@ -60,7 +61,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
 
     private async Task CheckAsync(CancellationToken cancellationToken)
     {
-        if (_stateStore.RefreshDailyWindowState())
+        if (_presetGateService.RefreshDailyWindowState())
         {
             _logger.LogInformation("Preset gate daily window state updated.");
             await PublishStateAsync(cancellationToken);
@@ -80,13 +81,13 @@ public sealed class PresetGateBackgroundService : BackgroundService
             return;
         }
 
-        if (_stateStore.StartPolling())
+        if (_presetGateService.StartPolling())
         {
             _logger.LogInformation("Preset gate polling started.");
             await PublishStateAsync(cancellationToken);
         }
 
-        var state = _stateStore.Get();
+        var state = _presetGateService.Get();
         if (state.PresetCompleted || state.ReadyForPreset)
         {
             return;
@@ -95,7 +96,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
         try
         {
             var probeResult = await ProbeAsync(cancellationToken);
-            if (_stateStore.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow))
+            if (_presetGateService.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow))
             {
                 _logger.LogInformation("Preset gate probe state changed. ProbeResult: {ProbeResult}", probeResult);
                 await PublishStateAsync(cancellationToken);
@@ -140,7 +141,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
 
     private async Task PublishStateAsync(CancellationToken cancellationToken)
     {
-        await _hubContext.Clients.All.SendAsync("preset_state", _stateStore.Get(), cancellationToken);
+        await _hubContext.Clients.All.SendAsync("preset_state", _presetGateService.Get(), cancellationToken);
     }
 
     private static int Clamp(int value, int min, int max)

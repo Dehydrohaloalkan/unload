@@ -70,6 +70,9 @@
   - Дополнительные задачи: `IScriptTaskOrchestrator` / `ScriptTaskOrchestrator`:
     - `preset`: выполняет SQL-скрипты из `scripts/preset`;
     - `extra`: выполняет SQL-скрипты из корня `scripts` (без подпапок), группирует результат по `NrBank` и пишет `LineFile` в файлы.
+  - Preset-gate use-case: `IPresetGateService` / `PresetGateService`, `PresetGateOptions`, `PresetGateState`.
+    - Хранит in-memory состояние, правила временного окна и требования ежедневного `preset`.
+    - Проверяет разрешение на запуск `preset`/`run`/`extra` и формирует причины блокировки.
   - In-memory диспетчер запусков (один активный run без очереди ожидания) и store статусов, общий `RunStatusInfo`.
   - `IRunCoordinator` поддерживает остановку активного запуска (`TryCancel`) и выдает активацию вместе с токеном отмены конкретного run.
   - `RunStatusInfo` хранит статусы мемберов (`MemberStatuses`) отдельно от общего статуса запуска.
@@ -102,9 +105,8 @@
     - `run_status` — обновления статуса запуска и мемберов для всех подключенных клиентов.
     - `preset_state` — состояние preset-гейта для UI.
   - Фоновый `PresetGateBackgroundService`:
-    - после `PresetGate.StartHour:StartMinute` раз в минуту выполняет probe SQL;
-    - при probe=1 завершает мониторинг и открывает запуск preset;
-    - обычный run и extra-задача разрешены только в окне `StartHour:StartMinute`-`23:59` и только после успешного preset текущего дня.
+    - выполняет transport/infrastructure-роль: запускает probe SQL по расписанию и публикует `preset_state` в SignalR;
+    - бизнес-решения (окно времени, daily reset, блокировки запусков) делегированы в `Unload.Application` (`IPresetGateService`).
   - `Program` оставлен как точка конфигурации DI/маршрутизации (`AddControllers`, `MapControllers`), резолв путей вынесен в `ApiWorkspacePathResolver`.
   - Логи API пишутся через NLog в CSV-файл `logs/api-<date>.csv` (колонки: `timestamp`, `level`, `traceId`, `logger`, `message`, `exception`).
   - В логах фиксируются ключевые точки: запуск/конфликт/отмена run, запуск/блокировка/завершение preset и extra, переходы состояния preset-гейта.
@@ -176,7 +178,7 @@ flowchart LR
 7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска/мембера.
 8. При `POST /api/runs/{correlationId}/stop` статус сначала становится `CancellationRequested`.
 9. После фактической остановки worker статус переходит в terminal `Cancelled` (поздние `Running`-ивенты игнорируются).
-10. После `PresetGate.StartHour:StartMinute` API раз в минуту выполняет probe SQL:
+10. После `PresetGate.StartHour:StartMinute` API раз в минуту выполняет probe SQL, а решение о доступности задач принимает `IPresetGateService` из `Unload.Application`:
    - `0` -> запуск preset пока недоступен;
    - `1` -> мониторинг завершается, пользователю разрешено запускать preset;
    - после успешного preset разблокируются обычный run и extra-задача;

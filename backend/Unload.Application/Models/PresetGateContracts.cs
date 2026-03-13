@@ -1,4 +1,4 @@
-namespace Unload.Api;
+namespace Unload.Application;
 
 /// <summary>
 /// Конфигурация фоновой проверки готовности preset-задачи.

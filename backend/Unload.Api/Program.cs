@@ -31,7 +31,7 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddSingleton(presetGateOptions);
-builder.Services.AddSingleton<PresetGateStateStore>();
+builder.Services.AddSingleton<IPresetGateService, PresetGateService>();
 builder.Services.AddSingleton(runtimePaths);
 builder.Services.AddUnloadRuntime(runtimePaths, databaseSettings, runnerOptions);
 builder.Services.AddHostedService<RunProcessingBackgroundService>();

@@ -1,9 +1,9 @@
-namespace Unload.Api;
+namespace Unload.Application;
 
 /// <summary>
-/// Потокобезопасное in-memory состояние этапа готовности и выполнения preset-задачи.
+/// Потокобезопасный in-memory сервис состояния и правил preset-гейта.
 /// </summary>
-public sealed class PresetGateStateStore
+public sealed class PresetGateService : IPresetGateService
 {
     private readonly object _sync = new();
     private TimeOnly _startTime = new(15, 0);
