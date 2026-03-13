@@ -37,9 +37,41 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
-var targetCodes = args.Length == 0
+var scriptTaskOrchestrator = provider.ServiceProvider.GetRequiredService<IScriptTaskOrchestrator>();
+var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
+    ? args[0].Trim().ToLowerInvariant()
+    : "--default";
+if (mode is "--preset" or "--extra")
+{
+    AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJustified());
+    AnsiConsole.MarkupLine($"[grey]Mode:[/] {Markup.Escape(mode)}");
+    using var taskCts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;
+        taskCts.Cancel();
+    };
+
+    var taskResult = mode == "--preset"
+        ? await scriptTaskOrchestrator.RunPresetAsync(taskCts.Token)
+        : await scriptTaskOrchestrator.RunExtraAsync(taskCts.Token);
+
+    AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskName)}");
+    AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.CorrelationId)}");
+    AnsiConsole.MarkupLine($"[grey]Scripts:[/] {taskResult.ScriptsExecuted}");
+    AnsiConsole.MarkupLine($"[grey]Files:[/] {taskResult.FilesWritten}");
+    AnsiConsole.MarkupLine($"[grey]Output:[/] {Markup.Escape(taskResult.OutputPath ?? "-")}");
+    return;
+}
+
+var targetArgs = mode == "--default" && args.Length > 0 && string.Equals(args[0], "--default", StringComparison.OrdinalIgnoreCase)
+    ? args[1..]
+    : mode == "--default"
+        ? args
+        : args[1..];
+var targetCodes = targetArgs.Length == 0
     ? await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, CancellationToken.None)
-    : args.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+    : targetArgs.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 var orchestrator = provider.ServiceProvider.GetRequiredService<IRunOrchestrator>();
@@ -176,7 +208,7 @@ static Table BuildGlobalLogsTable(IReadOnlyCollection<string> globalLogs)
         .Expand()
         .Border(TableBorder.Rounded)
         .Title("Global Logs (last 15)");
-    logsTable.AddColumn(new TableColumn("Event").NoWrap(false));
+    logsTable.AddColumn(new TableColumn("Event"));
 
     if (globalLogs.Count == 0)
     {

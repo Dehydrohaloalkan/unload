@@ -60,11 +60,19 @@ public class InMemoryRunStateStore : IRunStateStore
                 now,
                 Message: "Run started.",
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
-            (_, current) => current with
+            (_, current) =>
             {
-                Status = RunLifecycleStatus.Running,
-                UpdatedAt = now,
-                Message = "Run started."
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.Running,
+                    UpdatedAt = now,
+                    Message = "Run started."
+                };
             });
     }
 
@@ -90,14 +98,28 @@ public class InMemoryRunStateStore : IRunStateStore
                     new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                     @event,
                     now)),
-            (_, current) => current with
+            (_, current) =>
             {
-                Status = MapStatus(@event.Step),
-                UpdatedAt = now,
-                LastStep = @event.Step,
-                Message = @event.Message,
-                OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
-                MemberStatuses = ApplyMemberEvent(current.MemberStatuses, @event, now)
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                if (current.Status == RunLifecycleStatus.CancellationRequested &&
+                    @event.Step is not RunnerStep.Completed and not RunnerStep.Failed)
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = MapStatus(@event.Step),
+                    UpdatedAt = now,
+                    LastStep = @event.Step,
+                    Message = @event.Message,
+                    OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
+                    MemberStatuses = ApplyMemberEvent(current.MemberStatuses, @event, now)
+                };
             });
     }
 
@@ -136,6 +158,40 @@ public class InMemoryRunStateStore : IRunStateStore
     }
 
     /// <summary>
+    /// Помечает запуск как ожидающий завершения отмены.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение о запросе отмены.</param>
+    public void SetCancellationRequested(string correlationId, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.CancellationRequested,
+                Array.Empty<string>(),
+                now,
+                now,
+                Message: message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
+            (_, current) =>
+            {
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.CancellationRequested,
+                    UpdatedAt = now,
+                    Message = message
+                };
+            });
+    }
+
+    /// <summary>
     /// Помечает запуск как отмененный пользователем.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
@@ -154,18 +210,26 @@ public class InMemoryRunStateStore : IRunStateStore
                 RunnerStep.Failed,
                 message,
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)),
-            (_, current) => current with
+            (_, current) =>
             {
-                Status = RunLifecycleStatus.Cancelled,
-                UpdatedAt = now,
-                LastStep = RunnerStep.Failed,
-                Message = message,
-                MemberStatuses = UpdateAllMemberStatuses(
-                    current.MemberStatuses,
-                    MemberRunLifecycleStatus.Cancelled,
-                    RunnerStep.Failed,
-                    message,
-                    now)
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.Cancelled,
+                    UpdatedAt = now,
+                    LastStep = RunnerStep.Failed,
+                    Message = message,
+                    MemberStatuses = UpdateAllMemberStatuses(
+                        current.MemberStatuses,
+                        MemberRunLifecycleStatus.Cancelled,
+                        RunnerStep.Failed,
+                        message,
+                        now)
+                };
             });
     }
 
@@ -203,6 +267,11 @@ public class InMemoryRunStateStore : IRunStateStore
             RunnerStep.Failed => RunLifecycleStatus.Failed,
             _ => RunLifecycleStatus.Running
         };
+    }
+
+    private static bool IsTerminalStatus(RunLifecycleStatus status)
+    {
+        return status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled;
     }
 
     private static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyMemberEvent(

@@ -36,6 +36,13 @@ public interface IRunStateStore
     void SetFailed(string correlationId, string message);
 
     /// <summary>
+    /// Помечает запуск как ожидающий завершения отмены.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение о запросе отмены.</param>
+    void SetCancellationRequested(string correlationId, string message);
+
+    /// <summary>
     /// Помечает запуск как отмененный по запросу пользователя.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>

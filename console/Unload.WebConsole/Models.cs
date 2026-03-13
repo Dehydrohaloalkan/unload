@@ -45,7 +45,8 @@ internal enum RunLifecycleStatus
     Running,
     Completed,
     Failed,
-    Cancelled
+    Cancelled,
+    CancellationRequested
 }
 
 /// <summary>
@@ -121,6 +122,30 @@ internal record RunnerEventDto(
 internal record RunnerEventLine(DateTime Time, RunnerStep Step, string Message);
 
 /// <summary>
+/// Состояние preset-гейта, приходящее из API/SignalR.
+/// </summary>
+internal record PresetGateStateDto(
+    bool Enabled,
+    bool PollingStarted,
+    bool RequiresPresetExecution,
+    bool ReadyForPreset,
+    bool PresetCompleted,
+    int? LastProbeValue,
+    DateTimeOffset? LastProbeAt,
+    string Message);
+
+/// <summary>
+/// Результат запуска preset/extra задач через API.
+/// </summary>
+internal record ScriptTaskRunResultDto(
+    string TaskName,
+    string CorrelationId,
+    int ScriptsExecuted,
+    int FilesWritten,
+    string? OutputPath,
+    string Message);
+
+/// <summary>
 /// Снимок UI-состояния для построения панели и ленты событий.
 /// </summary>
 internal record UiSnapshot(
@@ -129,4 +154,5 @@ internal record UiSnapshot(
     string? Message,
     DateTimeOffset? UpdatedAt,
     IReadOnlyList<RunnerEventLine> Events,
-    IReadOnlyList<MemberRunStatusInfoDto> Members);
+    IReadOnlyList<MemberRunStatusInfoDto> Members,
+    PresetGateStateDto? PresetState);

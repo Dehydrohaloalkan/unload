@@ -110,6 +110,16 @@ internal static class RunDashboardBuilder
         info.AddRow("[grey]" + statusLabel + "[/]", $"[{GetRunStatusColor(snapshot.Status)}]{Markup.Escape(statusText)}[/]");
         info.AddRow("[grey]Last step[/]", Markup.Escape(snapshot.LastStep?.ToString() ?? "-"));
         info.AddRow("[grey]Updated[/]", snapshot.UpdatedAt?.ToLocalTime().ToString("HH:mm:ss") ?? "-");
+        var presetStateText = snapshot.PresetState is null
+            ? "-"
+            : snapshot.PresetState.PresetCompleted
+                ? "completed"
+                : snapshot.PresetState.ReadyForPreset
+                    ? "ready"
+                    : snapshot.PresetState.RequiresPresetExecution
+                        ? "locked"
+                        : "open";
+        info.AddRow("[grey]Preset gate[/]", Markup.Escape(presetStateText));
         info.AddRow("[grey]Message[/]", Markup.Escape(snapshot.Message ?? "-"));
         return new Panel(info).Header(headerTitle).RoundedBorder();
     }

@@ -15,9 +15,12 @@ public class RunsController : ControllerBase
 {
     private readonly ICatalogService _catalogService;
     private readonly IRunOrchestrator _orchestrator;
+    private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator;
     private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
+    private readonly PresetGateStateStore _presetGateStateStore;
     private readonly IHubContext<RunStatusHub> _hubContext;
+    private readonly ILogger<RunsController> _logger;
 
     /// <summary>
     /// Создает контроллер запусков.
@@ -30,15 +33,21 @@ public class RunsController : ControllerBase
     public RunsController(
         ICatalogService catalogService,
         IRunOrchestrator orchestrator,
+        IScriptTaskOrchestrator scriptTaskOrchestrator,
         IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
-        IHubContext<RunStatusHub> hubContext)
+        PresetGateStateStore presetGateStateStore,
+        IHubContext<RunStatusHub> hubContext,
+        ILogger<RunsController> logger)
     {
         _catalogService = catalogService;
         _orchestrator = orchestrator;
+        _scriptTaskOrchestrator = scriptTaskOrchestrator;
         _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
+        _presetGateStateStore = presetGateStateStore;
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     /// <summary>
@@ -50,9 +59,24 @@ public class RunsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> StartRunAsync([FromBody] RunStartRequest request, CancellationToken cancellationToken)
     {
+        if (!_presetGateStateStore.CanRunMainAndExtra(out var gateReason))
+        {
+            _logger.LogWarning("Run launch blocked by preset gate. Reason: {Reason}", gateReason);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Run is blocked by preset gate",
+                gateReason,
+                "PRESET_GATE_BLOCKED");
+        }
+
         if (request.MemberCodes is null)
         {
-            return BadRequest(new { message = "Member codes payload is required." });
+            _logger.LogWarning("Run launch rejected: memberCodes payload is missing.");
+            return ApiProblem(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "Member codes payload is required.",
+                "VALIDATION_ERROR");
         }
 
         var normalizedMemberCodes = request.MemberCodes
@@ -62,7 +86,12 @@ public class RunsController : ControllerBase
             .ToArray();
         if (normalizedMemberCodes.Length == 0)
         {
-            return BadRequest(new { message = "At least one member code is required." });
+            _logger.LogWarning("Run launch rejected: memberCodes became empty after normalization.");
+            return ApiProblem(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "At least one member code is required.",
+                "VALIDATION_ERROR");
         }
 
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
@@ -73,11 +102,12 @@ public class RunsController : ControllerBase
         var unknownCodes = normalizedMemberCodes.Where(code => !selectedCodes.Contains(code)).ToArray();
         if (unknownCodes.Length > 0)
         {
-            return BadRequest(new
-            {
-                message = $"Unknown member codes: {string.Join(", ", unknownCodes)}",
-                unknownMemberCodes = unknownCodes
-            });
+            _logger.LogWarning("Run launch rejected: unknown member codes requested: {UnknownCodes}", string.Join(", ", unknownCodes));
+            return ApiProblem(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                $"Unknown member codes: {string.Join(", ", unknownCodes)}",
+                "UNKNOWN_MEMBER_CODES");
         }
 
         var selectedMemberIds = selectedMembers.Select(static x => x.Id).ToHashSet();
@@ -88,7 +118,12 @@ public class RunsController : ControllerBase
             .ToArray();
         if (targetCodes.Length == 0)
         {
-            return BadRequest(new { message = "No target codes found for selected members." });
+            _logger.LogWarning("Run launch rejected: no target codes resolved for selected members.");
+            return ApiProblem(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "No target codes found for selected members.",
+                "TARGET_CODES_NOT_FOUND");
         }
 
         string correlationId;
@@ -98,12 +133,23 @@ public class RunsController : ControllerBase
         }
         catch (RunAlreadyInProgressException ex)
         {
-            return Conflict(new
-            {
-                message = ex.Message,
-                activeCorrelationId = ex.ActiveCorrelationId
-            });
+            _logger.LogWarning("Run launch conflict. ActiveCorrelationId: {ActiveCorrelationId}", ex.ActiveCorrelationId);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Run conflict",
+                ex.Message,
+                "RUN_ALREADY_IN_PROGRESS",
+                new Dictionary<string, object?>
+                {
+                    ["activeCorrelationId"] = ex.ActiveCorrelationId
+                });
         }
+
+        _logger.LogInformation(
+            "Run accepted. CorrelationId: {CorrelationId}, Members: {MemberCount}, Targets: {TargetCount}",
+            correlationId,
+            selectedMembers.Length,
+            targetCodes.Length);
 
         var runState = _runStateStore.Get(correlationId);
         if (runState is not null)
@@ -121,6 +167,105 @@ public class RunsController : ControllerBase
                 "status",
                 "run_status",
                 $"/api/runs/{correlationId}/stop"));
+    }
+
+    /// <summary>
+    /// Возвращает состояние preset-гейта (расписание, готовность, признак завершения).
+    /// </summary>
+    [HttpGet("preset/state")]
+    public IActionResult GetPresetState()
+    {
+        var state = _presetGateStateStore.Get();
+        _logger.LogDebug(
+            "Preset state requested. Enabled: {Enabled}, PollingStarted: {PollingStarted}, ReadyForPreset: {ReadyForPreset}, PresetCompleted: {PresetCompleted}",
+            state.Enabled,
+            state.PollingStarted,
+            state.ReadyForPreset,
+            state.PresetCompleted);
+        return Ok(state);
+    }
+
+    /// <summary>
+    /// Запускает preset-задачу (скрипты из <c>scripts/preset</c>).
+    /// </summary>
+    [HttpPost("preset")]
+    public async Task<IActionResult> RunPresetAsync(CancellationToken cancellationToken)
+    {
+        if (!_presetGateStateStore.CanRunPreset(out var reason))
+        {
+            _logger.LogWarning("Preset launch blocked. Reason: {Reason}", reason);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Preset is not available",
+                reason,
+                "PRESET_GATE_BLOCKED");
+        }
+
+        ScriptTaskRunResult result;
+        try
+        {
+            _logger.LogInformation("Preset task launch requested.");
+            result = await _scriptTaskOrchestrator.RunPresetAsync(cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Preset task conflict: {Message}", ex.Message);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Preset task conflict",
+                ex.Message,
+                "SCRIPT_TASK_CONFLICT");
+        }
+
+        var changed = _presetGateStateStore.MarkPresetCompleted();
+        if (changed)
+        {
+            await _hubContext.Clients.All.SendAsync("preset_state", _presetGateStateStore.Get(), cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Preset task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}",
+            result.CorrelationId,
+            result.ScriptsExecuted);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Запускает доп-выгрузку скриптов из корня <c>scripts</c> (без подпапок).
+    /// </summary>
+    [HttpPost("extra")]
+    public async Task<IActionResult> RunExtraAsync(CancellationToken cancellationToken)
+    {
+        if (!_presetGateStateStore.CanRunMainAndExtra(out var gateReason))
+        {
+            _logger.LogWarning("Extra launch blocked by preset gate. Reason: {Reason}", gateReason);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Extra task is blocked by preset gate",
+                gateReason,
+                "PRESET_GATE_BLOCKED");
+        }
+
+        try
+        {
+            _logger.LogInformation("Extra task launch requested.");
+            var result = await _scriptTaskOrchestrator.RunExtraAsync(cancellationToken);
+            _logger.LogInformation(
+                "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}",
+                result.CorrelationId,
+                result.ScriptsExecuted,
+                result.FilesWritten);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Extra task conflict: {Message}", ex.Message);
+            return ApiProblem(
+                StatusCodes.Status409Conflict,
+                "Extra task conflict",
+                ex.Message,
+                "SCRIPT_TASK_CONFLICT");
+        }
     }
 
     /// <summary>
@@ -175,10 +320,15 @@ public class RunsController : ControllerBase
     {
         if (!_runCoordinator.TryCancel(correlationId))
         {
-            return NotFound(new { message = "Active run with specified correlationId was not found." });
+            return ApiProblem(
+                StatusCodes.Status404NotFound,
+                "Run was not found",
+                "Active run with specified correlationId was not found.",
+                "RUN_NOT_FOUND");
         }
 
-        _runStateStore.SetCancelled(correlationId, "Run cancellation requested.");
+        _runStateStore.SetCancellationRequested(correlationId, "Run cancellation requested.");
+        _logger.LogInformation("Run cancellation requested. CorrelationId: {CorrelationId}", correlationId);
         var state = _runStateStore.Get(correlationId);
         if (state is not null)
         {
@@ -186,5 +336,34 @@ public class RunsController : ControllerBase
         }
 
         return Accepted($"/api/runs/{correlationId}", new { correlationId, status = "cancellation_requested" });
+    }
+
+    private ObjectResult ApiProblem(
+        int statusCode,
+        string title,
+        string detail,
+        string errorCode,
+        IReadOnlyDictionary<string, object?>? extensions = null)
+    {
+        var problem = new ProblemDetails
+        {
+            Type = $"https://httpstatuses.com/{statusCode}",
+            Title = title,
+            Status = statusCode,
+            Detail = detail,
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["errorCode"] = errorCode;
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        if (extensions is not null)
+        {
+            foreach (var (key, extensionValue) in extensions)
+            {
+                problem.Extensions[key] = extensionValue;
+            }
+        }
+
+        return StatusCode(statusCode, problem);
     }
 }

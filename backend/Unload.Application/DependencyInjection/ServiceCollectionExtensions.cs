@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Unload.Catalog;
 using Unload.Core;
 using Unload.Cryptography;
@@ -57,6 +58,12 @@ public static class ServiceCollectionExtensions
             _.GetRequiredService<IRunCoordinator>(),
             _.GetRequiredService<IRunStateStore>(),
             paths.OutputDirectory));
+        services.AddSingleton<IScriptTaskOrchestrator>(_ => new ScriptTaskOrchestrator(
+            paths.ScriptsDirectory,
+            paths.OutputDirectory,
+            _.GetRequiredService<IDatabaseClientFactory>(),
+            _.GetRequiredService<IMqPublisher>(),
+            _.GetRequiredService<ILogger<ScriptTaskOrchestrator>>()));
 
         return services;
     }

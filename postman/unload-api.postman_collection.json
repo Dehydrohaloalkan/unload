@@ -1,0 +1,692 @@
+{
+  "info": {
+    "_postman_id": "5b0d86b3-77e8-4f0a-9ebf-8e518b83d3a4",
+    "name": "Unload API",
+    "description": "Collection with smoke and edge-case tests for Unload API lifecycle.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Smoke",
+      "item": [
+        {
+          "name": "Get Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-members"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "members"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Body is array', function () {",
+                  "  pm.expect(Array.isArray(body)).to.eql(true);",
+                  "});",
+                  "if (Array.isArray(body) && body.length > 0 && body[0].code) {",
+                  "  pm.collectionVariables.set('memberCode', body[0].code);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Preset State",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-preset-state"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/preset/state",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "preset",
+                "state"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Preset state has key fields', function () {",
+                  "  pm.expect(body).to.have.property('enabled');",
+                  "  pm.expect(body).to.have.property('pollingStarted');",
+                  "  pm.expect(body).to.have.property('requiresPresetExecution');",
+                  "  pm.expect(body).to.have.property('readyForPreset');",
+                  "  pm.expect(body).to.have.property('presetCompleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Active Run",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-active-run"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "active"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', function () {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body && body.correlationId) {",
+                  "    pm.collectionVariables.set('correlationId', body.correlationId);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Main Run Flow",
+      "item": [
+        {
+          "name": "Start Main Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-start-main"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberCodes\": [\"{{memberCode}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 409', function () {",
+                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 202) {",
+                  "  pm.test('Accepted response has correlationId', function () {",
+                  "    pm.expect(body).to.have.property('correlationId');",
+                  "  });",
+                  "  pm.collectionVariables.set('correlationId', body.correlationId);",
+                  "} else {",
+                  "  pm.test('Conflict includes ProblemDetails fields', function () {",
+                  "    pm.expect(body).to.have.property('status');",
+                  "    pm.expect(body).to.have.property('errorCode');",
+                  "  });",
+                  "  if (body.activeCorrelationId) {",
+                  "    pm.collectionVariables.set('correlationId', body.activeCorrelationId);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Start Main Run Again (conflict expected if already running)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-start-main-again"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberCodes\": [\"{{memberCode}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 409', function () {",
+                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 409) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Conflict returns errorCode', function () {",
+                  "    pm.expect(body).to.have.property('errorCode');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Run By Correlation Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-run-by-id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{correlationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "{{correlationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 404', function () {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Run contains status and correlationId', function () {",
+                  "    pm.expect(body).to.have.property('status');",
+                  "    pm.expect(body).to.have.property('correlationId');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Stop Run By Correlation Id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-stop-run-by-id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{correlationId}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "{{correlationId}}",
+                "stop"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 404', function () {",
+                  "  pm.expect([202, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 404) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Not found has RUN_NOT_FOUND code', function () {",
+                  "    pm.expect(body.errorCode).to.eql('RUN_NOT_FOUND');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "List Runs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-list-runs"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Body is array', function () {",
+                  "  pm.expect(Array.isArray(body)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Preset And Extra",
+      "item": [
+        {
+          "name": "Run Preset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-run-preset"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/preset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "preset"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 409', function () {",
+                  "  pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Preset response contains scriptsExecuted', function () {",
+                  "    pm.expect(body).to.have.property('scriptsExecuted');",
+                  "    pm.expect(body).to.have.property('correlationId');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Conflict has PRESET_GATE_BLOCKED or SCRIPT_TASK_CONFLICT', function () {",
+                  "    pm.expect(['PRESET_GATE_BLOCKED', 'SCRIPT_TASK_CONFLICT']).to.include(body.errorCode);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Run Extra",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-run-extra"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/extra",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "extra"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 409', function () {",
+                  "  pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Extra response contains expected fields', function () {",
+                  "    pm.expect(body).to.have.property('scriptsExecuted');",
+                  "    pm.expect(body).to.have.property('filesWritten');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Conflict has expected errorCode', function () {",
+                  "    pm.expect(['PRESET_GATE_BLOCKED', 'SCRIPT_TASK_CONFLICT']).to.include(body.errorCode);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Edge Cases",
+      "item": [
+        {
+          "name": "Start Main Run - Empty memberCodes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-start-main-empty-members"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberCodes\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 or 409', function () {",
+                  "  pm.expect([400, 409]).to.include(pm.response.code);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Error contract has errorCode', function () {",
+                  "  pm.expect(body).to.have.property('errorCode');",
+                  "});",
+                  "pm.test('Error code is validation or gate-related', function () {",
+                  "  pm.expect(['VALIDATION_ERROR', 'PRESET_GATE_BLOCKED']).to.include(body.errorCode);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Start Main Run - Unknown member code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-start-main-unknown-member"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberCodes\": [\"ZZZ_UNKNOWN\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 or 409', function () {",
+                  "  pm.expect([400, 409]).to.include(pm.response.code);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Unknown member or gate block returned', function () {",
+                  "  pm.expect(['UNKNOWN_MEMBER_CODES', 'PRESET_GATE_BLOCKED']).to.include(body.errorCode);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Run By Unknown Correlation Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-run-unknown-id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{unknownCorrelationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "{{unknownCorrelationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Stop Unknown Correlation Id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-stop-run-unknown-id"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/{{unknownCorrelationId}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "{{unknownCorrelationId}}",
+                "stop"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Error code is RUN_NOT_FOUND', function () {",
+                  "  pm.expect(body.errorCode).to.eql('RUN_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "memberCode",
+      "value": "M"
+    },
+    {
+      "key": "correlationId",
+      "value": ""
+    },
+    {
+      "key": "unknownCorrelationId",
+      "value": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

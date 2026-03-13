@@ -26,7 +26,14 @@ internal sealed class RunApiClient(HttpClient httpClient)
 
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            var conflict = await response.Content.ReadFromJsonAsync<RunConflictResponse>(cancellationToken: cancellationToken);
+            var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+            var message = payload.TryGetProperty("detail", out var detailElement)
+                ? detailElement.GetString()
+                : "Run is already in progress.";
+            var activeCorrelationId = payload.TryGetProperty("activeCorrelationId", out var activeCorrelationElement)
+                ? activeCorrelationElement.GetString()
+                : null;
+            var conflict = new RunConflictResponse(message ?? "Run is already in progress.", activeCorrelationId);
             return new RunStartResult(null, conflict);
         }
 
@@ -102,5 +109,42 @@ internal sealed class RunApiClient(HttpClient httpClient)
             content: null,
             cancellationToken);
         return response.StatusCode == HttpStatusCode.Accepted;
+    }
+
+    /// <summary>
+    /// Возвращает текущее состояние preset-гейта.
+    /// </summary>
+    public async Task<PresetGateStateDto?> GetPresetStateAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync("/api/runs/preset/state", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<PresetGateStateDto>(cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Запускает preset-задачу на API.
+    /// </summary>
+    public async Task<ScriptTaskRunResultDto> RunPresetAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync("/api/runs/preset", content: null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResultDto>(cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Preset result payload is empty.");
+    }
+
+    /// <summary>
+    /// Запускает extra-задачу на API.
+    /// </summary>
+    public async Task<ScriptTaskRunResultDto> RunExtraAsync(CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsync("/api/runs/extra", content: null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResultDto>(cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Extra result payload is empty.");
     }
 }

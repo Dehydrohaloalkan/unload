@@ -8,6 +8,7 @@ internal sealed class UiState
     private readonly object _sync = new();
     private readonly Queue<RunnerEventLine> _events = new();
     private RunStatusInfoDto? _status;
+    private PresetGateStateDto? _presetState;
 
     /// <summary>
     /// Добавляет событие раннера в очередь отображаемых записей.
@@ -42,6 +43,17 @@ internal sealed class UiState
     }
 
     /// <summary>
+    /// Обновляет состояние preset-гейта.
+    /// </summary>
+    public void SetPresetState(PresetGateStateDto state)
+    {
+        lock (_sync)
+        {
+            _presetState = state;
+        }
+    }
+
+    /// <summary>
     /// Возвращает потокобезопасный снимок данных для отрисовки.
     /// </summary>
     /// <returns>Текущее состояние панели и ленты событий.</returns>
@@ -57,7 +69,8 @@ internal sealed class UiState
                 _events.ToArray(),
                 _status?.MemberStatuses?.Values
                     .OrderBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
-                    .ToArray() ?? Array.Empty<MemberRunStatusInfoDto>());
+                    .ToArray() ?? Array.Empty<MemberRunStatusInfoDto>(),
+                _presetState);
         }
     }
 }

@@ -60,11 +60,37 @@ internal static class WebConsoleRunner
             RenderHeader(options);
             RegisterConnectionHandlers(connection, sessionState, uiState, runCompleted);
             await ConnectToHubAsync(connection, cts.Token);
-            await ResolveTrackedRunAsync(options, apiClient, sessionState, cts.Token);
+            var presetState = await apiClient.GetPresetStateAsync(cts.Token);
+            if (presetState is not null)
+            {
+                uiState.SetPresetState(presetState);
+            }
+
+            if (options.RunPresetTask)
+            {
+                await RunPresetTaskAsync(apiClient, uiState, cts.Token);
+                return;
+            }
+
+            if (options.RunExtraTask)
+            {
+                await RunExtraTaskAsync(apiClient, uiState, cts.Token);
+                return;
+            }
+
+            await ResolveTrackedRunAsync(options, apiClient, sessionState, uiState, cts.Token);
 
             if (string.IsNullOrWhiteSpace(sessionState.TrackedCorrelationId))
             {
-                AnsiConsole.MarkupLine("[yellow]No active run found. Nothing to watch.[/]");
+                var currentPreset = uiState.GetSnapshot().PresetState;
+                if (currentPreset?.RequiresPresetExecution == true && !currentPreset.PresetCompleted)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Preset is required before starting main or extra tasks.[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[yellow]No active run found. Nothing to watch.[/]");
+                }
                 return;
             }
 
@@ -140,6 +166,11 @@ internal static class WebConsoleRunner
                 runCompleted.TrySetResult(true);
             }
         });
+
+        connection.On<PresetGateStateDto>("preset_state", presetState =>
+        {
+            uiState.SetPresetState(presetState);
+        });
     }
 
     /// <summary>
@@ -165,6 +196,7 @@ internal static class WebConsoleRunner
         AppOptions options,
         RunApiClient apiClient,
         RunnerSessionState sessionState,
+        UiState uiState,
         CancellationToken cancellationToken)
     {
         sessionState.TrackedCorrelationId = await apiClient.ResolveActiveCorrelationIdAsync(cancellationToken) ?? string.Empty;
@@ -183,6 +215,13 @@ internal static class WebConsoleRunner
             return;
         }
 
+        var presetState = uiState.GetSnapshot().PresetState;
+        if (presetState?.RequiresPresetExecution == true && !presetState.PresetCompleted)
+        {
+            AnsiConsole.MarkupLine("[yellow]Main run is locked until preset task is completed.[/]");
+            return;
+        }
+
         var startResult = await apiClient.StartRunAsync(selectedMemberCodes, cancellationToken);
         if (startResult.Accepted is not null)
         {
@@ -193,6 +232,40 @@ internal static class WebConsoleRunner
 
         sessionState.TrackedCorrelationId = startResult.Conflict?.ActiveCorrelationId ?? string.Empty;
         AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(startResult.Conflict?.Message ?? "Run is already in progress.")}[/]");
+    }
+
+    private static async Task RunPresetTaskAsync(
+        RunApiClient apiClient,
+        UiState uiState,
+        CancellationToken cancellationToken)
+    {
+        var presetState = uiState.GetSnapshot().PresetState;
+        if (presetState is not null && (!presetState.ReadyForPreset || presetState.PresetCompleted))
+        {
+            AnsiConsole.MarkupLine($"[yellow]Preset is not available:[/] {Markup.Escape(presetState.Message)}");
+            return;
+        }
+
+        var result = await apiClient.RunPresetAsync(cancellationToken);
+        AnsiConsole.MarkupLine(
+            $"[green]Preset completed.[/] Scripts: {result.ScriptsExecuted}, CorrelationId: {Markup.Escape(result.CorrelationId)}");
+    }
+
+    private static async Task RunExtraTaskAsync(
+        RunApiClient apiClient,
+        UiState uiState,
+        CancellationToken cancellationToken)
+    {
+        var presetState = uiState.GetSnapshot().PresetState;
+        if (presetState?.RequiresPresetExecution == true && !presetState.PresetCompleted)
+        {
+            AnsiConsole.MarkupLine("[yellow]Extra task is locked until preset task is completed.[/]");
+            return;
+        }
+
+        var result = await apiClient.RunExtraAsync(cancellationToken);
+        AnsiConsole.MarkupLine(
+            $"[green]Extra completed.[/] Scripts: {result.ScriptsExecuted}, Files: {result.FilesWritten}, Output: {Markup.Escape(result.OutputPath ?? "-")}");
     }
 
     /// <summary>

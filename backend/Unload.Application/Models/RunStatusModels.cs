@@ -11,7 +11,8 @@ public enum RunLifecycleStatus
     Running,
     Completed,
     Failed,
-    Cancelled
+    Cancelled,
+    CancellationRequested
 }
 
 /// <summary>

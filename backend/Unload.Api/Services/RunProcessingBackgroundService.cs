@@ -52,6 +52,7 @@ public class RunProcessingBackgroundService : BackgroundService
             var runToken = runCts.Token;
             _runStateStore.SetRunning(request.CorrelationId);
             await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+            _logger.LogInformation("Run moved to Running. CorrelationId: {CorrelationId}", request.CorrelationId);
 
             try
             {
@@ -74,6 +75,7 @@ public class RunProcessingBackgroundService : BackgroundService
             {
                 _runStateStore.SetCancelled(request.CorrelationId, "Run was cancelled by user.");
                 await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+                _logger.LogInformation("Run cancelled by user. CorrelationId: {CorrelationId}", request.CorrelationId);
             }
             catch (Exception ex)
             {
@@ -83,6 +85,15 @@ public class RunProcessingBackgroundService : BackgroundService
             }
             finally
             {
+                var finalState = _runStateStore.Get(request.CorrelationId);
+                if (finalState is not null)
+                {
+                    _logger.LogInformation(
+                        "Run finished. CorrelationId: {CorrelationId}, Status: {Status}",
+                        request.CorrelationId,
+                        finalState.Status);
+                }
+
                 _runCoordinator.Complete(request.CorrelationId);
             }
         }

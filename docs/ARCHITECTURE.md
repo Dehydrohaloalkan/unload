@@ -67,6 +67,9 @@
 - `backend/Unload.Application`
   - Application-слой use-case запуска выгрузки.
   - Контракты и реализации orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
+  - Дополнительные задачи: `IScriptTaskOrchestrator` / `ScriptTaskOrchestrator`:
+    - `preset`: выполняет SQL-скрипты из `scripts/preset`;
+    - `extra`: выполняет SQL-скрипты из корня `scripts` (без подпапок), группирует результат по `NrBank` и пишет `LineFile` в файлы.
   - In-memory диспетчер запусков (один активный run без очереди ожидания) и store статусов, общий `RunStatusInfo`.
   - `IRunCoordinator` поддерживает остановку активного запуска (`TryCancel`) и выдает активацию вместе с токеном отмены конкретного run.
   - `RunStatusInfo` хранит статусы мемберов (`MemberStatuses`) отдельно от общего статуса запуска.
@@ -76,6 +79,7 @@
 - `backend/Unload.Api`
   - ASP.NET Core API + SignalR.
   - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
+  - Единый контракт ошибок через `ProblemDetails` + глобальный exception handler.
   - HTTP-эндпоинты вынесены в MVC-контроллеры: `CatalogController` (`/api/catalog`, `/api/members`) и `RunsController` (`/api/runs*`).
   - Настройки БД читаются из секции `Database` (`TimeoutSeconds`, `ConnectionString`) в `appsettings.Development.json` / `appsettings.Production.json`; секция обязательна.
   - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
@@ -83,6 +87,9 @@
     - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
   - `GET /api/members` — отдает список мемберов для запуска (`code`, `name`, `targetCodes`) и, если есть активный запуск, текущий статус мембера (`activeRunCorrelationId`, `activeRunStatus`).
   - `POST /api/runs` — запускает выгрузку для выбранных мемберов (`memberCodes`) и возвращает `correlationId`.
+  - `GET /api/runs/preset/state` — состояние preset-гейта (расписание, готовность, блокировка).
+  - `POST /api/runs/preset` — запускает preset-задачу.
+  - `POST /api/runs/extra` — запускает extra-задачу root-скриптов.
   - Если запуск уже выполняется, `POST /api/runs` возвращает `409 Conflict` с `activeCorrelationId`.
   - `POST /api/runs/{correlationId}/stop` — останавливает активный запуск по `correlationId`.
   - `GET /api/runs` — список запусков и их статусы.
@@ -93,7 +100,14 @@
   - SignalR события:
     - `status` — события раннера активного запуска для всех подключенных клиентов;
     - `run_status` — обновления статуса запуска и мемберов для всех подключенных клиентов.
+    - `preset_state` — состояние preset-гейта для UI.
+  - Фоновый `PresetGateBackgroundService`:
+    - после `PresetGate.StartHour:StartMinute` раз в минуту выполняет probe SQL;
+    - при probe=1 завершает мониторинг и открывает запуск preset;
+    - обычный run и extra-задача разрешены только в окне `StartHour:StartMinute`-`23:59` и только после успешного preset текущего дня.
   - `Program` оставлен как точка конфигурации DI/маршрутизации (`AddControllers`, `MapControllers`), резолв путей вынесен в `ApiWorkspacePathResolver`.
+  - Логи API пишутся через NLog в CSV-файл `logs/api-<date>.csv` (колонки: `timestamp`, `level`, `traceId`, `logger`, `message`, `exception`).
+  - В логах фиксируются ключевые точки: запуск/конфликт/отмена run, запуск/блокировка/завершение preset и extra, переходы состояния preset-гейта.
 
 - `console/Unload.Console`
   - Точка входа.
@@ -107,6 +121,7 @@
 - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам через `ICatalogService.GetCatalogAsync()` из `backend/Unload.Catalog`; в мультиселекте все пункты выбраны по умолчанию.
 - Во время выполнения показывает live-таблицу по количеству worker-потоков (`Runner.WorkerCount`) с фиксированной шириной колонок и текущим состоянием каждого потока (`running <script>` / `idle`) плюс последнее событие раннера.
   - Во время выполнения показывает live-таблицу worker-потоков и отдельный глобальный блок логов под таблицей на всю ширину (`последние 15 событий`).
+  - Поддерживает режимы `--preset` и `--extra` для локального запуска дополнительных задач.
   - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор на основе `CatalogInfo`).
 
 - `console/Unload.WebConsole`
@@ -121,6 +136,8 @@
   - После завершения run live-рендер очищается и выводится отдельный финальный snapshot (`Run Finished`, `Final Members`, `Final Events`), чтобы исключить визуальную путаницу со «старой» динамической таблицей.
   - Ожидание завершения run в клиенте реализовано через встроенный `PeriodicTimer` (.NET), без ручного цикла `Task.Delay`.
   - Если `--members` не передан, показывает интерактивный multi-select мемберов из `GET /api/members`; пустой выбор включает режим наблюдения за активной выгрузкой.
+  - Поддерживает флаги `--preset` и `--extra` для запуска новых задач через API.
+  - Подписывается на `preset_state`, чтобы отображать готовность preset и блокировки.
 
 ## Module diagram
 
@@ -157,7 +174,14 @@ flowchart LR
    - worker формирует чанки и сразу пишет их на диск;
    - если скрипт вернул `0` строк, выходной файл не создается.
 7. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска/мембера.
-8. В конце эмитится `Completed` или `Failed`; при остановке пользователем статус становится `Cancelled`.
+8. При `POST /api/runs/{correlationId}/stop` статус сначала становится `CancellationRequested`.
+9. После фактической остановки worker статус переходит в terminal `Cancelled` (поздние `Running`-ивенты игнорируются).
+10. После `PresetGate.StartHour:StartMinute` API раз в минуту выполняет probe SQL:
+   - `0` -> запуск preset пока недоступен;
+   - `1` -> мониторинг завершается, пользователю разрешено запускать preset;
+   - после успешного preset разблокируются обычный run и extra-задача;
+   - до `StartHour:StartMinute` и после `23:59` обычный run и extra-задача всегда заблокированы;
+   - после смены даты требуется новый preset для нового окна выгрузки.
 
 ## Каталог и bigScripts
 
@@ -263,6 +287,24 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"memberCodes\":[\"M\"]}"
 ```
 
+Проверка состояния preset-гейта:
+
+```powershell
+curl http://localhost:5000/api/runs/preset/state
+```
+
+Запуск preset-задачи:
+
+```powershell
+curl -X POST http://localhost:5000/api/runs/preset
+```
+
+Запуск extra-задачи:
+
+```powershell
+curl -X POST http://localhost:5000/api/runs/extra
+```
+
 Получение списка доступных мемберов:
 
 ```powershell
@@ -293,6 +335,12 @@ curl http://localhost:5000/api/runs/active
 - Вызвать `SubscribeRun(correlationId)` (опционально для обратной совместимости).
 - Слушать событие `status` с payload `RunnerEvent` (событие отправляется всем подключенным клиентам).
 - Для общей ленты запусков слушать событие `run_status` с payload `RunStatusInfo`.
+- Для готовности preset слушать событие `preset_state` с payload `PresetGateState`.
+
+Формат ошибок API (`application/problem+json`):
+- поля: `type`, `title`, `status`, `detail`, `instance`;
+- расширения: `errorCode`, `traceId`;
+- примеры `errorCode`: `RUN_ALREADY_IN_PROGRESS`, `VALIDATION_ERROR`, `PRESET_GATE_BLOCKED`.
 
 ## Run
 
@@ -308,6 +356,18 @@ dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- QQW,QQE
 ```
 
+Локальный запуск preset-задачи:
+
+```powershell
+dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- --preset
+```
+
+Локальный запуск extra-задачи:
+
+```powershell
+dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- --extra
+```
+
 ## WebConsole
 
 Запуск web-клиента для API:
@@ -320,4 +380,16 @@ dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --a
 
 ```powershell
 dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000
+```
+
+Запуск preset-задачи из WebConsole:
+
+```powershell
+dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --preset
+```
+
+Запуск extra-задачи из WebConsole:
+
+```powershell
+dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --extra
 ```

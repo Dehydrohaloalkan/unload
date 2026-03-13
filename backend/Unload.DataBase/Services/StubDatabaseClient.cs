@@ -51,6 +51,15 @@ public class StubDatabaseClient : IDatabaseClient
     public Task<DbDataReader> GetDataReaderAsync(string query, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (!string.IsNullOrWhiteSpace(query) &&
+            query.Contains("PRESET_READY_PROBE", StringComparison.OrdinalIgnoreCase))
+        {
+            var probeTable = new DataTable();
+            probeTable.Columns.Add("Value", typeof(int));
+            probeTable.Rows.Add(0);
+            DbDataReader probeReader = probeTable.CreateDataReader();
+            return Task.FromResult(probeReader);
+        }
 
         var targetCode = "STUB";
         var scriptCode = string.IsNullOrWhiteSpace(query)

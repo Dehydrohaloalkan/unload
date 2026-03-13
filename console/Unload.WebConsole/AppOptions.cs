@@ -16,6 +16,14 @@ internal sealed class AppOptions
     /// Нормализованный список кодов мемберов для запуска.
     /// </summary>
     public required IReadOnlyCollection<string> MemberCodes { get; init; }
+    /// <summary>
+    /// Запустить preset-задачу и завершить приложение.
+    /// </summary>
+    public bool RunPresetTask { get; init; }
+    /// <summary>
+    /// Запустить extra-задачу и завершить приложение.
+    /// </summary>
+    public bool RunExtraTask { get; init; }
 
     /// <summary>
     /// Разбирает аргументы командной строки и возвращает валидированные параметры приложения.
@@ -26,6 +34,8 @@ internal sealed class AppOptions
     {
         var apiBaseUrl = "http://localhost:5000";
         var membersArgument = string.Empty;
+        var runPreset = false;
+        var runExtra = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -39,6 +49,17 @@ internal sealed class AppOptions
             {
                 membersArgument = args[++i];
                 continue;
+            }
+
+            if (string.Equals(args[i], "--preset", StringComparison.OrdinalIgnoreCase))
+            {
+                runPreset = true;
+                continue;
+            }
+
+            if (string.Equals(args[i], "--extra", StringComparison.OrdinalIgnoreCase))
+            {
+                runExtra = true;
             }
         }
 
@@ -67,7 +88,9 @@ internal sealed class AppOptions
         return new AppOptions
         {
             ApiBaseUrl = uri.ToString().TrimEnd('/'),
-            MemberCodes = memberCodes
+            MemberCodes = memberCodes,
+            RunPresetTask = runPreset,
+            RunExtraTask = runExtra
         };
     }
 }
