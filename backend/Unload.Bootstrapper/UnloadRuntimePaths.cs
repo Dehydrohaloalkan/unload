@@ -1,4 +1,4 @@
-namespace Unload.Application;
+namespace Unload.Bootstrapper;
 
 /// <summary>
 /// Набор путей runtime-конфигурации приложения.

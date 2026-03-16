@@ -1,3 +1,6 @@
+using Unload.Application;
+using Unload.Core;
+
 namespace Unload.WebConsole;
 
 /// <summary>
@@ -7,14 +10,14 @@ internal sealed class UiState
 {
     private readonly object _sync = new();
     private readonly Queue<RunnerEventLine> _events = new();
-    private RunStatusInfoDto? _status;
-    private PresetGateStateDto? _presetState;
+    private RunStatusInfo? _status;
+    private PresetGateState? _presetState;
 
     /// <summary>
     /// Добавляет событие раннера в очередь отображаемых записей.
     /// </summary>
     /// <param name="event">Событие, полученное из SignalR.</param>
-    public void AddEvent(RunnerEventDto @event)
+    public void AddEvent(RunnerEvent @event)
     {
         lock (_sync)
         {
@@ -34,7 +37,7 @@ internal sealed class UiState
     /// Обновляет снимок статуса выполнения.
     /// </summary>
     /// <param name="status">Текущий статус запуска.</param>
-    public void SetStatus(RunStatusInfoDto status)
+    public void SetStatus(RunStatusInfo status)
     {
         lock (_sync)
         {
@@ -45,7 +48,7 @@ internal sealed class UiState
     /// <summary>
     /// Обновляет состояние preset-гейта.
     /// </summary>
-    public void SetPresetState(PresetGateStateDto state)
+    public void SetPresetState(PresetGateState state)
     {
         lock (_sync)
         {
@@ -69,7 +72,7 @@ internal sealed class UiState
                 _events.ToArray(),
                 _status?.MemberStatuses?.Values
                     .OrderBy(static x => x.MemberName, StringComparer.OrdinalIgnoreCase)
-                    .ToArray() ?? Array.Empty<MemberRunStatusInfoDto>(),
+                    .ToArray() ?? Array.Empty<MemberRunStatusInfo>(),
                 _presetState);
         }
     }

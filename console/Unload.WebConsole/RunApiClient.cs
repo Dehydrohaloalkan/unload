@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Unload.Api;
+using Unload.Application;
 
 namespace Unload.WebConsole;
 
@@ -48,7 +50,7 @@ internal sealed class RunApiClient(HttpClient httpClient)
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="cancellationToken">Токен отмены запроса.</param>
     /// <returns>Статус запуска или <c>null</c>, если run не найден.</returns>
-    public async Task<RunStatusInfoDto?> GetRunStatusAsync(string correlationId, CancellationToken cancellationToken)
+    public async Task<RunStatusInfo?> GetRunStatusAsync(string correlationId, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync(
             $"/api/runs/{Uri.EscapeDataString(correlationId)}",
@@ -60,7 +62,7 @@ internal sealed class RunApiClient(HttpClient httpClient)
         }
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<RunStatusInfoDto>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<RunStatusInfo>(cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -68,12 +70,12 @@ internal sealed class RunApiClient(HttpClient httpClient)
     /// </summary>
     /// <param name="cancellationToken">Токен отмены запроса.</param>
     /// <returns>Список мемберов каталога.</returns>
-    public async Task<IReadOnlyList<MemberCatalogItemDto>> GetMembersAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MemberCatalogItem>> GetMembersAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync("/api/members", cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<MemberCatalogItemDto[]>(cancellationToken: cancellationToken)
-            ?? Array.Empty<MemberCatalogItemDto>();
+        return await response.Content.ReadFromJsonAsync<MemberCatalogItem[]>(cancellationToken: cancellationToken)
+            ?? Array.Empty<MemberCatalogItem>();
     }
 
     /// <summary>
@@ -114,7 +116,7 @@ internal sealed class RunApiClient(HttpClient httpClient)
     /// <summary>
     /// Возвращает текущее состояние preset-гейта.
     /// </summary>
-    public async Task<PresetGateStateDto?> GetPresetStateAsync(CancellationToken cancellationToken)
+    public async Task<PresetGateState?> GetPresetStateAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync("/api/runs/preset/state", cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -123,28 +125,28 @@ internal sealed class RunApiClient(HttpClient httpClient)
         }
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<PresetGateStateDto>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<PresetGateState>(cancellationToken: cancellationToken);
     }
 
     /// <summary>
     /// Запускает preset-задачу на API.
     /// </summary>
-    public async Task<ScriptTaskRunResultDto> RunPresetAsync(CancellationToken cancellationToken)
+    public async Task<ScriptTaskRunResult> RunPresetAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsync("/api/runs/preset", content: null, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResultDto>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResult>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Preset result payload is empty.");
     }
 
     /// <summary>
     /// Запускает extra-задачу на API.
     /// </summary>
-    public async Task<ScriptTaskRunResultDto> RunExtraAsync(CancellationToken cancellationToken)
+    public async Task<ScriptTaskRunResult> RunExtraAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsync("/api/runs/extra", content: null, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResultDto>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResult>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Extra result payload is empty.");
     }
 }

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Application;
-using Unload.Core;
 
 namespace Unload.Api;
 
@@ -11,20 +10,26 @@ public sealed class PresetGateBackgroundService : BackgroundService
 {
     private readonly PresetGateOptions _options;
     private readonly IPresetGateService _presetGateService;
-    private readonly IDatabaseClientFactory _databaseClientFactory;
+    private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
+    private readonly IWorkflowStageStateStore _workflowStageStateStore;
+    private readonly IPresetProbeWorkflowStage _presetProbeWorkflowStage;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<PresetGateBackgroundService> _logger;
 
     public PresetGateBackgroundService(
         PresetGateOptions options,
         IPresetGateService presetGateService,
-        IDatabaseClientFactory databaseClientFactory,
+        IWorkflowTaskAccessService workflowTaskAccessService,
+        IWorkflowStageStateStore workflowStageStateStore,
+        IPresetProbeWorkflowStage presetProbeWorkflowStage,
         IHubContext<RunStatusHub> hubContext,
         ILogger<PresetGateBackgroundService> logger)
     {
         _options = options;
         _presetGateService = presetGateService;
-        _databaseClientFactory = databaseClientFactory;
+        _workflowTaskAccessService = workflowTaskAccessService;
+        _workflowStageStateStore = workflowStageStateStore;
+        _presetProbeWorkflowStage = presetProbeWorkflowStage;
         _hubContext = hubContext;
         _logger = logger;
     }
@@ -32,6 +37,8 @@ public sealed class PresetGateBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _presetGateService.ApplyInitialOptions(_options);
+        _workflowTaskAccessService.ResetCompletedTasks();
+        _workflowStageStateStore.Reset();
         _logger.LogInformation(
             "Preset gate service initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
             _options.Enabled,
@@ -63,6 +70,8 @@ public sealed class PresetGateBackgroundService : BackgroundService
     {
         if (_presetGateService.RefreshDailyWindowState())
         {
+            _workflowTaskAccessService.ResetCompletedTasks();
+            _workflowStageStateStore.Reset();
             _logger.LogInformation("Preset gate daily window state updated.");
             await PublishStateAsync(cancellationToken);
         }
@@ -95,47 +104,14 @@ public sealed class PresetGateBackgroundService : BackgroundService
 
         try
         {
-            var probeResult = await ProbeAsync(cancellationToken);
-            if (_presetGateService.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow))
+            if (await _presetProbeWorkflowStage.ExecuteAsync(cancellationToken))
             {
-                _logger.LogInformation("Preset gate probe state changed. ProbeResult: {ProbeResult}", probeResult);
                 await PublishStateAsync(cancellationToken);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Preset probe failed.");
-        }
-    }
-
-    private async Task<int> ProbeAsync(CancellationToken cancellationToken)
-    {
-        var client = _databaseClientFactory.CreateClient();
-        try
-        {
-            await using var reader = await client.GetDataReaderAsync(_options.ProbeSql, cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
-            {
-                return 0;
-            }
-
-            if (reader.FieldCount == 0 || reader.IsDBNull(0))
-            {
-                return 0;
-            }
-
-            return Convert.ToInt32(reader.GetValue(0));
-        }
-        finally
-        {
-            if (client is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync();
-            }
-            else if (client is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
     }
 

@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Spectre.Console;
+using Unload.Api;
+using Unload.Application;
+using Unload.Core;
 
 namespace Unload.WebConsole;
 
@@ -143,7 +146,7 @@ internal static class WebConsoleRunner
         UiState uiState,
         TaskCompletionSource<bool> runCompleted)
     {
-        connection.On<RunnerEventDto>("status", @event =>
+        connection.On<RunnerEvent>("status", @event =>
         {
             if (!ShouldProcessCorrelation(sessionState.TrackedCorrelationId, @event.CorrelationId))
             {
@@ -153,7 +156,7 @@ internal static class WebConsoleRunner
             uiState.AddEvent(@event);
         });
 
-        connection.On<RunStatusInfoDto>("run_status", status =>
+        connection.On<RunStatusInfo>("run_status", status =>
         {
             if (!ShouldProcessCorrelation(sessionState.TrackedCorrelationId, status.CorrelationId))
             {
@@ -167,7 +170,7 @@ internal static class WebConsoleRunner
             }
         });
 
-        connection.On<PresetGateStateDto>("preset_state", presetState =>
+        connection.On<PresetGateState>("preset_state", presetState =>
         {
             uiState.SetPresetState(presetState);
         });
@@ -296,7 +299,7 @@ internal static class WebConsoleRunner
     /// <param name="uiState">Потокобезопасное состояние UI.</param>
     /// <param name="cancellationToken">Токен отмены операции.</param>
     /// <returns>Загруженный статус или <c>null</c>, если запуск не найден.</returns>
-    private static async Task<RunStatusInfoDto?> LoadInitialStatusAsync(
+    private static async Task<RunStatusInfo?> LoadInitialStatusAsync(
         RunApiClient apiClient,
         string correlationId,
         UiState uiState,
@@ -499,7 +502,7 @@ internal static class WebConsoleRunner
         }
 
         var selected = AnsiConsole.Prompt(
-            new MultiSelectionPrompt<MemberCatalogItemDto>()
+            new MultiSelectionPrompt<MemberCatalogItem>()
                 .Title("Select [green]members[/] to run ([grey]Enter to watch active run[/])")
                 .NotRequired()
                 .PageSize(12)

@@ -1,4 +1,4 @@
-namespace Unload.Application;
+namespace Unload.Bootstrapper;
 
 /// <summary>
 /// Настройки клиента БД, читаемые из appsettings.

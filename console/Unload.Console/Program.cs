@@ -3,8 +3,10 @@ using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using System.Text.RegularExpressions;
 using Unload.Application;
+using Unload.Bootstrapper;
 using Unload.Core;
 using Unload.Runner;
+using Unload.Workflow;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 const int WorkerColumnWidth = 26;
@@ -37,7 +39,7 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
-var scriptTaskOrchestrator = provider.ServiceProvider.GetRequiredService<IScriptTaskOrchestrator>();
+var dispatcher = provider.ServiceProvider.GetRequiredService<IWorkflowTaskDispatcher>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
     : "--default";
@@ -52,9 +54,24 @@ if (mode is "--preset" or "--extra")
         taskCts.Cancel();
     };
 
-    var taskResult = mode == "--preset"
-        ? await scriptTaskOrchestrator.RunPresetAsync(taskCts.Token)
-        : await scriptTaskOrchestrator.RunExtraAsync(taskCts.Token);
+    ScriptTaskRunResult taskResult;
+    try
+    {
+        taskResult = mode == "--preset"
+            ? await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
+                WorkflowTaskCodes.Preset,
+                new EmptyWorkflowTaskRequest(),
+                taskCts.Token)
+            : await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
+                WorkflowTaskCodes.Extra,
+                new EmptyWorkflowTaskRequest(),
+                taskCts.Token);
+    }
+    catch (WorkflowTaskDispatchException ex)
+    {
+        AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+        return;
+    }
 
     AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskName)}");
     AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.CorrelationId)}");
@@ -74,7 +91,6 @@ var targetCodes = targetArgs.Length == 0
     : targetArgs.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
-var orchestrator = provider.ServiceProvider.GetRequiredService<IRunOrchestrator>();
 var runCoordinator = provider.ServiceProvider.GetRequiredService<IRunCoordinator>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
@@ -92,16 +108,21 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-string correlationId;
+StartRunTaskResult startRunResult;
 try
 {
-    correlationId = orchestrator.StartRun(targetCodes);
+    startRunResult = await dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
+        WorkflowTaskCodes.Run,
+        new StartRunTaskRequest(targetCodes, RunSelectionMode.TargetCodes),
+        cts.Token);
 }
-catch (RunAlreadyInProgressException ex)
+catch (WorkflowTaskDispatchException ex)
 {
     AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
     return;
 }
+
+var correlationId = startRunResult.CorrelationId;
 
 var request = await WaitForRunRequestAsync(runCoordinator, correlationId, cts.Token);
 if (request is null)

@@ -1,6 +1,8 @@
 using Unload.Api;
 using Unload.Api.ErrorHandling;
+using Unload.Api.UseCases;
 using Unload.Application;
+using Unload.Bootstrapper;
 using Unload.Runner;
 using NLog.Web;
 
@@ -29,7 +31,12 @@ var presetGateOptions = builder.Configuration.GetSection("PresetGate").Get<Prese
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+builder.Services.AddSingleton<IApiProblemDetailsFactory, ApiProblemDetailsFactory>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddScoped<IStartRunUseCase, StartRunUseCase>();
+builder.Services.AddScoped<IRunPresetUseCase, RunPresetUseCase>();
+builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
+builder.Services.AddSingleton<IPresetProbeWorkflowStage, PresetProbeWorkflowStage>();
 builder.Services.AddSingleton(presetGateOptions);
 builder.Services.AddSingleton<IPresetGateService, PresetGateService>();
 builder.Services.AddSingleton(runtimePaths);

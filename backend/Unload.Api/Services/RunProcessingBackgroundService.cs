@@ -12,6 +12,8 @@ public class RunProcessingBackgroundService : BackgroundService
 {
     private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
+    private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
+    private readonly IWorkflowTaskTransitionService _transitionService;
     private readonly IRunner _runner;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<RunProcessingBackgroundService> _logger;
@@ -27,12 +29,16 @@ public class RunProcessingBackgroundService : BackgroundService
     public RunProcessingBackgroundService(
         IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
+        IWorkflowTaskAccessService workflowTaskAccessService,
+        IWorkflowTaskTransitionService transitionService,
         IRunner runner,
         IHubContext<RunStatusHub> hubContext,
         ILogger<RunProcessingBackgroundService> logger)
     {
         _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
+        _workflowTaskAccessService = workflowTaskAccessService;
+        _transitionService = transitionService;
         _runner = runner;
         _hubContext = hubContext;
         _logger = logger;
@@ -88,6 +94,12 @@ public class RunProcessingBackgroundService : BackgroundService
                 var finalState = _runStateStore.Get(request.CorrelationId);
                 if (finalState is not null)
                 {
+                    if (finalState.Status == RunLifecycleStatus.Completed)
+                    {
+                        _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Run);
+                        await _transitionService.HandleCompletedAsync(WorkflowTaskCodes.Run, finalState, stoppingToken);
+                    }
+
                     _logger.LogInformation(
                         "Run finished. CorrelationId: {CorrelationId}, Status: {Status}",
                         request.CorrelationId,

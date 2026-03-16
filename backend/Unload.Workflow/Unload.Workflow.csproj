@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
-    <ProjectReference Include="..\Unload.Workflow\Unload.Workflow.csproj" />
-  </ItemGroup>
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
 using Unload.Application;
 
 namespace Unload.Api.ErrorHandling;
@@ -10,48 +9,80 @@ namespace Unload.Api.ErrorHandling;
 public sealed class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
+    private readonly IApiProblemDetailsFactory _problemFactory;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(
+        ILogger<GlobalExceptionHandler> logger,
+        IApiProblemDetailsFactory problemFactory)
     {
         _logger = logger;
+        _problemFactory = problemFactory;
     }
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (statusCode, title, errorCode) = MapException(exception);
+        var mapped = MapException(exception);
 
         _logger.LogError(
             exception,
             "Request failed with {ErrorCode}. Path: {Path}, TraceId: {TraceId}",
-            errorCode,
+            mapped.ErrorCode,
             httpContext.Request.Path.Value,
             httpContext.TraceIdentifier);
 
-        var problem = new ProblemDetails
-        {
-            Type = $"https://httpstatuses.com/{statusCode}",
-            Title = title,
-            Status = statusCode,
-            Detail = exception.Message,
-            Instance = httpContext.Request.Path
-        };
+        var problem = _problemFactory.Create(
+            httpContext,
+            mapped.StatusCode,
+            mapped.Title,
+            mapped.Detail,
+            mapped.ErrorCode,
+            mapped.Extensions);
 
-        problem.Extensions["errorCode"] = errorCode;
-        problem.Extensions["traceId"] = httpContext.TraceIdentifier;
-
-        httpContext.Response.StatusCode = statusCode;
+        httpContext.Response.StatusCode = mapped.StatusCode;
         await httpContext.Response.WriteAsJsonAsync(problem, cancellationToken);
         return true;
     }
 
-    private static (int StatusCode, string Title, string ErrorCode) MapException(Exception exception)
+    private static ExceptionMapping MapException(Exception exception)
     {
         return exception switch
         {
-            RunAlreadyInProgressException => (StatusCodes.Status409Conflict, "Run conflict", "RUN_ALREADY_IN_PROGRESS"),
-            ArgumentException => (StatusCodes.Status400BadRequest, "Validation error", "VALIDATION_ERROR"),
-            InvalidOperationException => (StatusCodes.Status409Conflict, "Business rule violation", "BUSINESS_RULE_VIOLATION"),
-            _ => (StatusCodes.Status500InternalServerError, "Unexpected server error", "UNEXPECTED_ERROR")
+            ApiProblemException apiProblem => new ExceptionMapping(
+                apiProblem.StatusCode,
+                apiProblem.Title,
+                apiProblem.ErrorCode,
+                apiProblem.Message,
+                apiProblem.Extensions),
+            RunAlreadyInProgressException runConflict => new ExceptionMapping(
+                StatusCodes.Status409Conflict,
+                "Run conflict",
+                "RUN_ALREADY_IN_PROGRESS",
+                runConflict.Message,
+                runConflict.ActiveCorrelationId is null
+                    ? null
+                    : new Dictionary<string, object?> { ["activeCorrelationId"] = runConflict.ActiveCorrelationId }),
+            ArgumentException argumentException => new ExceptionMapping(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "VALIDATION_ERROR",
+                argumentException.Message),
+            InvalidOperationException invalidOperationException => new ExceptionMapping(
+                StatusCodes.Status409Conflict,
+                "Business rule violation",
+                "BUSINESS_RULE_VIOLATION",
+                invalidOperationException.Message),
+            _ => new ExceptionMapping(
+                StatusCodes.Status500InternalServerError,
+                "Unexpected server error",
+                "UNEXPECTED_ERROR",
+                "Unexpected server error.")
         };
     }
+
+    private sealed record ExceptionMapping(
+        int StatusCode,
+        string Title,
+        string ErrorCode,
+        string Detail,
+        IReadOnlyDictionary<string, object?>? Extensions = null);
 }

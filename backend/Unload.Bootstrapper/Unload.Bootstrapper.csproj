@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Unload.Application\Unload.Application.csproj" />
+    <ProjectReference Include="..\Unload.Catalog\Unload.Catalog.csproj" />
+    <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
+    <ProjectReference Include="..\Unload.Cryptography\Unload.Cryptography.csproj" />
+    <ProjectReference Include="..\Unload.DataBase\Unload.DataBase.csproj" />
+    <ProjectReference Include="..\Unload.FileWriter\Unload.FileWriter.csproj" />
+    <ProjectReference Include="..\Unload.MQ\Unload.MQ.csproj" />
+    <ProjectReference Include="..\Unload.Runner\Unload.Runner.csproj" />
+    <ProjectReference Include="..\Unload.ScriptTasks\Unload.ScriptTasks.csproj" />
+    <ProjectReference Include="..\Unload.Workflow\Unload.Workflow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

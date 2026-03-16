@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Unload.Application;
 using Unload.Catalog;
 using Unload.Core;
 using Unload.Cryptography;
@@ -7,8 +8,9 @@ using Unload.DataBase;
 using Unload.FileWriter;
 using Unload.MQ;
 using Unload.Runner;
+using Unload.Workflow;
 
-namespace Unload.Application;
+namespace Unload.Bootstrapper;
 
 /// <summary>
 /// Расширения DI-контейнера для регистрации runtime сервисов выгрузки.
@@ -47,23 +49,39 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
+        services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
+        services.AddSingleton<IWorkflowTaskDispatcher, WorkflowTaskDispatcher>();
+        services.AddSingleton<IWorkflowTaskRegistry, WorkflowTaskRegistry>();
         var opts = runnerOptions ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
         services.AddSingleton(opts);
         services.AddSingleton<IRunner, RunnerEngine>();
         services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
         services.AddSingleton<IRunCoordinator, InMemoryRunCoordinator>();
         services.AddSingleton<IRunStateStore, InMemoryRunStateStore>();
+        services.AddSingleton<IWorkflowStageStateStore, InMemoryWorkflowStageStateStore>();
+        services.AddSingleton<IWorkflowTaskDependencyCatalog, WorkflowTaskDependencyCatalog>();
+        services.AddSingleton<IWorkflowTaskAccessService, InMemoryWorkflowTaskAccessService>();
+        services.AddSingleton<IWorkflowTaskTransitionService, WorkflowTaskTransitionService>();
         services.AddSingleton<IRunOrchestrator>(_ => new RunOrchestrator(
             _.GetRequiredService<IRunRequestFactory>(),
             _.GetRequiredService<IRunCoordinator>(),
             _.GetRequiredService<IRunStateStore>(),
             paths.OutputDirectory));
+        services.AddSingleton<IScriptTaskEventPublisher, ScriptTaskEventPublisher>();
+        services.AddSingleton<IPresetScriptExecutor, PresetScriptExecutor>();
+        services.AddSingleton<IExtraScriptExecutor, ExtraScriptExecutor>();
+        services.AddSingleton<IExtraOutputWriter, ExtraOutputWriter>();
         services.AddSingleton<IScriptTaskOrchestrator>(_ => new ScriptTaskOrchestrator(
             paths.ScriptsDirectory,
             paths.OutputDirectory,
-            _.GetRequiredService<IDatabaseClientFactory>(),
-            _.GetRequiredService<IMqPublisher>(),
+            _.GetRequiredService<IPresetScriptExecutor>(),
+            _.GetRequiredService<IExtraScriptExecutor>(),
+            _.GetRequiredService<IExtraOutputWriter>(),
+            _.GetRequiredService<IScriptTaskEventPublisher>(),
             _.GetRequiredService<ILogger<ScriptTaskOrchestrator>>()));
+        services.AddSingleton<IWorkflowTaskDefinition, StartRunWorkflowTaskDefinition>();
+        services.AddSingleton<IWorkflowTaskDefinition, RunPresetWorkflowTaskDefinition>();
+        services.AddSingleton<IWorkflowTaskDefinition, RunExtraWorkflowTaskDefinition>();
 
         return services;
     }

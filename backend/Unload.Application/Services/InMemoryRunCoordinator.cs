@@ -1,5 +1,5 @@
-using System.Threading.Channels;
 using Unload.Core;
+using Unload.Workflow;
 
 namespace Unload.Application;
 
@@ -9,21 +9,11 @@ namespace Unload.Application;
 /// </summary>
 public class InMemoryRunCoordinator : IRunCoordinator
 {
-    private readonly Channel<RunActivation> _channel;
-    private readonly object _sync = new();
-    private ActiveRunContext? _active;
+    private readonly ISingleActiveWorkflow<RunRequest> _workflow;
 
-    /// <summary>
-    /// Инициализирует координатор с bounded-каналом на один элемент.
-    /// </summary>
-    public InMemoryRunCoordinator()
+    public InMemoryRunCoordinator(ISingleActiveWorkflow<RunRequest> workflow)
     {
-        _channel = Channel.CreateBounded<RunActivation>(new BoundedChannelOptions(1)
-        {
-            FullMode = BoundedChannelFullMode.DropWrite,
-            SingleReader = true,
-            SingleWriter = false
-        });
+        _workflow = workflow;
     }
 
     /// <summary>
@@ -33,25 +23,7 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// <returns><c>true</c>, если запуск активирован; иначе <c>false</c>.</returns>
     public bool TryActivate(RunRequest request)
     {
-        lock (_sync)
-        {
-            if (_active is not null)
-            {
-                return false;
-            }
-
-            var runCts = new CancellationTokenSource();
-            var activation = new RunActivation(request, runCts.Token);
-            _active = new ActiveRunContext(request.CorrelationId, runCts);
-            if (_channel.Writer.TryWrite(activation))
-            {
-                return true;
-            }
-
-            _active = null;
-            runCts.Dispose();
-            return false;
-        }
+        return _workflow.TryActivate(request.CorrelationId, request);
     }
 
     /// <summary>
@@ -59,9 +31,12 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// </summary>
     /// <param name="cancellationToken">Токен отмены чтения.</param>
     /// <returns>Асинхронный поток запросов запуска.</returns>
-    public IAsyncEnumerable<RunActivation> ReadActivationsAsync(CancellationToken cancellationToken)
+    public async IAsyncEnumerable<RunActivation> ReadActivationsAsync(CancellationToken cancellationToken)
     {
-        return _channel.Reader.ReadAllAsync(cancellationToken);
+        await foreach (var activation in _workflow.ReadActivationsAsync(cancellationToken))
+        {
+            yield return new RunActivation(activation.Payload, activation.CancellationToken);
+        }
     }
 
     /// <summary>
@@ -70,15 +45,7 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// <param name="correlationId">Идентификатор завершенного запуска.</param>
     public void Complete(string correlationId)
     {
-        lock (_sync)
-        {
-            if (_active is not null &&
-                string.Equals(_active.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
-            {
-                _active.Cancellation.Dispose();
-                _active = null;
-            }
-        }
+        _workflow.Complete(correlationId);
     }
 
     /// <summary>
@@ -87,10 +54,7 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// <returns>Correlation id активного запуска или <c>null</c>.</returns>
     public string? GetActiveCorrelationId()
     {
-        lock (_sync)
-        {
-            return _active?.CorrelationId;
-        }
+        return _workflow.GetActiveCorrelationId();
     }
 
     /// <summary>
@@ -100,23 +64,6 @@ public class InMemoryRunCoordinator : IRunCoordinator
     /// <returns><c>true</c>, если запрос отмены отправлен; иначе <c>false</c>.</returns>
     public bool TryCancel(string correlationId)
     {
-        lock (_sync)
-        {
-            if (_active is null ||
-                !string.Equals(_active.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (_active.Cancellation.IsCancellationRequested)
-            {
-                return true;
-            }
-
-            _active.Cancellation.Cancel();
-            return true;
-        }
+        return _workflow.TryCancel(correlationId);
     }
-
-    private sealed record ActiveRunContext(string CorrelationId, CancellationTokenSource Cancellation);
 }
