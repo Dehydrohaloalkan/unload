@@ -46,7 +46,7 @@ internal sealed class RunnerEventEmitter
         int? records = null,
         string? filePath = null)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, false, CancellationToken.None).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, false, CancellationToken.None).AsTask();
     }
 
     public Task EmitAsync(
@@ -56,7 +56,7 @@ internal sealed class RunnerEventEmitter
         string? filePath,
         CancellationToken cancellationToken)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, false, cancellationToken).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, false, cancellationToken).AsTask();
     }
 
     public async Task<bool> EmitForScriptAsync(
@@ -65,9 +65,18 @@ internal sealed class RunnerEventEmitter
         string message,
         int? records = null,
         string? filePath = null,
+        int? workerId = null,
         bool awaitMqStatus = false)
     {
-        return await EmitCoreAsync(step, message, script, records, filePath, awaitMqStatus, CancellationToken.None) ?? false;
+        return await EmitCoreAsync(
+                step,
+                message,
+                script,
+                records,
+                filePath,
+                workerId,
+                awaitMqStatus,
+                CancellationToken.None) ?? false;
     }
 
     public async Task<bool> EmitForScriptAsync(
@@ -76,10 +85,19 @@ internal sealed class RunnerEventEmitter
         string message,
         int? records,
         string? filePath,
+        int? workerId,
         bool awaitMqStatus,
         CancellationToken cancellationToken)
     {
-        return await EmitCoreAsync(step, message, script, records, filePath, awaitMqStatus, cancellationToken) ?? false;
+        return await EmitCoreAsync(
+                step,
+                message,
+                script,
+                records,
+                filePath,
+                workerId,
+                awaitMqStatus,
+                cancellationToken) ?? false;
     }
 
     public async Task TryEmitFailureAsync(RunnerStep step, string message)
@@ -111,6 +129,7 @@ internal sealed class RunnerEventEmitter
         ScriptDefinition? script,
         int? records,
         string? filePath,
+        int? workerId,
         bool awaitMqStatus,
         CancellationToken cancellationToken)
     {
@@ -126,7 +145,8 @@ internal sealed class RunnerEventEmitter
             script?.MemberName,
             script?.ScriptCode,
             records,
-            filePath);
+            filePath,
+            workerId);
         await _channel.Writer.WriteAsync(new PendingRunnerEvent(@event, completion), cancellationToken);
         return completion is null ? null : await completion.Task;
     }

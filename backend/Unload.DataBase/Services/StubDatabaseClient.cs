@@ -56,7 +56,7 @@ public class StubDatabaseClient : IDatabaseClient
         {
             var probeTable = new DataTable();
             probeTable.Columns.Add("Value", typeof(int));
-            probeTable.Rows.Add(0);
+            probeTable.Rows.Add(Random.Shared.Next(2));
             DbDataReader probeReader = probeTable.CreateDataReader();
             return Task.FromResult(probeReader);
         }

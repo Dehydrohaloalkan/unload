@@ -128,6 +128,12 @@ public class RunnerEngine : IRunner
 
             await Task.WhenAll(workers);
 
+            var reportPath = Path.Combine(runOutputDirectory, RunnerOutputDirectoryFactory.RunReportFileName);
+            await RunReportCsvWriter.WriteAsync(reportPath, reportRows, CancellationToken.None);
+            await eventEmitter.EmitAsync(
+                RunnerStep.FileWritten,
+                $"File written: {Path.GetFileName(reportPath)}.",
+                filePath: reportPath);
             await eventEmitter.EmitAsync(
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
@@ -146,11 +152,6 @@ public class RunnerEngine : IRunner
         finally
         {
             await (eventEmitter?.CompleteAsync() ?? Task.CompletedTask);
-            if (runOutputDirectory is not null)
-            {
-                var reportPath = Path.Combine(runOutputDirectory, RunnerOutputDirectoryFactory.RunReportFileName);
-                await RunReportCsvWriter.WriteAsync(reportPath, reportRows, CancellationToken.None);
-            }
         }
     }
 
@@ -195,7 +196,11 @@ public class RunnerEngine : IRunner
         ConcurrentDictionary<string, int> memberChunkCounters,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryStarted, $"Worker #{workerId} running query for script {script.ScriptCode}.");
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.QueryStarted,
+            $"Worker #{workerId} running query for script {script.ScriptCode}.",
+            workerId: workerId);
 
         await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
         var columns = RunnerEngineDataReader.GetColumns(reader);
@@ -222,7 +227,16 @@ public class RunnerEngine : IRunner
             if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
             {
                 var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
-                await WriteAndPublishChunkAsync(script, chunkNumber, currentRows.ToArray(), currentSize, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+                await WriteAndPublishChunkAsync(
+                    script,
+                    workerId,
+                    chunkNumber,
+                    currentRows.ToArray(),
+                    currentSize,
+                    runFilesDirectory,
+                    eventEmitter,
+                    reportRows,
+                    cancellationToken);
                 currentRows = [];
                 currentSize = headerSize;
             }
@@ -234,16 +248,31 @@ public class RunnerEngine : IRunner
         if (currentRows.Count > 0)
         {
             var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
-            await WriteAndPublishChunkAsync(script, chunkNumber, currentRows.ToArray(), currentSize, runFilesDirectory, eventEmitter, reportRows, cancellationToken);
+            await WriteAndPublishChunkAsync(
+                script,
+                workerId,
+                chunkNumber,
+                currentRows.ToArray(),
+                currentSize,
+                runFilesDirectory,
+                eventEmitter,
+                reportRows,
+                cancellationToken);
         }
         else if (rowsRead == 0)
             reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
 
-        await eventEmitter.EmitForScriptAsync(script, RunnerStep.QueryCompleted, $"Worker #{workerId} finished query for script {script.ScriptCode}.", rowsRead);
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.QueryCompleted,
+            $"Worker #{workerId} finished query for script {script.ScriptCode}.",
+            records: rowsRead,
+            workerId: workerId);
     }
 
     private async Task WriteAndPublishChunkAsync(
         ScriptDefinition script,
+        int workerId,
         int chunkNumber,
         DatabaseRow[] rows,
         int byteSize,
@@ -252,7 +281,12 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(script, RunnerStep.ChunkCreated, $"Chunk #{chunkNumber} created for {script.ScriptCode}.", rows.Length);
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.ChunkCreated,
+            $"Chunk #{chunkNumber} created for {script.ScriptCode}.",
+            records: rows.Length,
+            workerId: workerId);
 
         var chunk = new FileChunk(script, chunkNumber, rows, byteSize);
         var stopwatch = Stopwatch.StartNew();
@@ -265,6 +299,7 @@ public class RunnerEngine : IRunner
             $"File written: {Path.GetFileName(written.FilePath)}.",
             records: written.RowsCount,
             filePath: written.FilePath,
+            workerId: workerId,
             awaitMqStatus: true,
             cancellationToken: cancellationToken);
 

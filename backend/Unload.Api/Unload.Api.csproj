@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
-    <ProjectReference Include="..\Unload.Application\Unload.Application.csproj" />
     <ProjectReference Include="..\Unload.Bootstrapper\Unload.Bootstrapper.csproj" />
+    <ProjectReference Include="..\Unload.Run.Application\Unload.Run.Application.csproj" />
+    <ProjectReference Include="..\Unload.TaskFlow\Unload.TaskFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,69 @@
+<main class="app-shell">
+  <section class="hero-section" [class.hero-section--shifted]="taskDeckVisible()">
+    <div class="app-header">
+      <div>
+        <h1 class="app-title">Панель управления выгрузкой</h1>
+      </div>
+
+      <div class="app-header__actions">
+        <p-tag
+          [severity]="store.connectionReady() ? 'success' : 'warn'"
+          [value]="store.connectionReady() ? 'Live stream connected' : 'Live stream degraded'"
+        />
+      </div>
+    </div>
+
+    @if (store.errorMessage(); as error) {
+      <p-message severity="error" [text]="error" />
+    }
+
+    @if (!store.ready() && store.loading()) {
+      <div class="loading-state">
+        <p-progress-spinner strokeWidth="4" />
+        <div class="loading-state__text">
+          <div class="font-medium text-slate-800">Загружаю состояние API</div>
+          <div class="text-sm text-slate-500">Каталог, активный run, preset-гейт и live-канал.</div>
+        </div>
+      </div>
+    } @else {
+      <div class="hero-grid">
+        <app-live-clock
+          [now]="store.currentTime()"
+          [connected]="store.connectionReady()"
+        />
+
+        <app-preset-stage
+          [presetState]="store.presetState()"
+          [presetTask]="store.presetTask()"
+          [canRunPreset]="store.canRunPreset()"
+          (startPreset)="store.runPresetAsync()"
+        />
+      </div>
+    }
+  </section>
+
+  <section class="task-section" [class.task-section--visible]="taskDeckVisible()">
+    <div class="task-grid">
+      <app-run-card
+        [groups]="store.memberGroups()"
+        [run]="store.activeRun()"
+        [selectedCount]="store.selectedCount()"
+        [canStartRun]="store.canStartRun()"
+        [runBusy]="store.isRunBusy()"
+        [buildDownloadUrl]="store.buildSystemDownloadUrl"
+        (startRun)="store.startRunAsync()"
+        (stopRun)="store.stopRunAsync()"
+        (selectAll)="store.selectAllMembers()"
+        (clear)="store.clearMemberSelection()"
+        (toggleMember)="store.toggleMember($event.code, $event.selected)"
+      />
+
+      <app-extra-card
+        [task]="store.extraTask()"
+        [now]="store.currentTime()"
+        [canRun]="store.canRunExtra()"
+        (start)="store.runExtraAsync()"
+      />
+    </div>
+  </section>
+</main>

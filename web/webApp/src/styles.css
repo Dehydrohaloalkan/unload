@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+@import "tailwindcss";
+@import "primeicons/primeicons.css";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  font-family: 'Roboto', sans-serif;
+  background:
+    radial-gradient(circle at top, rgba(186, 230, 253, 0.26), transparent 35%),
+    linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: #0f172a;
+  background: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.p-card {
+  border-radius: 1.75rem;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  background: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 60px rgba(148, 163, 184, 0.12);
+}
+
+.p-card .p-card-body {
+  padding: 1.5rem;
+}
+
+.p-card .p-card-content {
+  padding: 0;
+}
+
+.p-panel {
+  border-radius: 1.25rem;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+}
+
+.p-panel-header {
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.p-panel-content {
+  background: transparent;
+}
+
+.p-tooltip .p-tooltip-text {
+  max-width: 24rem;
+  white-space: pre-line;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}

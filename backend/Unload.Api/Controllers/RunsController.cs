@@ -3,7 +3,8 @@ using Unload.Api;
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
 using Unload.Api.UseCases;
-using Unload.Application;
+using Unload.Run.Application;
+using Unload.TaskFlow;
 
 namespace Unload.Api.Controllers;
 
@@ -125,7 +126,7 @@ public class RunsController : ControllerBase
         var correlationId = _runCoordinator.GetActiveCorrelationId();
         if (string.IsNullOrWhiteSpace(correlationId))
         {
-            return NotFound();
+            return Ok(new { correlationId = (string?)null });
         }
 
         var run = _runStateStore.Get(correlationId);

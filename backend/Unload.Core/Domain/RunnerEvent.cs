@@ -13,6 +13,7 @@ namespace Unload.Core;
 /// <param name="ScriptCode">Код скрипта (если событие относится к конкретному скрипту).</param>
 /// <param name="Records">Количество обработанных записей (если применимо).</param>
 /// <param name="FilePath">Путь к файлу результата (если применимо).</param>
+/// <param name="WorkerId">Идентификатор worker-потока, если событие относится к конкретному worker.</param>
 public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -22,4 +23,5 @@ public record RunnerEvent(
     string? MemberName = null,
     string? ScriptCode = null,
     int? Records = null,
-    string? FilePath = null);
+    string? FilePath = null,
+    int? WorkerId = null);

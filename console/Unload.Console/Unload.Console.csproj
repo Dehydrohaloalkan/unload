@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\backend\Unload.Application\Unload.Application.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Bootstrapper\Unload.Bootstrapper.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.Run.Application\Unload.Run.Application.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.TaskFlow\Unload.TaskFlow.csproj" />
   </ItemGroup>
 
   <ItemGroup>

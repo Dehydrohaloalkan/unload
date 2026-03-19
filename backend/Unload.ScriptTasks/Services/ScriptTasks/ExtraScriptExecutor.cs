@@ -3,7 +3,7 @@ using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
 
-namespace Unload.Application;
+namespace Unload.ScriptTasks;
 
 public interface IExtraScriptExecutor
 {

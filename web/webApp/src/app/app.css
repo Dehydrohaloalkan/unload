@@ -1,0 +1,108 @@
+:host {
+  display: block;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 2rem clamp(1rem, 4vw, 2.5rem) 3rem;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.app-kicker {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.app-title {
+  margin: 0.6rem 0 0;
+  font-size: clamp(2.1rem, 4vw, 3.25rem);
+  line-height: 1;
+  letter-spacing: -0.06em;
+  color: #0f172a;
+}
+
+.app-subtitle {
+  max-width: 50rem;
+  margin: 0.9rem 0 0;
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.hero-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  transition:
+    transform 260ms ease,
+    opacity 220ms ease;
+}
+
+.hero-section--shifted {
+  transform: translateY(-0.35rem);
+}
+
+.hero-grid,
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.task-section {
+  margin-top: 0.9rem;
+  opacity: 0;
+  transform: translateY(0.75rem);
+  pointer-events: none;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.task-section--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 16rem;
+  padding: 2rem;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24px 60px rgba(148, 163, 184, 0.12);
+}
+
+.loading-state__text {
+  display: grid;
+  gap: 0.25rem;
+}
+
+@media (max-width: 1100px) {
+  .hero-grid,
+  .task-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

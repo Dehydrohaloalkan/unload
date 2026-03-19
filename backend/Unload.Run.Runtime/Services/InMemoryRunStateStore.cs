@@ -1,0 +1,483 @@
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
+using Unload.Core;
+using Unload.Run.Application;
+
+namespace Unload.Run.Runtime;
+
+/// <summary>
+/// Потокобезопасное in-memory хранилище статусов запусков.
+/// Используется API и background worker для синхронизации жизненного цикла run.
+/// </summary>
+public class InMemoryRunStateStore : IRunStateStore
+{
+    private static readonly Regex WorkerIdRegex = new(@"Worker\s*#(?<id>\d+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly int _workerCount;
+    private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
+
+    public InMemoryRunStateStore(int workerCount)
+    {
+        _workerCount = Math.Max(1, workerCount);
+    }
+
+    /// <summary>
+    /// Создает или перезаписывает запись запуска в статусе выполнения.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="targetCodes">Target-коды запуска.</param>
+    /// <param name="memberNames">Мемберы, выбранные для выгрузки.</param>
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var memberStatuses = memberNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                static x => x,
+                x => new MemberRunStatusInfo(
+                    x,
+                    MemberRunLifecycleStatus.Pending,
+                    LastStep: null,
+                    Message: "Awaiting processing.",
+                    UpdatedAt: now),
+                StringComparer.OrdinalIgnoreCase);
+        var snapshot = new RunStatusInfo(
+            correlationId,
+            RunLifecycleStatus.Running,
+            targetCodes.ToArray(),
+            now,
+            now,
+            Message: "Run started.",
+            MemberStatuses: memberStatuses,
+            OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+            WorkerStatuses: CreateInitialWorkerStatuses(now));
+
+        _runs[correlationId] = snapshot;
+    }
+
+    /// <summary>
+    /// Обновляет запись запуска в статус выполняется.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    public void SetRunning(string correlationId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.Running,
+                Array.Empty<string>(),
+                now,
+                now,
+                Message: "Run started.",
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+            (_, current) =>
+            {
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.Running,
+                    UpdatedAt = now,
+                    Message = "Run started.",
+                    WorkerStatuses = current.WorkerStatuses is null || current.WorkerStatuses.Count == 0
+                        ? CreateInitialWorkerStatuses(now)
+                        : current.WorkerStatuses
+                };
+            });
+    }
+
+    /// <summary>
+    /// Применяет входящее событие раннера к снимку состояния запуска.
+    /// </summary>
+    /// <param name="event">Событие, на основании которого обновляется статус.</param>
+    public void ApplyEvent(RunnerEvent @event)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            @event.CorrelationId,
+            _ => new RunStatusInfo(
+                @event.CorrelationId,
+                MapStatus(@event.Step),
+                Array.Empty<string>(),
+                now,
+                now,
+                @event.Step,
+                @event.Message,
+                @event.FilePath,
+                ApplyMemberEvent(
+                    new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                    @event,
+                    now),
+                ApplyArtifacts(Array.Empty<RunOutputArtifactInfo>(), @event),
+                ApplyWorkerEvent(CreateInitialWorkerStatuses(now), @event, now)),
+            (_, current) =>
+            {
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                if (current.Status == RunLifecycleStatus.CancellationRequested &&
+                    @event.Step is not RunnerStep.Completed and not RunnerStep.Failed)
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = MapStatus(@event.Step),
+                    UpdatedAt = now,
+                    LastStep = @event.Step,
+                    Message = @event.Message,
+                    OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
+                    MemberStatuses = ApplyMemberEvent(current.MemberStatuses, @event, now),
+                    OutputArtifacts = ApplyArtifacts(current.OutputArtifacts, @event),
+                    WorkerStatuses = ApplyWorkerEvent(current.WorkerStatuses, @event, now)
+                };
+            });
+    }
+
+    /// <summary>
+    /// Помечает запуск как завершившийся ошибкой.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Диагностическое сообщение об ошибке.</param>
+    public void SetFailed(string correlationId, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.Failed,
+                Array.Empty<string>(),
+                now,
+                now,
+                RunnerStep.Failed,
+                message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+            (_, current) => current with
+            {
+                Status = RunLifecycleStatus.Failed,
+                UpdatedAt = now,
+                LastStep = RunnerStep.Failed,
+                Message = message,
+                MemberStatuses = UpdateAllMemberStatuses(
+                    current.MemberStatuses,
+                    MemberRunLifecycleStatus.Failed,
+                    RunnerStep.Failed,
+                    message,
+                    now),
+                WorkerStatuses = ResetWorkers(current.WorkerStatuses, now)
+            });
+    }
+
+    /// <summary>
+    /// Помечает запуск как ожидающий завершения отмены.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение о запросе отмены.</param>
+    public void SetCancellationRequested(string correlationId, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.CancellationRequested,
+                Array.Empty<string>(),
+                now,
+                now,
+                Message: message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+            (_, current) =>
+            {
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.CancellationRequested,
+                    UpdatedAt = now,
+                    Message = message,
+                    WorkerStatuses = current.WorkerStatuses is null || current.WorkerStatuses.Count == 0
+                        ? CreateInitialWorkerStatuses(now)
+                        : current.WorkerStatuses
+                };
+            });
+    }
+
+    /// <summary>
+    /// Помечает запуск как отмененный пользователем.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <param name="message">Сообщение об отмене.</param>
+    public void SetCancelled(string correlationId, string message)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            correlationId,
+            _ => new RunStatusInfo(
+                correlationId,
+                RunLifecycleStatus.Cancelled,
+                Array.Empty<string>(),
+                now,
+                now,
+                RunnerStep.Failed,
+                message,
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+            (_, current) =>
+            {
+                if (IsTerminalStatus(current.Status))
+                {
+                    return current;
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.Cancelled,
+                    UpdatedAt = now,
+                    LastStep = RunnerStep.Failed,
+                    Message = message,
+                    MemberStatuses = UpdateAllMemberStatuses(
+                        current.MemberStatuses,
+                        MemberRunLifecycleStatus.Cancelled,
+                        RunnerStep.Failed,
+                        message,
+                        now),
+                    WorkerStatuses = ResetWorkers(current.WorkerStatuses, now)
+                };
+            });
+    }
+
+    /// <summary>
+    /// Возвращает текущее состояние указанного запуска.
+    /// </summary>
+    /// <param name="correlationId">Идентификатор запуска.</param>
+    /// <returns>Состояние запуска или <c>null</c>, если запись отсутствует.</returns>
+    public RunStatusInfo? Get(string correlationId)
+    {
+        return _runs.TryGetValue(correlationId, out var run) ? run : null;
+    }
+
+    /// <summary>
+    /// Возвращает список всех запусков, отсортированный по времени обновления.
+    /// </summary>
+    /// <returns>Снимок состояний запусков.</returns>
+    public IReadOnlyList<RunStatusInfo> List()
+    {
+        return _runs.Values
+            .OrderByDescending(static x => x.UpdatedAt)
+            .ToArray();
+    }
+
+    private static RunLifecycleStatus MapStatus(RunnerStep step)
+    {
+        return step switch
+        {
+            RunnerStep.Completed => RunLifecycleStatus.Completed,
+            RunnerStep.Failed => RunLifecycleStatus.Failed,
+            _ => RunLifecycleStatus.Running
+        };
+    }
+
+    private static bool IsTerminalStatus(RunLifecycleStatus status)
+    {
+        return status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled;
+    }
+
+    private static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyMemberEvent(
+        IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
+        RunnerEvent @event,
+        DateTimeOffset now)
+    {
+        var map = source is null
+            ? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, MemberRunStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
+
+        if (@event.Step == RunnerStep.Completed)
+        {
+            return UpdateAllMemberStatuses(map, MemberRunLifecycleStatus.Completed, @event.Step, @event.Message, now);
+        }
+
+        if (@event.Step == RunnerStep.Failed)
+        {
+            if (string.IsNullOrWhiteSpace(@event.MemberName))
+            {
+                return UpdateAllMemberStatuses(map, MemberRunLifecycleStatus.Failed, @event.Step, @event.Message, now);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(@event.MemberName))
+        {
+            return map;
+        }
+
+        var memberName = @event.MemberName.Trim();
+        var status = @event.Step == RunnerStep.Failed
+            ? MemberRunLifecycleStatus.Failed
+            : MemberRunLifecycleStatus.Running;
+        map[memberName] = new MemberRunStatusInfo(
+            memberName,
+            status,
+            @event.Step,
+            @event.Message,
+            now);
+
+        return map;
+    }
+
+    private static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateAllMemberStatuses(
+        IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
+        MemberRunLifecycleStatus status,
+        RunnerStep step,
+        string? message,
+        DateTimeOffset now)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return source.ToDictionary(
+            static x => x.Key,
+            x => x.Value with
+            {
+                Status = status,
+                LastStep = step,
+                Message = message,
+                UpdatedAt = now
+            },
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyCollection<RunOutputArtifactInfo> ApplyArtifacts(
+        IReadOnlyCollection<RunOutputArtifactInfo>? source,
+        RunnerEvent @event)
+    {
+        var artifacts = source?.ToList() ?? [];
+        if (@event.Step != RunnerStep.FileWritten || string.IsNullOrWhiteSpace(@event.FilePath))
+        {
+            return artifacts;
+        }
+
+        if (artifacts.Any(x => string.Equals(x.FilePath, @event.FilePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return artifacts;
+        }
+
+        artifacts.Add(new RunOutputArtifactInfo(
+            Path.GetFileName(@event.FilePath),
+            @event.FilePath,
+            @event.MemberName,
+            @event.ScriptCode,
+            @event.OccurredAt));
+        return artifacts
+            .OrderByDescending(static x => x.OccurredAt)
+            .ToArray();
+    }
+
+    private static IReadOnlyDictionary<int, RunWorkerStatusInfo> ApplyWorkerEvent(
+        IReadOnlyDictionary<int, RunWorkerStatusInfo>? source,
+        RunnerEvent @event,
+        DateTimeOffset now)
+    {
+        var map = source is null
+            ? new Dictionary<int, RunWorkerStatusInfo>()
+            : new Dictionary<int, RunWorkerStatusInfo>(source);
+
+        if (@event.Step is RunnerStep.Completed or RunnerStep.Failed)
+        {
+            return ResetWorkers(map, now);
+        }
+
+        var workerId = @event.WorkerId ?? TryExtractWorkerId(@event.Message);
+        if (workerId is null)
+        {
+            return map;
+        }
+
+        if (@event.Step == RunnerStep.QueryStarted)
+        {
+            map[workerId.Value] = new RunWorkerStatusInfo(
+                workerId.Value,
+                "running",
+                @event.ScriptCode,
+                @event.MemberName,
+                now);
+            return map;
+        }
+
+        if (@event.Step == RunnerStep.QueryCompleted)
+        {
+            map[workerId.Value] = new RunWorkerStatusInfo(
+                workerId.Value,
+                "idle",
+                null,
+                null,
+                now);
+        }
+
+        return map;
+    }
+
+    private static IReadOnlyDictionary<int, RunWorkerStatusInfo> ResetWorkers(
+        IReadOnlyDictionary<int, RunWorkerStatusInfo>? source,
+        DateTimeOffset now)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return new Dictionary<int, RunWorkerStatusInfo>();
+        }
+
+        return source.ToDictionary(
+            static x => x.Key,
+            x => x.Value with
+            {
+                State = "idle",
+                ScriptCode = null,
+                MemberName = null,
+                UpdatedAt = now
+            });
+    }
+
+    private static int? TryExtractWorkerId(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var match = WorkerIdRegex.Match(message);
+        return match.Success && int.TryParse(match.Groups["id"].Value, out var workerId)
+            ? workerId
+            : null;
+    }
+
+    private IReadOnlyDictionary<int, RunWorkerStatusInfo> CreateInitialWorkerStatuses(DateTimeOffset now)
+    {
+        return Enumerable.Range(1, _workerCount)
+            .ToDictionary(
+                static workerId => workerId,
+                workerId => new RunWorkerStatusInfo(
+                    workerId,
+                    "idle",
+                    null,
+                    null,
+                    now));
+    }
+}

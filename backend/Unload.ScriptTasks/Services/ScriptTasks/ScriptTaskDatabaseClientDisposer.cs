@@ -1,6 +1,6 @@
 using Unload.Core;
 
-namespace Unload.Application;
+namespace Unload.ScriptTasks;
 
 internal static class ScriptTaskDatabaseClientDisposer
 {

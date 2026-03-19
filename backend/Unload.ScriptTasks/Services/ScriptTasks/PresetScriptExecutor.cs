@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Unload.Core;
 
-namespace Unload.Application;
+namespace Unload.ScriptTasks;
 
 public interface IPresetScriptExecutor
 {

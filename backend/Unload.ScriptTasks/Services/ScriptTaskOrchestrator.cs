@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
+using Unload.TaskFlow;
 
-namespace Unload.Application;
+namespace Unload.ScriptTasks;
 
 /// <summary>
 /// Выполняет доп-задачи на SQL-скриптах вне каталожного пайплайна.

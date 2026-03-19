@@ -5,7 +5,7 @@
 - есть системная стадия готовности `probe_preset_ready`;
 - есть пользовательские задачи `preset`, `run`, `extra`;
 - есть правила порядка, конфликтов и будущих автопереходов;
-- есть API, Console и WebConsole для запуска и наблюдения.
+- есть API, Console, WebConsole и Angular WebApp для запуска и наблюдения.
 
 Этот `README.md` описывает прикладную логику проекта: как устроен бизнес-пайплайн, какие сервисы за что отвечают, как менять правила и куда добавлять новые задачи.
 
@@ -213,37 +213,76 @@
 
 Если меняется параллельность, порядок обработки скриптов, чанки, отчет или MQ-эмиссия, смотреть сюда.
 
-### `backend/Unload.Application`
+### `backend/Unload.Run.Application`
 
-Здесь живет прикладная бизнес-логика пайплайна.
+Здесь живет прикладной слой основного `run`.
+
+Главные сервисы:
+
+- `IRunOrchestrator` / `RunOrchestrator`
+- `IRunRequestFactory` / `RunRequestFactory`
+- `IRunCoordinator`
+- `IRunStateStore`
+- `RunStatusInfo`
+
+Если меняется orchestration основного запуска, нормализация target-кодов, контракт статусов или бизнес-семантика одного активного `run`, смотреть в первую очередь сюда.
+
+### `backend/Unload.Run.Runtime`
+
+Здесь лежат in-memory runtime реализации для основного `run`.
+
+Главные сервисы:
+
+- `InMemoryRunCoordinator`
+- `InMemoryRunStateStore`
+
+Если меняется process-local хранение статусов, активный слот запуска или runtime-механика `run`, смотреть сюда.
+
+### `backend/Unload.TaskFlow`
+
+Здесь живет orchestration пользовательских задач и прозрачная конфигурация pipeline.
 
 Главные группы:
 
-- orchestration `run`:
-  - `IRunOrchestrator` / `RunOrchestrator`
-  - `IRunRequestFactory` / `RunRequestFactory`
-  - `IRunCoordinator` / `InMemoryRunCoordinator`
-  - `IRunStateStore` / `InMemoryRunStateStore`
+- task models и codes:
+  - `WorkflowTaskCodes`
+  - `WorkflowStageCodes`
+  - `StartRunTaskRequest`
+  - `StartRunTaskResult`
+  - `EmptyWorkflowTaskRequest`
+  - `WorkflowTaskDispatchException`
 
 - workflow-task definitions:
   - `StartRunWorkflowTaskDefinition`
   - `RunPresetWorkflowTaskDefinition`
   - `RunExtraWorkflowTaskDefinition`
 
-- workflow access:
+- pipeline configuration:
+  - `TaskPipelineConfigurator`
+  - `TaskPipelineBuilder`
+  - `TaskPipeline`
+
+- policy и transitions:
   - `WorkflowTaskDependencyCatalog`
-  - `IWorkflowTaskAccessService`
-  - `IWorkflowStageStateStore`
+  - `IWorkflowTaskTransitionService`
+  - `IWorkflowTaskTransitionHandler`
 
 - preset gate:
   - `IPresetGateService`
   - `PresetGateService`
 
-- future auto transitions:
-  - `IWorkflowTaskTransitionService`
-  - `IWorkflowTaskTransitionHandler`
+Если меняется порядок задач, зависимости, конфликты, post-actions или бизнес-правила окна `preset`, смотреть сюда.
 
-Если меняется бизнес-логика порядка, доступности задач, конфликтов или будущих переходов, смотреть в первую очередь сюда.
+### `backend/Unload.TaskFlow.Runtime`
+
+Здесь лежат in-memory runtime реализации task orchestration.
+
+Главные сервисы:
+
+- `InMemoryWorkflowTaskAccessService`
+- `InMemoryWorkflowStageStateStore`
+
+Если меняется process-local состояние completed tasks/stages или enforcement правил запуска задач, смотреть сюда.
 
 ### `backend/Unload.ScriptTasks`
 
@@ -257,7 +296,7 @@
 - `ExtraOutputWriter`
 - `ScriptTaskEventPublisher`
 
-Если меняется исполнение `preset` или `extra`, смотреть сюда.
+Если меняется исполнение `preset` или `extra` через SQL, файловую систему и DB/MQ интеграцию, смотреть сюда.
 
 ### `backend/Unload.Bootstrapper`
 
@@ -267,7 +306,7 @@
 
 - `AddUnloadRuntime(...)`
 
-Если добавляется новый сервис, task definition, transition handler, stage store или infrastructure implementation, регистрировать нужно здесь.
+Если добавляется новый проект runtime-слоя или меняется общая сборка зависимостей для API/Console, смотреть сюда. Регистрация самих task definitions теперь собирается через `TaskPipelineConfigurator`, а не вручную по одной строке.
 
 ### `backend/Unload.Workflow`
 
@@ -303,6 +342,21 @@
 
 CLI-клиент к API через HTTP + SignalR.
 
+### `web/webApp`
+
+Браузерный Angular-клиент к API через HTTP + SignalR.
+
+Главное:
+
+- стартовый экран показывает live-часы и состояние `preset_state`;
+- часы синхронизируются через backend endpoint `GET /api/system/time`, а не по локальному времени браузера;
+- после успешного `preset` без дерганой жидкой анимации открывается экран запуска `run` и `extra`;
+- активный `run` восстанавливается после перезагрузки страницы через `GET /api/runs/active` и `GET /api/runs/{correlationId}`;
+- `run`-карточка показывает console-like таблицу worker-потоков (`Worker #n` + `running <script>` / `idle`), компактные цветные карточки мемберов и модальное окно деталей по выбранному мемберу;
+- внутри модального окна мембера показываются последние логи, target-коды, абсолютные пути файлов и ссылки на скачивание артефактов через system API;
+- выбранные мемберы сохраняются локально в браузере;
+- для `extra` UI использует текущий API-контракт без отдельного backend live-state.
+
 ## Где управлять пайплайном
 
 Ниже краткая карта: что менять и в каком файле.
@@ -311,12 +365,14 @@ CLI-клиент к API через HTTP + SignalR.
 
 Файл:
 
-- `backend/Unload.Application/Tasks/WorkflowTaskDependencyCatalog.cs`
+- `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`
 
 Здесь задается:
 
+- какие задачи входят в pipeline;
 - какие задачи/стадии должны быть завершены до запуска другой задачи;
-- какие задачи конфликтуют друг с другом.
+- какие задачи конфликтуют друг с другом;
+- какие transition handlers запускать после completion.
 
 Примеры:
 
@@ -328,7 +384,7 @@ CLI-клиент к API через HTTP + SignalR.
 
 Файл:
 
-- `backend/Unload.Application/Services/PresetGateService.cs`
+- `backend/Unload.TaskFlow/Services/PresetGateService.cs`
 
 Здесь задаются:
 
@@ -355,8 +411,9 @@ CLI-клиент к API через HTTP + SignalR.
 
 Файлы:
 
-- `backend/Unload.Application/Tasks/StartRunWorkflowTaskDefinition.cs`
-- `backend/Unload.Application/Services/RunOrchestrator.cs`
+- `backend/Unload.TaskFlow/Definitions/StartRunWorkflowTaskDefinition.cs`
+- `backend/Unload.Run.Application/Services/RunOrchestrator.cs`
+- `backend/Unload.Run.Runtime/Services/InMemoryRunStateStore.cs`
 - `backend/Unload.Api/Services/RunProcessingBackgroundService.cs`
 - `backend/Unload.Runner/Services/RunnerEngine.cs`
 
@@ -364,8 +421,8 @@ CLI-клиент к API через HTTP + SignalR.
 
 Файлы:
 
-- `backend/Unload.Application/Tasks/RunPresetWorkflowTaskDefinition.cs`
-- `backend/Unload.Application/Tasks/RunExtraWorkflowTaskDefinition.cs`
+- `backend/Unload.TaskFlow/Definitions/RunPresetWorkflowTaskDefinition.cs`
+- `backend/Unload.TaskFlow/Definitions/RunExtraWorkflowTaskDefinition.cs`
 - `backend/Unload.ScriptTasks/Services/ScriptTaskOrchestrator.cs`
 - связанные executors/writers внутри `backend/Unload.ScriptTasks`
 
@@ -373,8 +430,9 @@ CLI-клиент к API через HTTP + SignalR.
 
 Файлы:
 
-- `backend/Unload.Application/Tasks/IWorkflowTaskTransitionService.cs`
-- `backend/Unload.Application/Tasks/WorkflowTaskTransitionService.cs`
+- `backend/Unload.TaskFlow/Abstractions/IWorkflowTaskTransitionService.cs`
+- `backend/Unload.TaskFlow/Services/WorkflowTaskTransitionService.cs`
+- `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`
 
 Для новой автоматической реакции нужен новый `IWorkflowTaskTransitionHandler`.
 
@@ -384,20 +442,21 @@ CLI-клиент к API через HTTP + SignalR.
 
 Что нужно сделать:
 
-1. Добавить новый код задачи в `backend/Unload.Application/Tasks/WorkflowTaskCodes.cs`.
+1. Добавить новый код задачи в `backend/Unload.TaskFlow/Models/WorkflowTaskCodes.cs`.
 2. Создать request/result модели при необходимости.
 3. Создать новый `WorkflowTaskDefinition`.
-4. Если задача зависит от другой задачи или стадии, добавить правило в `WorkflowTaskDependencyCatalog`.
-5. Если задача конфликтует с другими задачами, тоже описать это в `WorkflowTaskDependencyCatalog`.
-6. Реализовать прикладной или инфраструктурный исполнитель:
-   - либо в `Unload.Application`,
+4. Добавить задачу в `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`.
+5. Если задача зависит от другой задачи или стадии, описать это в `TaskPipelineConfigurator`.
+6. Если задача конфликтует с другими задачами, тоже описать это в `TaskPipelineConfigurator`.
+7. Реализовать прикладной или инфраструктурный исполнитель:
+   - либо в `Unload.TaskFlow`,
    - либо в `Unload.ScriptTasks`,
    - либо в новом infra-проекте, если это отдельный большой поток.
-7. Зарегистрировать definition и сервисы в `backend/Unload.Bootstrapper/ServiceCollectionExtensions.cs`.
-8. Добавить transport-вход:
+8. Если нужен transition handler, подключить его через `TaskPipelineConfigurator`.
+9. Добавить transport-вход:
    - API endpoint/use-case;
    - и/или Console/WebConsole режим.
-9. Обновить:
+10. Обновить:
    - `README.md`
    - `docs/ARCHITECTURE.md`
    - `postman/unload-api.postman_collection.json`, если это API-задача.
@@ -408,13 +467,12 @@ CLI-клиент к API через HTTP + SignalR.
 
 1. Добавить новый `TaskCode`.
 2. Создать новый `WorkflowTaskDefinition`.
-3. При необходимости описать зависимость в `WorkflowTaskDependencyCatalog`.
-4. Зарегистрировать definition в `Unload.Bootstrapper`.
-5. Создать `IWorkflowTaskTransitionHandler`, например `PostExtraTransitionHandler`.
-6. В handler:
+3. При необходимости описать зависимость в `TaskPipelineConfigurator`.
+4. Создать `IWorkflowTaskTransitionHandler`, например `PostExtraTransitionHandler`.
+5. В handler:
    - указать `SourceTaskCode = WorkflowTaskCodes.Extra`;
    - через `IWorkflowTaskDispatcher` запустить новую задачу.
-7. Зарегистрировать handler в `Unload.Bootstrapper`.
+6. Подключить handler через `TaskPipelineConfigurator`.
 
 Важно:
 
@@ -425,10 +483,10 @@ CLI-клиент к API через HTTP + SignalR.
 
 Что нужно сделать:
 
-1. Добавить новый stage code в `backend/Unload.Application/Tasks/WorkflowStageCodes.cs`.
+1. Добавить новый stage code в `backend/Unload.TaskFlow/Models/WorkflowStageCodes.cs`.
 2. Реализовать stage executor, по аналогии с `PresetProbeWorkflowStage`.
 3. Если нужен отдельный scheduler, добавить background service или встроить в существующий scheduler.
-4. Добавить зависимость нужной пользовательской задачи на новую stage в `WorkflowTaskDependencyCatalog`.
+4. Добавить зависимость нужной пользовательской задачи на новую stage в `TaskPipelineConfigurator`.
 5. Если stage должна сбрасываться по расписанию, сбрасывать ее через `IWorkflowStageStateStore`.
 
 ## API
@@ -442,7 +500,8 @@ CLI-клиент к API через HTTP + SignalR.
 - `POST /api/runs/{correlationId}/stop` — остановка активного `run`
 - `GET /api/runs` — список запусков
 - `GET /api/runs/active` — активный `run`
-- `GET /api/runs/{correlationId}` — статус конкретного `run`
+- `GET /api/runs/{correlationId}` — статус конкретного `run`, включая `workerStatuses` и `outputArtifacts`
+- `GET /api/system/download?path=...` — безопасная выдача файла из директории `output` для скачивания из UI
 
 SignalR:
 
@@ -539,12 +598,19 @@ WebConsole `extra`:
 dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --extra
 ```
 
+Angular WebApp:
+
+```powershell
+cd .\web\webApp
+npm start
+```
+
 ## Ограничения
 
 - Одновременно может выполняться только один активный `run`.
 - `run` и `extra` могут выполняться параллельно.
 - `preset` конфликтует с `run` и `extra`.
-- `IRunCoordinator`, `IRunStateStore`, workflow-stage state и completed tasks сейчас in-memory.
+- `IRunCoordinator`, `IRunStateStore`, workflow-stage state и completed tasks сейчас in-memory и живут в `Unload.Run.Runtime` + `Unload.TaskFlow.Runtime`.
 - После перезапуска процесса состояние pipeline не сохраняется.
 - Реализации БД и MQ сейчас development-oriented.
 

@@ -1,14 +1,20 @@
 <Solution>
   <Folder Name="/backend/">
     <Project Path="backend/Unload.Api/Unload.Api.csproj" />
-    <Project Path="backend/Unload.Application/Unload.Application.csproj" />
+    <Project Path="backend/Unload.Bootstrapper/Unload.Bootstrapper.csproj" />
     <Project Path="backend/Unload.Catalog/Unload.Catalog.csproj" />
     <Project Path="backend/Unload.Core/Unload.Core.csproj" />
     <Project Path="backend/Unload.Cryptography/Unload.Cryptography.csproj" />
     <Project Path="backend/Unload.DataBase/Unload.DataBase.csproj" />
     <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
     <Project Path="backend/Unload.MQ/Unload.MQ.csproj" />
+    <Project Path="backend/Unload.Run.Application/Unload.Run.Application.csproj" />
+    <Project Path="backend/Unload.Run.Runtime/Unload.Run.Runtime.csproj" />
     <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
+    <Project Path="backend/Unload.ScriptTasks/Unload.ScriptTasks.csproj" />
+    <Project Path="backend/Unload.TaskFlow/Unload.TaskFlow.csproj" />
+    <Project Path="backend/Unload.TaskFlow.Runtime/Unload.TaskFlow.Runtime.csproj" />
+    <Project Path="backend/Unload.Workflow/Unload.Workflow.csproj" />
   </Folder>
   <Folder Name="/console/">
     <Project Path="console/Unload.Console/Unload.Console.csproj" />
