@@ -42,6 +42,7 @@ Dev-server использует `proxy.conf.json`, поэтому запросы
 ## Архитектура frontend
 
 - `src/app/app.store.ts` — единый store для REST, SignalR, localStorage и derived state.
+- `src/app/app.error-store.ts` — глобальная обработка непойманных runtime-ошибок Angular и единый сигнал для отображения в UI.
 - `src/app/components/live-clock.component.ts` — часы и индикатор live-канала.
 - `src/app/components/preset-stage.component.ts` — стартовый экран `probe -> preset`.
 - `src/app/components/run-card.component.ts` — запуск `run`, группировка мемберов и live-статусы.

@@ -33,6 +33,7 @@ var runnerOptions = configuration.GetSection("Runner").Get<RunnerOptions>()
     ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
 
 var services = new ServiceCollection();
+services.AddLogging();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
@@ -41,9 +42,36 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
 var dispatcher = provider.ServiceProvider.GetRequiredService<IWorkflowTaskDispatcher>();
+var runCoordinator = provider.ServiceProvider.GetRequiredService<IRunCoordinator>();
+var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
+var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
+var presetGateService = provider.ServiceProvider.GetRequiredService<IPresetGateService>();
+var workflowStageStateStore = provider.ServiceProvider.GetRequiredService<IWorkflowStageStateStore>();
+var databaseClientFactory = provider.ServiceProvider.GetRequiredService<IDatabaseClientFactory>();
+var presetGateOptions = configuration.GetSection("PresetGate").Get<PresetGateOptions>() ?? PresetGateOptions.Default;
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
     : "--default";
+
+if (mode == "--default" && args.Length == 0)
+{
+    await RunInteractiveSessionAsync(
+        catalogPath,
+        scriptsDirectory,
+        catalogService,
+        dispatcher,
+        runCoordinator,
+        runStateStore,
+        runner,
+        runnerOptions,
+        presetGateService,
+        workflowStageStateStore,
+        databaseClientFactory,
+        presetGateOptions,
+        CancellationToken.None);
+    return;
+}
+
 if (mode is "--preset" or "--extra")
 {
     AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJustified());
@@ -92,9 +120,6 @@ var targetCodes = targetArgs.Length == 0
     : targetArgs.SelectMany(static x => x.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
-var runCoordinator = provider.ServiceProvider.GetRequiredService<IRunCoordinator>();
-var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
-var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
 
 AnsiConsole.Write(new Rule("[green]Unload Console[/]").RuleStyle("green").LeftJustified());
 AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
@@ -109,13 +134,9 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-StartRunTaskResult startRunResult;
 try
 {
-    startRunResult = await dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
-        WorkflowTaskCodes.Run,
-        new StartRunTaskRequest(targetCodes, RunSelectionMode.TargetCodes),
-        cts.Token);
+    await ExecuteRunAsync(dispatcher, runCoordinator, runStateStore, runner, runnerOptions, targetCodes, cts.Token);
 }
 catch (WorkflowTaskDispatchException ex)
 {
@@ -123,61 +144,280 @@ catch (WorkflowTaskDispatchException ex)
     return;
 }
 
-var correlationId = startRunResult.CorrelationId;
-
-var request = await WaitForRunRequestAsync(runCoordinator, correlationId, cts.Token);
-if (request is null)
-{
-    AnsiConsole.MarkupLine("[red]Run request was not received by processor.[/]");
-    return;
-}
-
-var runStopwatch = Stopwatch.StartNew();
-try
-{
-    runStateStore.SetRunning(correlationId);
-    using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, request.CancellationToken);
-    var workerStatuses = Enumerable
-        .Range(1, runnerOptions.WorkerCount)
-        .ToDictionary(
-            static workerId => workerId,
-            static _ => "idle");
-    var globalLogs = new Queue<string>(MaxGlobalLogs);
-
-    await AnsiConsole.Live(BuildDashboard(workerStatuses, globalLogs))
-        .StartAsync(async context =>
-    {
-        await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
-        {
-            runStateStore.ApplyEvent(@event);
-            ApplyWorkerStatusUpdate(workerStatuses, @event);
-            AppendGlobalLog(globalLogs, FormatEventLine(@event));
-            context.UpdateTarget(BuildDashboard(workerStatuses, globalLogs));
-            context.Refresh();
-        }
-    });
-}
-catch (OperationCanceledException)
-{
-    runStateStore.SetFailed(correlationId, "Run was cancelled.");
-}
-catch (Exception ex)
-{
-    runStateStore.SetFailed(correlationId, ex.Message);
-    AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
-}
-finally
-{
-    runCoordinator.Complete(correlationId);
-}
-
-runStopwatch.Stop();
-
-AnsiConsole.MarkupLine(string.Empty);
-AnsiConsole.MarkupLine(
-    $"[green]Total export time:[/] [white]{runStopwatch.Elapsed:hh\\:mm\\:ss\\.fff}[/]");
-
 return;
+
+static async Task RunInteractiveSessionAsync(
+    string catalogPath,
+    string scriptsDirectory,
+    ICatalogService catalogService,
+    IWorkflowTaskDispatcher dispatcher,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    IRunner runner,
+    RunnerOptions runnerOptions,
+    IPresetGateService presetGateService,
+    IWorkflowStageStateStore workflowStageStateStore,
+    IDatabaseClientFactory databaseClientFactory,
+    PresetGateOptions presetGateOptions,
+    CancellationToken cancellationToken)
+{
+    while (!cancellationToken.IsCancellationRequested)
+    {
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rule("[green]Unload Console - Stages[/]").RuleStyle("green").LeftJustified());
+        AnsiConsole.MarkupLine($"[grey]Catalog:[/] {Markup.Escape(catalogPath)}");
+        AnsiConsole.MarkupLine($"[grey]Scripts:[/] {Markup.Escape(scriptsDirectory)}");
+        AnsiConsole.MarkupLine("[grey]Одна сессия для всех фаз: probe -> preset -> run -> extra[/]");
+        AnsiConsole.MarkupLine(string.Empty);
+
+        presetGateService.RefreshDailyWindowState();
+        var state = presetGateService.Get();
+        RenderStageState(state, presetGateOptions);
+
+        var action = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("Выберите [green]действие[/]")
+                .AddChoices(
+                    "Проверить готовность preset (probe)",
+                    "Запустить preset",
+                    "Запустить run",
+                    "Запустить extra",
+                    "Обновить состояние",
+                    "Выход"));
+
+        if (string.Equals(action, "Выход", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (string.Equals(action, "Обновить состояние", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        try
+        {
+            if (string.Equals(action, "Проверить готовность preset (probe)", StringComparison.Ordinal))
+            {
+                var probeResult = await ExecuteProbeAsync(
+                    presetGateService,
+                    workflowStageStateStore,
+                    databaseClientFactory,
+                    presetGateOptions,
+                    cancellationToken);
+                AnsiConsole.MarkupLine($"[grey]Последний probe:[/] {probeResult}");
+            }
+            else if (string.Equals(action, "Запустить preset", StringComparison.Ordinal))
+            {
+                var presetResult = await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
+                    WorkflowTaskCodes.Preset,
+                    new EmptyWorkflowTaskRequest(),
+                    cancellationToken);
+                AnsiConsole.MarkupLine($"[green]Preset completed.[/] CorrelationId: {Markup.Escape(presetResult.CorrelationId)}");
+            }
+            else if (string.Equals(action, "Запустить run", StringComparison.Ordinal))
+            {
+                var targetCodes = await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, cancellationToken);
+                await ExecuteRunAsync(dispatcher, runCoordinator, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
+            }
+            else if (string.Equals(action, "Запустить extra", StringComparison.Ordinal))
+            {
+                var extraResult = await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
+                    WorkflowTaskCodes.Extra,
+                    new EmptyWorkflowTaskRequest(),
+                    cancellationToken);
+                AnsiConsole.MarkupLine(
+                    $"[green]Extra completed.[/] Files: {extraResult.FilesWritten}, Output: {Markup.Escape(extraResult.OutputPath ?? "-")}");
+            }
+        }
+        catch (WorkflowTaskDispatchException ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+        }
+        catch (OperationCanceledException)
+        {
+            AnsiConsole.MarkupLine("[yellow]Operation cancelled.[/]");
+            return;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+        }
+
+        AnsiConsole.MarkupLine(string.Empty);
+    }
+}
+
+static async Task<int> ExecuteProbeAsync(
+    IPresetGateService presetGateService,
+    IWorkflowStageStateStore workflowStageStateStore,
+    IDatabaseClientFactory databaseClientFactory,
+    PresetGateOptions presetGateOptions,
+    CancellationToken cancellationToken)
+{
+    presetGateService.StartPolling();
+    var probeResult = await ProbeAsync(databaseClientFactory, presetGateOptions.ProbeSql, cancellationToken);
+    presetGateService.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow);
+    if (probeResult == 1)
+    {
+        workflowStageStateStore.MarkCompleted(WorkflowStageCodes.PresetProbeReady);
+    }
+
+    return probeResult;
+}
+
+static async Task<int> ProbeAsync(
+    IDatabaseClientFactory databaseClientFactory,
+    string probeSql,
+    CancellationToken cancellationToken)
+{
+    var client = databaseClientFactory.CreateClient();
+    try
+    {
+        await using var reader = await client.GetDataReaderAsync(probeSql, cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return 0;
+        }
+
+        if (reader.FieldCount == 0 || reader.IsDBNull(0))
+        {
+            return 0;
+        }
+
+        return Convert.ToInt32(reader.GetValue(0));
+    }
+    finally
+    {
+        if (client is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync();
+        }
+        else if (client is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+}
+
+static async Task ExecuteRunAsync(
+    IWorkflowTaskDispatcher dispatcher,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    IRunner runner,
+    RunnerOptions runnerOptions,
+    IReadOnlyCollection<string> targetCodes,
+    CancellationToken cancellationToken)
+{
+    StartRunTaskResult startRunResult = await dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
+        WorkflowTaskCodes.Run,
+        new StartRunTaskRequest(targetCodes, RunSelectionMode.TargetCodes),
+        cancellationToken);
+
+    var correlationId = startRunResult.CorrelationId;
+    var request = await WaitForRunRequestAsync(runCoordinator, correlationId, cancellationToken);
+    if (request is null)
+    {
+        throw new InvalidOperationException("Run request was not received by processor.");
+    }
+
+    var runStopwatch = Stopwatch.StartNew();
+    try
+    {
+        runStateStore.SetRunning(correlationId);
+        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, request.CancellationToken);
+        var workerStatuses = Enumerable
+            .Range(1, runnerOptions.WorkerCount)
+            .ToDictionary(
+                static workerId => workerId,
+                static _ => "idle");
+        var globalLogs = new Queue<string>(MaxGlobalLogs);
+
+        await AnsiConsole.Live(BuildDashboard(workerStatuses, globalLogs))
+            .StartAsync(async context =>
+            {
+                await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
+                {
+                    runStateStore.ApplyEvent(@event);
+                    ApplyWorkerStatusUpdate(workerStatuses, @event);
+                    AppendGlobalLog(globalLogs, FormatEventLine(@event));
+                    context.UpdateTarget(BuildDashboard(workerStatuses, globalLogs));
+                    context.Refresh();
+                }
+            });
+    }
+    catch (OperationCanceledException)
+    {
+        runStateStore.SetFailed(correlationId, "Run was cancelled.");
+    }
+    catch (Exception ex)
+    {
+        runStateStore.SetFailed(correlationId, ex.Message);
+        throw;
+    }
+    finally
+    {
+        runCoordinator.Complete(correlationId);
+    }
+
+    runStopwatch.Stop();
+    AnsiConsole.MarkupLine(
+        $"[green]Total export time:[/] [white]{runStopwatch.Elapsed:hh\\:mm\\:ss\\.fff}[/]");
+}
+
+static void RenderStageState(PresetGateState state, PresetGateOptions presetGateOptions)
+{
+    var table = new Table().Border(TableBorder.Rounded).Title("Workflow Stages");
+    table.AddColumn("Stage");
+    table.AddColumn("State");
+    table.AddColumn("Details");
+
+    var probeState = state.ReadyForPreset
+        ? "[green]ready[/]"
+        : state.PollingStarted
+            ? "[yellow]waiting[/]"
+            : "[grey]not started[/]";
+
+    var presetState = state.PresetCompleted
+        ? "[green]completed[/]"
+        : state.ReadyForPreset
+            ? "[yellow]available[/]"
+            : "[grey]locked[/]";
+
+    var runAndExtraState = !state.Enabled || state.PresetCompleted
+        ? "[green]available[/]"
+        : "[grey]locked[/]";
+
+    var now = DateTimeOffset.Now;
+    var lastProbeText = state.LastProbeAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    var passTime = ResolveNextPresetWindowStart(now, presetGateOptions.StartHour, presetGateOptions.StartMinute);
+
+    table.AddRow("clock", "[deepskyblue1]now[/]", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
+    table.AddRow("last_probe_time", "[deepskyblue1]time[/]", Markup.Escape(lastProbeText));
+    table.AddRow(
+        "probe_pass_after",
+        "[deepskyblue1]window[/]",
+        $"After {passTime:yyyy-MM-dd HH:mm} (local) and probe result = 1");
+    table.AddRow("probe_preset_ready", probeState, Markup.Escape(state.Message));
+    table.AddRow("preset", presetState, state.PresetCompleted ? "Done for current day" : "Needs probe result = 1");
+    table.AddRow("run", runAndExtraState, "Available after preset");
+    table.AddRow("extra", runAndExtraState, "Available after preset");
+
+    AnsiConsole.Write(table);
+}
+
+static DateTimeOffset ResolveNextPresetWindowStart(DateTimeOffset now, int startHour, int startMinute)
+{
+    var todayStart = new DateTimeOffset(
+        now.Year,
+        now.Month,
+        now.Day,
+        Math.Clamp(startHour, 0, 23),
+        Math.Clamp(startMinute, 0, 59),
+        0,
+        now.Offset);
+    return now <= todayStart ? todayStart : todayStart.AddDays(1);
+}
 
 static async Task<RunActivation?> WaitForRunRequestAsync(
     IRunCoordinator runCoordinator,
@@ -310,3 +550,4 @@ static string TrimForCell(string value, int width)
 
     return value[..(width - 3)] + "...";
 }
+

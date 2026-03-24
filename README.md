@@ -337,6 +337,8 @@
 ### `console/Unload.Console`
 
 Локальный запуск через DI того же runtime.
+По умолчанию работает как единая интерактивная сессия стадий `probe -> preset -> run -> extra` без перезапуска процесса.
+Для совместимости оставлены one-shot флаги `--preset` и `--extra`.
 
 ### `console/Unload.WebConsole`
 
@@ -567,6 +569,8 @@ curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" 
 ```powershell
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 ```
+
+Эта команда открывает stage-меню и позволяет последовательно выполнить `probe`, `preset`, `run`, `extra` в одном процессе.
 
 Локальный `preset`:
 

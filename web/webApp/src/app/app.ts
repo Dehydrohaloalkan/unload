@@ -7,6 +7,7 @@ import { ExtraCardComponent } from './components/extra-card.component';
 import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
+import { AppErrorStore } from './app.error-store';
 import { WorkflowStore } from './app.store';
 
 @Component({
@@ -27,6 +28,7 @@ import { WorkflowStore } from './app.store';
 })
 export class App {
   readonly store = inject(WorkflowStore);
+  readonly appErrorStore = inject(AppErrorStore);
   readonly taskDeckVisible = computed(() => this.store.phase() === 'tasks');
 
   constructor() {

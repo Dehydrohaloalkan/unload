@@ -16,6 +16,9 @@
     @if (store.errorMessage(); as error) {
       <p-message severity="error" [text]="error" />
     }
+    @if (appErrorStore.unhandledErrorMessage(); as unhandledError) {
+      <p-message severity="error" [text]="unhandledError" />
+    }
 
     @if (!store.ready() && store.loading()) {
       <div class="loading-state">

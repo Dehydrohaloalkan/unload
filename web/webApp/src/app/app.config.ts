@@ -1,4 +1,9 @@
-import { ApplicationConfig, LOCALE_ID, provideBrowserGlobalErrorListeners } from '@angular/core';
+import {
+  ApplicationConfig,
+  ErrorHandler,
+  LOCALE_ID,
+  provideBrowserGlobalErrorListeners,
+} from '@angular/core';
 import { provideHttpClient, withFetch } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { providePrimeNG } from 'primeng/config';
@@ -6,6 +11,7 @@ import { definePreset } from '@primeuix/themes';
 import Material from '@primeuix/themes/material';
 
 import { routes } from './app.routes';
+import { GlobalAppErrorHandler } from './app.error-store';
 
 const UnloadTheme = definePreset(Material, {
   semantic: {
@@ -28,6 +34,7 @@ const UnloadTheme = definePreset(Material, {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
+    { provide: ErrorHandler, useClass: GlobalAppErrorHandler },
     { provide: LOCALE_ID, useValue: 'ru-RU' },
     provideHttpClient(withFetch()),
     provideRouter(routes),

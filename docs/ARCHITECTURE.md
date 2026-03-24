@@ -174,16 +174,23 @@
 - `console/Unload.Console`
   - Точка входа.
   - DI через `Microsoft.Extensions.DependencyInjection`.
+  - Регистрирует `AddLogging()` для корректной работы runtime-сервисов, зависящих от `ILogger<T>`.
   - Переиспользует тот же runtime/use-case слой через `Unload.Bootstrapper`, что и API.
   - Настройки БД читаются из `appsettings.{Environment}.json` (переменные окружения `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`, по умолчанию `Production`); секция `Database` обязательна.
-  - Запуск инициируется через `IRunOrchestrator` и тот же single-run диспетчер (`IRunCoordinator`), без очереди ожидания.
+  - По умолчанию работает как единая интерактивная сессия стадий (`probe -> preset -> run -> extra`) без перезапуска процесса между фазами.
+  - Экран stage-режима перерисовывается на каждом шаге, чтобы не раздувать консоль повторяющимися блоками таблиц.
+  - В stage-таблице показывает текущие локальные часы и `last_probe_time` (локальное время последней probe-проверки).
+  - В stage-таблице показывает `probe_pass_after` — ближайшее локальное время окна, после которого `probe=1` сможет пропустить на следующий шаг.
+  - Выбор действий в stage-режиме выполняется через `SelectionPrompt` (стрелки + Enter).
+  - Для `probe` использует `PresetGate.ProbeSql`, `IDatabaseClientFactory`, обновляет `IPresetGateService` и помечает стадию `probe_preset_ready` в `IWorkflowStageStateStore` при результате `1`.
+  - Запуск `run` инициируется через `IRunOrchestrator` и тот же single-run диспетчер (`IRunCoordinator`), без очереди ожидания.
   - Отображение событий в терминале через `Spectre.Console`.
   - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
 - Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам через `ICatalogService.GetCatalogAsync()` из `backend/Unload.Catalog`; в мультиселекте все пункты выбраны по умолчанию.
 - Во время выполнения показывает live-таблицу по количеству worker-потоков (`Runner.WorkerCount`) с фиксированной шириной колонок и текущим состоянием каждого потока (`running <script>` / `idle`) плюс последнее событие раннера.
   - Во время выполнения показывает live-таблицу worker-потоков и отдельный глобальный блок логов под таблицей на всю ширину (`последние 15 событий`).
-  - Поддерживает режимы `--preset` и `--extra` для локального запуска дополнительных задач.
+  - Поддерживает legacy one-shot режимы `--preset` и `--extra`.
   - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор на основе `CatalogInfo`).
 
 - `console/Unload.WebConsole`
@@ -220,6 +227,7 @@
     - показывает локальную анимацию загрузки и таймер;
     - после reload может восстановить только последнее локально известное состояние, так как в текущем API нет отдельного live-state контракта для extra.
   - В dev-режиме использует `proxy.conf.json` для маршрутов `/api` и `/hubs`, чтобы работать с API без CORS-изменений backend.
+  - Ошибки UI обрабатываются в двух слоях: прикладные ошибки API в `WorkflowStore.errorMessage`, непойманные runtime-ошибки Angular — через глобальный `ErrorHandler` (`app.error-store.ts`) с выводом сообщения в верхней панели.
 
 ## Module diagram
 
@@ -469,6 +477,8 @@ curl http://localhost:5000/api/runs/active
 ```powershell
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 ```
+
+Команда выше запускает единый stage-интерфейс (без перезапуска приложения между фазами): `probe`, `preset`, `run`, `extra`.
 
 С указанием target-кодов:
 
