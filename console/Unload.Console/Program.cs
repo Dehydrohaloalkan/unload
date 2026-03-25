@@ -31,13 +31,14 @@ var databaseSettings = configuration
         $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
 var runnerOptions = configuration.GetSection("Runner").Get<RunnerOptions>()
     ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
+var presetGateOptions = configuration.GetSection("PresetGate").Get<PresetGateOptions>() ?? PresetGateOptions.Default;
 
 var services = new ServiceCollection();
 services.AddLogging();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory), databaseSettings, runnerOptions);
+    OutputDirectory: outputDirectory), databaseSettings, runnerOptions, presetGateOptions);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
@@ -47,8 +48,7 @@ var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>(
 var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
 var presetGateService = provider.ServiceProvider.GetRequiredService<IPresetGateService>();
 var workflowStageStateStore = provider.ServiceProvider.GetRequiredService<IWorkflowStageStateStore>();
-var databaseClientFactory = provider.ServiceProvider.GetRequiredService<IDatabaseClientFactory>();
-var presetGateOptions = configuration.GetSection("PresetGate").Get<PresetGateOptions>() ?? PresetGateOptions.Default;
+var presetProbeService = provider.ServiceProvider.GetRequiredService<IPresetProbeService>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
     : "--default";
@@ -66,7 +66,7 @@ if (mode == "--default" && args.Length == 0)
         runnerOptions,
         presetGateService,
         workflowStageStateStore,
-        databaseClientFactory,
+        presetProbeService,
         presetGateOptions,
         CancellationToken.None);
     return;
@@ -157,10 +157,17 @@ static async Task RunInteractiveSessionAsync(
     RunnerOptions runnerOptions,
     IPresetGateService presetGateService,
     IWorkflowStageStateStore workflowStageStateStore,
-    IDatabaseClientFactory databaseClientFactory,
+    IPresetProbeService presetProbeService,
     PresetGateOptions presetGateOptions,
     CancellationToken cancellationToken)
 {
+    static void Pause()
+    {
+        AnsiConsole.MarkupLine(string.Empty);
+        AnsiConsole.MarkupLine("[grey]Нажмите любую клавишу, чтобы продолжить...[/]");
+        Console.ReadKey(intercept: true);
+    }
+
     while (!cancellationToken.IsCancellationRequested)
     {
         AnsiConsole.Clear();
@@ -199,13 +206,9 @@ static async Task RunInteractiveSessionAsync(
         {
             if (string.Equals(action, "Проверить готовность preset (probe)", StringComparison.Ordinal))
             {
-                var probeResult = await ExecuteProbeAsync(
-                    presetGateService,
-                    workflowStageStateStore,
-                    databaseClientFactory,
-                    presetGateOptions,
-                    cancellationToken);
+                var probeResult = await presetProbeService.ExecuteAndApplyAsync(cancellationToken);
                 AnsiConsole.MarkupLine($"[grey]Последний probe:[/] {probeResult}");
+                Pause();
             }
             else if (string.Equals(action, "Запустить preset", StringComparison.Ordinal))
             {
@@ -214,11 +217,13 @@ static async Task RunInteractiveSessionAsync(
                     new EmptyWorkflowTaskRequest(),
                     cancellationToken);
                 AnsiConsole.MarkupLine($"[green]Preset completed.[/] CorrelationId: {Markup.Escape(presetResult.CorrelationId)}");
+                Pause();
             }
             else if (string.Equals(action, "Запустить run", StringComparison.Ordinal))
             {
                 var targetCodes = await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, cancellationToken);
                 await ExecuteRunAsync(dispatcher, runCoordinator, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
+                Pause();
             }
             else if (string.Equals(action, "Запустить extra", StringComparison.Ordinal))
             {
@@ -228,75 +233,27 @@ static async Task RunInteractiveSessionAsync(
                     cancellationToken);
                 AnsiConsole.MarkupLine(
                     $"[green]Extra completed.[/] Files: {extraResult.FilesWritten}, Output: {Markup.Escape(extraResult.OutputPath ?? "-")}");
+                Pause();
             }
         }
         catch (WorkflowTaskDispatchException ex)
         {
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            Pause();
         }
         catch (OperationCanceledException)
         {
             AnsiConsole.MarkupLine("[yellow]Operation cancelled.[/]");
+            Pause();
             return;
         }
         catch (Exception ex)
         {
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+            Pause();
         }
 
         AnsiConsole.MarkupLine(string.Empty);
-    }
-}
-
-static async Task<int> ExecuteProbeAsync(
-    IPresetGateService presetGateService,
-    IWorkflowStageStateStore workflowStageStateStore,
-    IDatabaseClientFactory databaseClientFactory,
-    PresetGateOptions presetGateOptions,
-    CancellationToken cancellationToken)
-{
-    presetGateService.StartPolling();
-    var probeResult = await ProbeAsync(databaseClientFactory, presetGateOptions.ProbeSql, cancellationToken);
-    presetGateService.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow);
-    if (probeResult == 1)
-    {
-        workflowStageStateStore.MarkCompleted(WorkflowStageCodes.PresetProbeReady);
-    }
-
-    return probeResult;
-}
-
-static async Task<int> ProbeAsync(
-    IDatabaseClientFactory databaseClientFactory,
-    string probeSql,
-    CancellationToken cancellationToken)
-{
-    var client = databaseClientFactory.CreateClient();
-    try
-    {
-        await using var reader = await client.GetDataReaderAsync(probeSql, cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            return 0;
-        }
-
-        if (reader.FieldCount == 0 || reader.IsDBNull(0))
-        {
-            return 0;
-        }
-
-        return Convert.ToInt32(reader.GetValue(0));
-    }
-    finally
-    {
-        if (client is IAsyncDisposable asyncDisposable)
-        {
-            await asyncDisposable.DisposeAsync();
-        }
-        else if (client is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
     }
 }
 

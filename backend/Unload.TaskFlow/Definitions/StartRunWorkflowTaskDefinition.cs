@@ -1,6 +1,7 @@
 using Unload.Core;
 using Unload.Run.Application;
 using Unload.Workflow;
+using System.Text.RegularExpressions;
 
 namespace Unload.TaskFlow;
 
@@ -9,19 +10,30 @@ namespace Unload.TaskFlow;
 /// </summary>
 public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
 {
+    private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
+
     private readonly ICatalogService _catalogService;
-    private readonly IRunOrchestrator _orchestrator;
+    private readonly IRunRequestFactory _requestFactory;
+    private readonly IRunCoordinator _runCoordinator;
+    private readonly IRunStateStore _runStateStore;
+    private readonly RunApplicationOptions _runOptions;
     private readonly IPresetGateService _presetGateService;
     private readonly IWorkflowTaskAccessService _taskAccessService;
 
     public StartRunWorkflowTaskDefinition(
         ICatalogService catalogService,
-        IRunOrchestrator orchestrator,
+        IRunRequestFactory requestFactory,
+        IRunCoordinator runCoordinator,
+        IRunStateStore runStateStore,
+        RunApplicationOptions runOptions,
         IPresetGateService presetGateService,
         IWorkflowTaskAccessService taskAccessService)
     {
         _catalogService = catalogService;
-        _orchestrator = orchestrator;
+        _requestFactory = requestFactory;
+        _runCoordinator = runCoordinator;
+        _runStateStore = runStateStore;
+        _runOptions = runOptions;
         _presetGateService = presetGateService;
         _taskAccessService = taskAccessService;
     }
@@ -126,7 +138,32 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
     {
         try
         {
-            return _orchestrator.StartRun(targetCodes, memberNames);
+            var normalizedCodes = NormalizeTargetCodes(targetCodes);
+            var outputDirectory = Path.GetFullPath(_runOptions.OutputDirectory);
+            var request = _requestFactory.Create(normalizedCodes, outputDirectory);
+
+            if (!_runCoordinator.TryActivate(request))
+            {
+                throw new RunAlreadyInProgressException(_runCoordinator.GetActiveCorrelationId());
+            }
+
+            try
+            {
+                _runStateStore.SetStarted(
+                    request.CorrelationId,
+                    normalizedCodes,
+                    memberNames?.Where(static x => !string.IsNullOrWhiteSpace(x))
+                        .Select(static x => x.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray() ?? Array.Empty<string>());
+            }
+            catch
+            {
+                _runCoordinator.Complete(request.CorrelationId);
+                throw;
+            }
+
+            return request.CorrelationId;
         }
         catch (RunAlreadyInProgressException ex)
         {
@@ -138,5 +175,29 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
                     ? null
                     : new Dictionary<string, object?> { ["activeCorrelationId"] = ex.ActiveCorrelationId });
         }
+    }
+
+    private static IReadOnlyCollection<string> NormalizeTargetCodes(IReadOnlyCollection<string> targetCodes)
+    {
+        var normalized = targetCodes
+            .Where(static x => !string.IsNullOrWhiteSpace(x))
+            .Select(static x => x.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Length == 0)
+        {
+            throw new InvalidOperationException("At least one target code is required.");
+        }
+
+        foreach (var code in normalized)
+        {
+            if (!TargetCodePattern.IsMatch(code))
+            {
+                throw new InvalidOperationException($"Target code '{code}' is invalid.");
+            }
+        }
+
+        return normalized;
     }
 }

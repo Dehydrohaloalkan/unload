@@ -1,35 +1,23 @@
 using Unload.Core;
-using Unload.TaskFlow;
+using Unload.Workflow;
+using Microsoft.Extensions.Logging;
 
-namespace Unload.Api;
+namespace Unload.TaskFlow;
 
-/// <summary>
-/// Системная workflow-стадия проверки готовности preset через probe SQL.
-/// Отвечает только за выполнение probe и фиксацию stage-state, без расписания.
-/// </summary>
-public interface IPresetProbeWorkflowStage
-{
-    /// <summary>
-    /// Выполняет probe и обновляет состояние preset-гейта и workflow-stage.
-    /// </summary>
-    /// <returns><c>true</c>, если состояние изменилось.</returns>
-    Task<bool> ExecuteAsync(CancellationToken cancellationToken);
-}
-
-public sealed class PresetProbeWorkflowStage : IPresetProbeWorkflowStage
+public sealed class PresetProbeService : IPresetProbeService
 {
     private readonly PresetGateOptions _options;
     private readonly IPresetGateService _presetGateService;
     private readonly IWorkflowStageStateStore _workflowStageStateStore;
     private readonly IDatabaseClientFactory _databaseClientFactory;
-    private readonly ILogger<PresetProbeWorkflowStage> _logger;
+    private readonly ILogger<PresetProbeService> _logger;
 
-    public PresetProbeWorkflowStage(
+    public PresetProbeService(
         PresetGateOptions options,
         IPresetGateService presetGateService,
         IWorkflowStageStateStore workflowStageStateStore,
         IDatabaseClientFactory databaseClientFactory,
-        ILogger<PresetProbeWorkflowStage> logger)
+        ILogger<PresetProbeService> logger)
     {
         _options = options;
         _presetGateService = presetGateService;
@@ -38,9 +26,11 @@ public sealed class PresetProbeWorkflowStage : IPresetProbeWorkflowStage
         _logger = logger;
     }
 
-    public async Task<bool> ExecuteAsync(CancellationToken cancellationToken)
+    public async Task<int> ExecuteAndApplyAsync(CancellationToken cancellationToken)
     {
         var probeResult = await ProbeAsync(cancellationToken);
+
+        _presetGateService.StartPolling();
         var changed = _presetGateService.ApplyProbeResult(probeResult, DateTimeOffset.UtcNow);
         if (probeResult == 1)
         {
@@ -49,10 +39,10 @@ public sealed class PresetProbeWorkflowStage : IPresetProbeWorkflowStage
 
         if (changed)
         {
-            _logger.LogInformation("Preset probe stage state changed. ProbeResult: {ProbeResult}", probeResult);
+            _logger.LogInformation("Preset probe applied. ProbeResult: {ProbeResult}", probeResult);
         }
 
-        return changed;
+        return probeResult;
     }
 
     private async Task<int> ProbeAsync(CancellationToken cancellationToken)
@@ -86,3 +76,4 @@ public sealed class PresetProbeWorkflowStage : IPresetProbeWorkflowStage
         }
     }
 }
+

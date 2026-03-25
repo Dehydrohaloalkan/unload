@@ -84,8 +84,8 @@
 
 1. `PresetGateBackgroundService` отслеживает локальное время.
 2. После `StartHour:StartMinute` он начинает polling.
-3. По расписанию вызывает `IPresetProbeWorkflowStage`.
-4. `PresetProbeWorkflowStage` выполняет SQL probe.
+3. По расписанию вызывает общий `IPresetProbeService`.
+4. `IPresetProbeService` выполняет SQL probe и применяет результат в preset-gate + workflow-stage.
 5. Если probe вернул `1`, stage `probe_preset_ready` помечается completed.
 6. Пользователь вызывает `preset` через API или Console.
 7. `IWorkflowTaskDispatcher` находит `RunPresetWorkflowTaskDefinition`.
@@ -109,12 +109,7 @@
    - валидирует входные данные;
    - при запуске по `memberCodes` через `ICatalogService` переводит их в `targetCodes`;
    - проверяет доступность задачи;
-   - вызывает `IRunOrchestrator`.
-4. `IRunOrchestrator`:
-   - нормализует коды;
-   - создает `RunRequest`;
-   - резервирует слот единственного активного `run`;
-   - создает стартовый статус.
+   - запускает `run` (создает `RunRequest`, резервирует слот единственного активного `run`, создает стартовый статус).
 5. `RunProcessingBackgroundService` читает активацию из `IRunCoordinator`.
 6. `RunnerEngine` выполняет выгрузку.
 7. Статусы попадают в `IRunStateStore`.
@@ -219,7 +214,6 @@
 
 Главные сервисы:
 
-- `IRunOrchestrator` / `RunOrchestrator`
 - `IRunRequestFactory` / `RunRequestFactory`
 - `IRunCoordinator`
 - `IRunStateStore`
@@ -330,7 +324,7 @@
 - ProblemDetails и error handling;
 - SignalR hub;
 - background services;
-- системная стадия `PresetProbeWorkflowStage`.
+- системная стадия `probe_preset_ready` (реализована через общий `IPresetProbeService`).
 
 Если меняются HTTP-контракты, события SignalR, transport-level background services или API-ошибки, смотреть сюда.
 
@@ -402,19 +396,18 @@ CLI-клиент к API через HTTP + SignalR.
 Файлы:
 
 - `backend/Unload.Api/Services/PresetGateBackgroundService.cs`
-- `backend/Unload.Api/Services/PresetProbeWorkflowStage.cs`
+- `backend/Unload.TaskFlow/Services/PresetProbeService.cs`
 
 Разделение такое:
 
 - `PresetGateBackgroundService` — только расписание и polling;
-- `PresetProbeWorkflowStage` — только сама стадия probe.
+- `IPresetProbeService` — выполнение probe SQL и применение результата в gate + stage-store.
 
 ### Изменить исполнение `run`
 
 Файлы:
 
 - `backend/Unload.TaskFlow/Definitions/StartRunWorkflowTaskDefinition.cs`
-- `backend/Unload.Run.Application/Services/RunOrchestrator.cs`
 - `backend/Unload.Run.Runtime/Services/InMemoryRunStateStore.cs`
 - `backend/Unload.Api/Services/RunProcessingBackgroundService.cs`
 - `backend/Unload.Runner/Services/RunnerEngine.cs`
@@ -486,7 +479,7 @@ CLI-клиент к API через HTTP + SignalR.
 Что нужно сделать:
 
 1. Добавить новый stage code в `backend/Unload.TaskFlow/Models/WorkflowStageCodes.cs`.
-2. Реализовать stage executor, по аналогии с `PresetProbeWorkflowStage`.
+2. Реализовать stage executor, по аналогии с `IPresetProbeService`/`PresetProbeService`.
 3. Если нужен отдельный scheduler, добавить background service или встроить в существующий scheduler.
 4. Добавить зависимость нужной пользовательской задачи на новую stage в `TaskPipelineConfigurator`.
 5. Если stage должна сбрасываться по расписанию, сбрасывать ее через `IWorkflowStageStateStore`.

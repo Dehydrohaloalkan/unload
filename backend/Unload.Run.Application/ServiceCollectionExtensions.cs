@@ -14,12 +14,8 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         string outputDirectory)
     {
+        services.AddSingleton(new RunApplicationOptions(outputDirectory));
         services.AddSingleton<IRunRequestFactory, RunRequestFactory>();
-        services.AddSingleton<IRunOrchestrator>(_ => new RunOrchestrator(
-            _.GetRequiredService<IRunRequestFactory>(),
-            _.GetRequiredService<IRunCoordinator>(),
-            _.GetRequiredService<IRunStateStore>(),
-            outputDirectory));
         return services;
     }
 }

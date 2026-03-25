@@ -67,9 +67,9 @@
 
 - `backend/Unload.Run.Application`
   - Application-слой основного `run`.
-  - Контракты и orchestration: `IRunOrchestrator`, `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
+  - Контракты и orchestration: `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
   - Контракт и модели runtime-статусов: `RunStatusInfo`, `RunLifecycleStatus`, `MemberRunStatusInfo`, `RunWorkerStatusInfo`, `RunOutputArtifactInfo`.
-  - `RunOrchestrator` нормализует target-коды, формирует `RunRequest`, резервирует слот единственного активного запуска и создает стартовый статус.
+  - Нормализация target-кодов, формирование `RunRequest`, резервирование слота единственного активного запуска и создание стартового статуса выполняются в `StartRunWorkflowTaskDefinition` (в `Unload.TaskFlow`).
 
 - `backend/Unload.Run.Runtime`
   - In-memory runtime реализации основного `run`.
@@ -156,7 +156,7 @@
   - `GET /api/runs/active` — текущий активный запуск; если его нет, endpoint возвращает `200 OK` с `correlationId = null`.
   - `GET /api/runs/{correlationId}` — статус конкретного запуска, включая `memberStatuses`, `workerStatuses` и `outputArtifacts`.
   - Запуски обрабатываются фоновым worker (`BackgroundService`) без очереди ожидания: одновременно выполняется только один запуск.
-  - System-stage `probe_preset_ready` вынесен в отдельный компонент `IPresetProbeWorkflowStage` / `PresetProbeWorkflowStage`; `PresetGateBackgroundService` отвечает только за расписание и публикацию состояния.
+  - System-stage `probe_preset_ready` выполняется через общий сервис `IPresetProbeService` (в `Unload.TaskFlow`); `PresetGateBackgroundService` отвечает только за расписание и публикацию состояния.
   - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`.
   - SignalR события:
     - `status` — события раннера активного запуска для всех подключенных клиентов;
@@ -182,8 +182,8 @@
   - В stage-таблице показывает текущие локальные часы и `last_probe_time` (локальное время последней probe-проверки).
   - В stage-таблице показывает `probe_pass_after` — ближайшее локальное время окна, после которого `probe=1` сможет пропустить на следующий шаг.
   - Выбор действий в stage-режиме выполняется через `SelectionPrompt` (стрелки + Enter).
-  - Для `probe` использует `PresetGate.ProbeSql`, `IDatabaseClientFactory`, обновляет `IPresetGateService` и помечает стадию `probe_preset_ready` в `IWorkflowStageStateStore` при результате `1`.
-  - Запуск `run` инициируется через `IRunOrchestrator` и тот же single-run диспетчер (`IRunCoordinator`), без очереди ожидания.
+- Для `probe` использует общий `IPresetProbeService`: выполняет `PresetGate.ProbeSql`, обновляет `IPresetGateService` и помечает стадию `probe_preset_ready` в `IWorkflowStageStateStore` при результате `1`.
+- Запуск `run` инициируется в `StartRunWorkflowTaskDefinition` через `IRunRequestFactory` + `IRunCoordinator` (single-active), без очереди ожидания.
   - Отображение событий в терминале через `Spectre.Console`.
   - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
   - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
@@ -276,8 +276,8 @@ flowchart LR
    - запрещает `preset`, если уже выполняется `run` или `extra`;
    - разрешает параллельный запуск `run` и `extra`;
    - фиксирует успешное завершение задач для сценариев `before/after`.
-4. System-stage `probe_preset_ready` выполняется автоматически по расписанию через `PresetGateBackgroundService` -> `IPresetProbeWorkflowStage` и отмечается в `IWorkflowStageStateStore`.
-5. Для `run` definition подготавливает входные данные, вызывает `IRunOrchestrator`, который формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
+4. System-stage `probe_preset_ready` выполняется автоматически по расписанию через `PresetGateBackgroundService` -> `IPresetProbeService` и отмечается в `IWorkflowStageStateStore`.
+5. Для `run` definition подготавливает входные данные, формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
 6. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
 7. `RunnerEngine` эмитит `RequestAccepted`.
 8. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
@@ -359,8 +359,7 @@ sequenceDiagram
 
     Client->>Transport: start run(targetCodes)
     Transport->>TaskFlow: StartRunWorkflowTaskDefinition
-    TaskFlow->>RunApp: IRunOrchestrator.StartRun(...)
-    RunApp->>RunApp: normalize + validate target codes
+    TaskFlow->>TaskFlow: normalize + validate target codes
     RunApp->>Coordinator: TryActivate(RunRequest)
     RunApp->>State: SetStarted(...)
     Transport-->>Client: correlationId

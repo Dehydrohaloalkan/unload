@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(presetGateOptions);
         services.AddSingleton<IPresetGateService, PresetGateService>();
+        services.AddSingleton<IPresetProbeService, PresetProbeService>();
         services.AddSingleton(pipeline);
         services.AddSingleton<IWorkflowTaskDependencyCatalog, WorkflowTaskDependencyCatalog>();
         services.AddSingleton<IWorkflowTaskTransitionService, WorkflowTaskTransitionService>();

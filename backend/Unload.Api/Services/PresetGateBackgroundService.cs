@@ -12,7 +12,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
     private readonly IPresetGateService _presetGateService;
     private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
     private readonly IWorkflowStageStateStore _workflowStageStateStore;
-    private readonly IPresetProbeWorkflowStage _presetProbeWorkflowStage;
+    private readonly IPresetProbeService _presetProbeService;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<PresetGateBackgroundService> _logger;
 
@@ -21,7 +21,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
         IPresetGateService presetGateService,
         IWorkflowTaskAccessService workflowTaskAccessService,
         IWorkflowStageStateStore workflowStageStateStore,
-        IPresetProbeWorkflowStage presetProbeWorkflowStage,
+        IPresetProbeService presetProbeService,
         IHubContext<RunStatusHub> hubContext,
         ILogger<PresetGateBackgroundService> logger)
     {
@@ -29,7 +29,7 @@ public sealed class PresetGateBackgroundService : BackgroundService
         _presetGateService = presetGateService;
         _workflowTaskAccessService = workflowTaskAccessService;
         _workflowStageStateStore = workflowStageStateStore;
-        _presetProbeWorkflowStage = presetProbeWorkflowStage;
+        _presetProbeService = presetProbeService;
         _hubContext = hubContext;
         _logger = logger;
     }
@@ -104,10 +104,12 @@ public sealed class PresetGateBackgroundService : BackgroundService
 
         try
         {
-            if (await _presetProbeWorkflowStage.ExecuteAsync(cancellationToken))
-            {
+            var previous = _presetGateService.Get();
+            await _presetProbeService.ExecuteAndApplyAsync(cancellationToken);
+            var current = _presetGateService.Get();
+
+            if (!Equals(previous, current))
                 await PublishStateAsync(cancellationToken);
-            }
         }
         catch (Exception ex)
         {
