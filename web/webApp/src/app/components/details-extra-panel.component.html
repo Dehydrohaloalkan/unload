@@ -1,0 +1,99 @@
+<div class="details-section">
+  <div class="details-section__title">Скрипты и статусы</div>
+  @if (extraTask().running) {
+    <div class="details-item">
+      <div class="details-item__row">
+        <span class="details-item__label">Статус</span>
+        <span class="details-item__value">Выполняется</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">Старт</span>
+        <span class="details-item__value">{{ formatTimestamp(extraTask().startedAt!) }}</span>
+      </div>
+      <div class="details-item__message">Идет выполнение extra-скриптов.</div>
+    </div>
+  } @else if (extraTask().result; as result) {
+    <div class="details-item">
+      <div class="details-item__row">
+        <span class="details-item__label">Статус</span>
+        <span class="details-item__value">Завершено</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">Скриптов</span>
+        <span class="details-item__value">{{ result.scriptsExecuted }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">Файлов</span>
+        <span class="details-item__value">{{ result.filesWritten }}</span>
+      </div>
+      @if (result.message) {
+        <div class="details-item__message">{{ result.message }}</div>
+      }
+    </div>
+  } @else {
+    <div class="details-empty">Скрипты этапа 4 пока не запускались.</div>
+  }
+</div>
+
+<div class="details-section">
+  <div class="details-section__title">История extra за сегодня</div>
+  @if (records().length === 0) {
+    <div class="details-empty">Сегодня запусков пока не было.</div>
+  } @else {
+    @for (record of records(); track record.completedAt + '-' + (record.correlationId ?? '')) {
+      <details class="history-run">
+        <summary class="history-run__summary">
+          <span>{{ record.correlationId ?? 'extra-run' }}</span>
+          <span>{{ formatTimestamp(record.completedAt) }}</span>
+        </summary>
+        <div class="history-run__body">
+          <div class="details-item__row">
+            <span class="details-item__label">Старт</span>
+            <span class="details-item__value">{{ formatTimestamp(record.startedAt) }}</span>
+          </div>
+          <div class="details-item__row">
+            <span class="details-item__label">Финиш</span>
+            <span class="details-item__value">{{ formatTimestamp(record.completedAt) }}</span>
+          </div>
+          <div class="details-item__row">
+            <span class="details-item__label">Скриптов</span>
+            <span class="details-item__value">{{ record.scriptsExecuted ?? '-' }}</span>
+          </div>
+          <div class="details-item__row">
+            <span class="details-item__label">Файлов</span>
+            <span class="details-item__value">{{ record.filesWritten ?? '-' }}</span>
+          </div>
+          @if (record.message) {
+            <div class="details-item__message">{{ record.message }}</div>
+          }
+
+          <div class="history-files">
+            <div class="history-files__title">Файлы результата</div>
+            @if (recordFiles(record).length === 0) {
+              <div class="details-empty">Файлы для этой выгрузки не найдены.</div>
+            } @else {
+              @for (file of recordFiles(record); track file.filePath) {
+                <a
+                  class="history-file-link"
+                  [href]="buildDownloadUrl()(file.filePath)"
+                  [attr.download]="file.fileName"
+                >
+                  {{ file.fileName }}
+                </a>
+              }
+            }
+          </div>
+          @if (record.outputPath) {
+            <a
+              class="history-file-link history-file-link--archive"
+              [href]="buildArchiveUrl()(record.outputPath!)"
+              [attr.download]="'extra-result-' + (record.correlationId ?? 'run') + '.zip'"
+            >
+              Скачать архив результата (.zip)
+            </a>
+          }
+        </div>
+      </details>
+    }
+  }
+</div>

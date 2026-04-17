@@ -1,0 +1,93 @@
+:host {
+  display: block;
+}
+
+.stage-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem 0;
+}
+
+.stage-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.stage-completed {
+  text-align: right;
+  font-size: 0.64rem;
+  color: #64748b;
+}
+
+.stage-completed span {
+  color: #334155;
+  font-weight: 600;
+}
+
+.stage-icon {
+  font-size: 1rem;
+}
+
+.stage-icon--success {
+  color: #16a34a;
+}
+
+.stage-icon--danger {
+  color: #dc2626;
+}
+
+.stage-icon--spin {
+  color: #2563eb;
+}
+
+.stage-body {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem 0.9rem;
+}
+
+.stage-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stage-main-action {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stage-running {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #0f172a;
+  font-size: 0.78rem;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.55rem;
+  padding: 0.4rem 0.5rem;
+}
+
+:host ::ng-deep .preset-pulse-button {
+  animation: presetPulseGlow 0.85s ease-out infinite;
+}
+
+@keyframes presetPulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+:host ::ng-deep .stage-button--done.p-button {
+  opacity: 0.62;
+}

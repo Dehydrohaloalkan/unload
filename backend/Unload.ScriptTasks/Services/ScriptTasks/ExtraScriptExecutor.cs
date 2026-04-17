@@ -17,16 +17,13 @@ public interface IExtraScriptExecutor
 public sealed class ExtraScriptExecutor : IExtraScriptExecutor
 {
     private readonly IDatabaseClientFactory _databaseClientFactory;
-    private readonly IScriptTaskEventPublisher _eventPublisher;
     private readonly ILogger<ExtraScriptExecutor> _logger;
 
     public ExtraScriptExecutor(
         IDatabaseClientFactory databaseClientFactory,
-        IScriptTaskEventPublisher eventPublisher,
         ILogger<ExtraScriptExecutor> logger)
     {
         _databaseClientFactory = databaseClientFactory;
-        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -39,13 +36,6 @@ public sealed class ExtraScriptExecutor : IExtraScriptExecutor
         var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
         _logger.LogDebug("Extra script started. CorrelationId: {CorrelationId}, ScriptCode: {ScriptCode}", correlationId, scriptCode);
         var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
-        await _eventPublisher.PublishAsync(
-            correlationId,
-            RunnerStep.QueryStarted,
-            $"Extra script started: {scriptCode}.",
-            cancellationToken,
-            targetCode: "EXTRA",
-            scriptCode: scriptCode);
 
         var client = _databaseClientFactory.CreateClient();
         var records = 0;
@@ -74,14 +64,6 @@ public sealed class ExtraScriptExecutor : IExtraScriptExecutor
             await ScriptTaskDatabaseClientDisposer.DisposeAsync(client);
         }
 
-        await _eventPublisher.PublishAsync(
-            correlationId,
-            RunnerStep.QueryCompleted,
-            $"Extra script completed: {scriptCode}.",
-            cancellationToken,
-            targetCode: "EXTRA",
-            scriptCode: scriptCode,
-            records: records);
         _logger.LogDebug(
             "Extra script completed. CorrelationId: {CorrelationId}, ScriptCode: {ScriptCode}, Records: {Records}",
             correlationId,

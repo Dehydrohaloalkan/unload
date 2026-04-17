@@ -72,6 +72,18 @@ public record RunOutputArtifactInfo(
     string? ScriptCode,
     DateTimeOffset OccurredAt);
 
+public record SenderFileDispatchStateInfo(
+    string FilePath,
+    DateTimeOffset SentAt);
+
+public record SenderBatchStatusInfo(
+    string BatchId,
+    string MemberName,
+    SenderBatchStatus Status,
+    DateTimeOffset UpdatedAt,
+    IReadOnlyCollection<SenderFileDispatchStateInfo> SentFiles,
+    string? Message = null);
+
 /// <summary>
 /// Снимок состояния конкретного запуска выгрузки.
 /// Используется для REST-ответов и SignalR-событий <c>run_status</c>.
@@ -89,6 +101,7 @@ public record RunOutputArtifactInfo(
 /// <param name="WorkerStatuses">Текущие состояния worker-потоков.</param>
 public record RunStatusInfo(
     string CorrelationId,
+    string TaskCode,
     RunLifecycleStatus Status,
     IReadOnlyCollection<string> TargetCodes,
     DateTimeOffset CreatedAt,
@@ -98,4 +111,5 @@ public record RunStatusInfo(
     string? OutputPath = null,
     IReadOnlyDictionary<string, MemberRunStatusInfo>? MemberStatuses = null,
     IReadOnlyCollection<RunOutputArtifactInfo>? OutputArtifacts = null,
-    IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null);
+    IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null,
+    IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null);

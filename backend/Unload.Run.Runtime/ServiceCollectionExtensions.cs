@@ -15,11 +15,13 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddUnloadRunRuntime(
         this IServiceCollection services,
-        int workerCount)
+        int workerCount,
+        string stateFilePath)
     {
         services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
         services.AddSingleton<IRunCoordinator, InMemoryRunCoordinator>();
-        services.AddSingleton<IRunStateStore>(_ => new InMemoryRunStateStore(workerCount));
+        services.AddSingleton<IRunStateStore>(_ => new InMemoryRunStateStore(workerCount, stateFilePath));
+        services.AddSingleton<IMqSenderFeedbackConsumer, MqSenderFeedbackConsumer>();
         return services;
     }
 }

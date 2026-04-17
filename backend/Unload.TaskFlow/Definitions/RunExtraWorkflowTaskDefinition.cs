@@ -30,7 +30,7 @@ public sealed class RunExtraWorkflowTaskDefinition : WorkflowTaskDefinition<Empt
         EmptyWorkflowTaskRequest request,
         CancellationToken cancellationToken)
     {
-        if (!_presetGateService.CanRunMainAndExtra(out var gateReason))
+        if (!request.AdminOverride && !_presetGateService.CanRunMainAndExtra(out var gateReason))
         {
             throw new WorkflowTaskDispatchException(
                 WorkflowTaskFailureKind.Conflict,
@@ -44,6 +44,7 @@ public sealed class RunExtraWorkflowTaskDefinition : WorkflowTaskDefinition<Empt
                 WorkflowTaskCodes.Extra,
                 () => _scriptTaskOrchestrator.RunExtraAsync(cancellationToken),
                 markCompletedOnSuccess: true,
+                request.AdminOverride,
                 cancellationToken);
             await _transitionService.HandleCompletedAsync(WorkflowTaskCodes.Extra, result, cancellationToken);
             return result;

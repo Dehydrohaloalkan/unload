@@ -29,9 +29,10 @@ public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessServi
         string taskCode,
         Func<Task<TResult>> executor,
         bool markCompletedOnSuccess,
+        bool adminOverride,
         CancellationToken cancellationToken)
     {
-        BeginForegroundTask(taskCode);
+        BeginForegroundTask(taskCode, adminOverride);
         try
         {
             var result = await executor();
@@ -50,11 +51,12 @@ public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessServi
 
     public TResult ExecuteDeferredStart<TResult>(
         string taskCode,
-        Func<TResult> starter)
+        Func<TResult> starter,
+        bool adminOverride)
     {
         lock (_sync)
         {
-            EnsureCanStartLocked(taskCode);
+            EnsureCanStartLocked(taskCode, adminOverride);
             return starter();
         }
     }
@@ -75,11 +77,11 @@ public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessServi
         }
     }
 
-    private void BeginForegroundTask(string taskCode)
+    private void BeginForegroundTask(string taskCode, bool adminOverride)
     {
         lock (_sync)
         {
-            EnsureCanStartLocked(taskCode);
+            EnsureCanStartLocked(taskCode, adminOverride);
             _activeForegroundTaskCodes.Add(taskCode);
         }
     }
@@ -92,7 +94,7 @@ public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessServi
         }
     }
 
-    private void EnsureCanStartLocked(string taskCode)
+    private void EnsureCanStartLocked(string taskCode, bool adminOverride)
     {
         var rule = _dependencyCatalog.GetRequired(taskCode);
         var conflictingForegroundTaskCode = _activeForegroundTaskCodes.FirstOrDefault(activeTaskCode =>
@@ -121,17 +123,20 @@ public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessServi
                 new Dictionary<string, object?> { ["activeCorrelationId"] = activeRunCorrelationId });
         }
 
-        var missingTaskCodes = rule.RequiresCompletedCodes
-            .Where(requiredCode => !_completedTaskCodes.Contains(requiredCode) && !_workflowStageStateStore.IsCompleted(requiredCode))
-            .ToArray();
-
-        if (missingTaskCodes.Length > 0)
+        if (!adminOverride)
         {
-            throw new WorkflowTaskDispatchException(
-                WorkflowTaskFailureKind.Conflict,
-                "TASK_DEPENDENCY_NOT_SATISFIED",
-                $"Task '{taskCode}' requires completed tasks: {string.Join(", ", missingTaskCodes)}.",
-                new Dictionary<string, object?> { ["requiredTaskCodes"] = missingTaskCodes });
+            var missingTaskCodes = rule.RequiresCompletedCodes
+                .Where(requiredCode => !_completedTaskCodes.Contains(requiredCode) && !_workflowStageStateStore.IsCompleted(requiredCode))
+                .ToArray();
+
+            if (missingTaskCodes.Length > 0)
+            {
+                throw new WorkflowTaskDispatchException(
+                    WorkflowTaskFailureKind.Conflict,
+                    "TASK_DEPENDENCY_NOT_SATISFIED",
+                    $"Task '{taskCode}' requires completed tasks: {string.Join(", ", missingTaskCodes)}.",
+                    new Dictionary<string, object?> { ["requiredTaskCodes"] = missingTaskCodes });
+            }
         }
     }
 }

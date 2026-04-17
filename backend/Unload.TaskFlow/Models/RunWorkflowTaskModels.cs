@@ -16,7 +16,8 @@ public enum RunSelectionMode
 /// <param name="SelectionMode">Режим интерпретации кодов.</param>
 public sealed record StartRunTaskRequest(
     IReadOnlyCollection<string> Codes,
-    RunSelectionMode SelectionMode);
+    RunSelectionMode SelectionMode,
+    bool AdminOverride = false);
 
 /// <summary>
 /// Результат принятого запуска выгрузки.
@@ -27,4 +28,4 @@ public sealed record StartRunTaskResult(string CorrelationId);
 /// <summary>
 /// Пустой запрос для задач без payload.
 /// </summary>
-public sealed record EmptyWorkflowTaskRequest;
+public sealed record EmptyWorkflowTaskRequest(bool AdminOverride = false);

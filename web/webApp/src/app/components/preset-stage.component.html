@@ -1,0 +1,48 @@
+<p-card styleClass="stage-card">
+  <ng-template #header>
+    <div class="stage-head">
+      <div>
+        <h2 class="stage-title">2. Пресет</h2>
+      </div>
+      @if (completedAt()) {
+        <div class="stage-completed">
+          Выполнено<br />
+          <span>{{ formatMoment(completedAt()!) }}</span>
+        </div>
+      }
+      <i [class]="statusIconClass()"></i>
+    </div>
+  </ng-template>
+
+  <div class="stage-body">
+    @if (presetTask().running) {
+      <div class="stage-running">
+        <p-progress-spinner strokeWidth="4" [style]="{ width: '1.25rem', height: '1.25rem' }" />
+        <span>Выполняется...</span>
+      </div>
+    } @else {
+      <div class="stage-actions">
+        <div class="stage-main-action">
+        <p-button
+          label="Выполнить пресет"
+          icon="pi pi-play"
+          size="small"
+          [fluid]="true"
+          [disabled]="!canRunPreset()"
+          [styleClass]="completedAt() ? 'stage-button--done' : (canRunPreset() ? 'preset-pulse-button' : '')"
+          (onClick)="onStartClick()"
+        />
+        </div>
+        <p-button
+          icon="pi pi-arrow-right"
+          [rounded]="true"
+          [outlined]="true"
+          severity="secondary"
+          [attr.aria-label]="'Подробнее'"
+          (onClick)="openDetails.emit()"
+        />
+      </div>
+    }
+  </div>
+</p-card>
+<p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }"></p-confirmdialog>

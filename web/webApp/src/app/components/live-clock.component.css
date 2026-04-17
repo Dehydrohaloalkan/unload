@@ -1,0 +1,75 @@
+:host {
+  display: block;
+}
+
+.clock-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem 0;
+}
+
+.clock-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.clock-body {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem 0.9rem;
+}
+
+.clock-value {
+  font-size: clamp(1.2rem, 3.4vw, 1.7rem);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+:host ::ng-deep .clock-card--online {
+  border: 2px solid rgba(16, 185, 129, 0.55);
+}
+
+:host ::ng-deep .clock-card--offline {
+  border: 2px solid rgba(239, 68, 68, 0.55);
+}
+
+.clock-status {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  color: #64748b;
+}
+
+.clock-status .pi {
+  font-size: 1rem;
+}
+
+.status-icon--success {
+  color: #16a34a;
+}
+
+.status-icon--danger {
+  color: #dc2626;
+}
+
+.clock-status__completed {
+  font-size: 0.68rem;
+  color: #334155;
+  font-weight: 600;
+}
+
+.clock-window-summary {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.55rem;
+  padding: 0.35rem 0.45rem;
+  color: #334155;
+  font-size: 0.72rem;
+  background: rgba(248, 250, 252, 0.85);
+}

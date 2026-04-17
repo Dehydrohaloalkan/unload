@@ -6,31 +6,44 @@ namespace Unload.Api.UseCases;
 
 public interface IRunExtraUseCase
 {
-    Task<ScriptTaskRunResult> ExecuteAsync(CancellationToken cancellationToken);
+    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
 }
 
 public sealed class RunExtraUseCase : IRunExtraUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
     private readonly ILogger<RunExtraUseCase> _logger;
 
     public RunExtraUseCase(
         IWorkflowTaskDispatcher dispatcher,
+        ITaskExecutionHistoryStore taskExecutionHistoryStore,
         ILogger<RunExtraUseCase> logger)
     {
         _dispatcher = dispatcher;
+        _taskExecutionHistoryStore = taskExecutionHistoryStore;
         _logger = logger;
     }
 
-    public async Task<ScriptTaskRunResult> ExecuteAsync(CancellationToken cancellationToken)
+    public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
         try
         {
             _logger.LogInformation("Extra task launch requested.");
             var result = await _dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
                 WorkflowTaskCodes.Extra,
-                new EmptyWorkflowTaskRequest(),
+                new EmptyWorkflowTaskRequest(adminOverride),
                 cancellationToken);
+            _taskExecutionHistoryStore.Add(
+                WorkflowTaskCodes.Extra,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                result.CorrelationId,
+                result.Message,
+                result.ScriptsExecuted,
+                result.FilesWritten,
+                result.OutputPath);
             _logger.LogInformation(
                 "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}",
                 result.CorrelationId,

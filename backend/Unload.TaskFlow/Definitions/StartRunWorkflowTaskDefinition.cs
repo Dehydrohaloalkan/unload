@@ -44,7 +44,7 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
         StartRunTaskRequest request,
         CancellationToken cancellationToken)
     {
-        if (!_presetGateService.CanRunMainAndExtra(out var gateReason))
+        if (!request.AdminOverride && !_presetGateService.CanRunMainAndExtra(out var gateReason))
         {
             throw new WorkflowTaskDispatchException(
                 WorkflowTaskFailureKind.Conflict,
@@ -76,8 +76,8 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
 
         var correlationId = request.SelectionMode switch
         {
-            RunSelectionMode.MemberCodes => await StartByMemberCodesAsync(normalizedCodes, cancellationToken),
-            RunSelectionMode.TargetCodes => StartByTargetCodes(normalizedCodes),
+            RunSelectionMode.MemberCodes => await StartByMemberCodesAsync(normalizedCodes, request.AdminOverride, cancellationToken),
+            RunSelectionMode.TargetCodes => StartByTargetCodes(normalizedCodes, request.AdminOverride),
             _ => throw new WorkflowTaskDispatchException(
                 WorkflowTaskFailureKind.Validation,
                 "VALIDATION_ERROR",
@@ -89,6 +89,7 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
 
     private async Task<string> StartByMemberCodesAsync(
         IReadOnlyCollection<string> memberCodes,
+        bool adminOverride,
         CancellationToken cancellationToken)
     {
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
@@ -124,57 +125,46 @@ public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<Star
 
         return _taskAccessService.ExecuteDeferredStart(
             WorkflowTaskCodes.Run,
-            () => StartRunCore(targetCodes, selectedMembers.Select(static x => x.Name).ToArray()));
+            () => StartRunCore(targetCodes, selectedMembers.Select(static x => x.Name).ToArray()),
+            adminOverride);
     }
 
-    private string StartByTargetCodes(IReadOnlyCollection<string> targetCodes)
+    private string StartByTargetCodes(IReadOnlyCollection<string> targetCodes, bool adminOverride)
     {
         return _taskAccessService.ExecuteDeferredStart(
             WorkflowTaskCodes.Run,
-            () => StartRunCore(targetCodes, memberNames: null));
+            () => StartRunCore(targetCodes, memberNames: null),
+            adminOverride);
     }
 
     private string StartRunCore(IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string>? memberNames)
     {
+        var normalizedCodes = NormalizeTargetCodes(targetCodes);
+        var outputDirectory = Path.GetFullPath(_runOptions.OutputDirectory);
+        var request = _requestFactory.Create(normalizedCodes, outputDirectory);
+
+        if (!_runCoordinator.TryActivate(request))
+        {
+            throw new InvalidOperationException("Run activation conflict.");
+        }
+
         try
         {
-            var normalizedCodes = NormalizeTargetCodes(targetCodes);
-            var outputDirectory = Path.GetFullPath(_runOptions.OutputDirectory);
-            var request = _requestFactory.Create(normalizedCodes, outputDirectory);
-
-            if (!_runCoordinator.TryActivate(request))
-            {
-                throw new RunAlreadyInProgressException(_runCoordinator.GetActiveCorrelationId());
-            }
-
-            try
-            {
-                _runStateStore.SetStarted(
-                    request.CorrelationId,
-                    normalizedCodes,
-                    memberNames?.Where(static x => !string.IsNullOrWhiteSpace(x))
-                        .Select(static x => x.Trim())
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray() ?? Array.Empty<string>());
-            }
-            catch
-            {
-                _runCoordinator.Complete(request.CorrelationId);
-                throw;
-            }
-
-            return request.CorrelationId;
+            _runStateStore.SetStarted(
+                request.CorrelationId,
+                normalizedCodes,
+                memberNames?.Where(static x => !string.IsNullOrWhiteSpace(x))
+                    .Select(static x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? Array.Empty<string>());
         }
-        catch (RunAlreadyInProgressException ex)
+        catch
         {
-            throw new WorkflowTaskDispatchException(
-                WorkflowTaskFailureKind.Conflict,
-                "RUN_ALREADY_IN_PROGRESS",
-                ex.Message,
-                ex.ActiveCorrelationId is null
-                    ? null
-                    : new Dictionary<string, object?> { ["activeCorrelationId"] = ex.ActiveCorrelationId });
+            _runCoordinator.Complete(request.CorrelationId);
+            throw;
         }
+
+        return request.CorrelationId;
     }
 
     private static IReadOnlyCollection<string> NormalizeTargetCodes(IReadOnlyCollection<string> targetCodes)

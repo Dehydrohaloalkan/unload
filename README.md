@@ -18,7 +18,7 @@
 - читает данные из БД потоково;
 - режет результат на чанки;
 - пишет файлы в `output`;
-- публикует события;
+- публикует MQ-события готовности файлов и sender-feedback;
 - хранит и отдает live-статусы;
 - поддерживает отдельные задачи `preset` и `extra`.
 
@@ -113,8 +113,11 @@
 5. `RunProcessingBackgroundService` читает активацию из `IRunCoordinator`.
 6. `RunnerEngine` выполняет выгрузку.
 7. Статусы попадают в `IRunStateStore`.
-8. API публикует `status` и `run_status` в SignalR.
-9. После завершения `run`:
+8. После завершения записи файлов по мемберам `RunnerEngine` публикует в MQ события `FileBatchReady` (по одному batch на мембера).
+9. `SenderStubMqBackgroundService` (в проекте `Unload.MQ`) читает batch-и и отправляет файлы с задержкой 1 секунда на файл.
+10. Sender публикует feedback (`FileSent`, `BatchCompleted`, `BatchFailed`) обратно в MQ.
+11. `SenderFeedbackProjectionBackgroundService` (в API) проецирует feedback в `IRunStateStore` и публикует обновленный `run_status` в SignalR.
+12. После завершения `run`:
    - слот освобождается;
    - задача `run` помечается completed;
    - вызывается `IWorkflowTaskTransitionService`.
@@ -185,9 +188,20 @@
 
 ### `backend/Unload.MQ`
 
-Отвечает за публикацию событий раннера.
+Отвечает за MQ-runtime логику.
 
-Сейчас это in-memory заглушка.
+Сейчас это in-memory реализация с двумя потоками сообщений:
+
+- `FileBatchReady` (готовые файлы на отправку по мемберу);
+- sender-feedback (`FileSent`, `BatchCompleted`, `BatchFailed`).
+
+Здесь же живет sender-stub:
+
+- `SenderStubMqBackgroundService` читает `FileBatchReady`;
+- отправляет файлы с задержкой 1 секунда на файл;
+- публикует sender-feedback в MQ.
+
+В `Core` остаются только контракты MQ, без runtime-логики.
 
 ### `backend/Unload.Cryptography`
 
@@ -206,7 +220,7 @@
 - `RunnerOutputDirectoryFactory` — создает output-директории;
 - `RunReportCsvWriter` — пишет итоговый CSV-отчет.
 
-Если меняется параллельность, порядок обработки скриптов, чанки, отчет или MQ-эмиссия, смотреть сюда.
+Если меняется параллельность, порядок обработки скриптов, чанки, отчет или правила формирования file-batch для sender, смотреть сюда.
 
 ### `backend/Unload.Run.Application`
 
@@ -324,7 +338,8 @@
 - ProblemDetails и error handling;
 - SignalR hub;
 - background services;
-- системная стадия `probe_preset_ready` (реализована через общий `IPresetProbeService`).
+- системная стадия `probe_preset_ready` (реализована через общий `IPresetProbeService`);
+- проекция sender-feedback в `run_status` для web-клиента.
 
 Если меняются HTTP-контракты, события SignalR, transport-level background services или API-ошибки, смотреть сюда.
 
@@ -344,14 +359,14 @@ CLI-клиент к API через HTTP + SignalR.
 
 Главное:
 
-- стартовый экран показывает live-часы и состояние `preset_state`;
-- часы синхронизируются через backend endpoint `GET /api/system/time`, а не по локальному времени браузера;
-- после успешного `preset` без дерганой жидкой анимации открывается экран запуска `run` и `extra`;
-- активный `run` восстанавливается после перезагрузки страницы через `GET /api/runs/active` и `GET /api/runs/{correlationId}`;
-- `run`-карточка показывает console-like таблицу worker-потоков (`Worker #n` + `running <script>` / `idle`), компактные цветные карточки мемберов и модальное окно деталей по выбранному мемберу;
-- внутри модального окна мембера показываются последние логи, target-коды, абсолютные пути файлов и ссылки на скачивание артефактов через system API;
-- выбранные мемберы сохраняются локально в браузере;
-- для `extra` UI использует текущий API-контракт без отдельного backend live-state.
+- главная страница состоит из 4 компактных этапов (`сервер`, `пресет`, `выгрузка`, `extra`) и правой выезжающей панели деталей;
+- часы синхронизируются через `GET /api/system/time` (backend-время), а не по локальному времени браузера;
+- статусы этапов унифицированы: красный крест (`не выполнено`), синий спин (`выполняется`), зеленая галочка (`выполнено`);
+- для этапов 2/3/4 есть отдельные панели деталей: `preset`, `run`, `extra` (этапы 2 и 4 разделены);
+- в деталях `run` выбор мемберов сделан как grid карточек (удобно для больших наборов);
+- в истории результатов доступны скачивание отдельных файлов и on-demand скачивание ZIP архива результата;
+- выбранные мемберы и часть UI-состояния сохраняются локально в браузере;
+- в UI есть `admin mode`, который передает `adminOverride` в backend для обхода gate-зависимостей.
 
 ## Где управлять пайплайном
 
@@ -494,9 +509,14 @@ CLI-клиент к API через HTTP + SignalR.
 - `POST /api/runs/extra` — запуск `extra`
 - `POST /api/runs/{correlationId}/stop` — остановка активного `run`
 - `GET /api/runs` — список запусков
+- `GET /api/runs/today` — список запусков `run` за текущий день
+- `GET /api/runs/dashboard` — агрегированный snapshot для UI (preset-state, today flags/history, last completed timestamps)
 - `GET /api/runs/active` — активный `run`
 - `GET /api/runs/{correlationId}` — статус конкретного `run`, включая `workerStatuses` и `outputArtifacts`
 - `GET /api/system/download?path=...` — безопасная выдача файла из директории `output` для скачивания из UI
+- `GET /api/system/output-files?path=...` — безопасный листинг файлов в output-папке
+- `GET /api/system/download-archive?path=...` — on-demand сборка и скачивание ZIP архива всей output-папки
+- `POST /api/system/sender-feedback` — ручная подача sender-feedback в run-state (debug/интеграционный endpoint)
 
 SignalR:
 
@@ -607,9 +627,10 @@ npm start
 - Одновременно может выполняться только один активный `run`.
 - `run` и `extra` могут выполняться параллельно.
 - `preset` конфликтует с `run` и `extra`.
-- `IRunCoordinator`, `IRunStateStore`, workflow-stage state и completed tasks сейчас in-memory и живут в `Unload.Run.Runtime` + `Unload.TaskFlow.Runtime`.
-- После перезапуска процесса состояние pipeline не сохраняется.
+- Состояние запусков и история задач сохраняются в файлы runtime-директории и восстанавливаются после рестарта backend.
+- Внутренний runtime enforcement зависимостей/стадий остается process-local, но UI-критичное состояние и история персистентны.
 - Реализации БД и MQ сейчас development-oriented.
+- Sender-stub in-memory и предназначен для локального контура; в production нужно заменить `Unload.MQ` на реальный транспорт.
 
 ## Где смотреть подробнее
 

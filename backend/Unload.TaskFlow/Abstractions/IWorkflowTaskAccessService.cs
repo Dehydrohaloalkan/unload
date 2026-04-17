@@ -13,6 +13,7 @@ public interface IWorkflowTaskAccessService
         string taskCode,
         Func<Task<TResult>> executor,
         bool markCompletedOnSuccess,
+        bool adminOverride,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -20,7 +21,8 @@ public interface IWorkflowTaskAccessService
     /// </summary>
     TResult ExecuteDeferredStart<TResult>(
         string taskCode,
-        Func<TResult> starter);
+        Func<TResult> starter,
+        bool adminOverride);
 
     /// <summary>
     /// Помечает задачу завершенной успешно.

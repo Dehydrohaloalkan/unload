@@ -37,10 +37,12 @@ builder.Services.AddScoped<IStartRunUseCase, StartRunUseCase>();
 builder.Services.AddScoped<IRunPresetUseCase, RunPresetUseCase>();
 builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
 builder.Services.AddScoped<IGetServerTimeUseCase, GetServerTimeUseCase>();
+builder.Services.AddSingleton<ITaskExecutionHistoryStore, TaskExecutionHistoryStore>();
 builder.Services.AddSingleton(runtimePaths);
 builder.Services.AddUnloadRuntime(runtimePaths, databaseSettings, runnerOptions, presetGateOptions);
 builder.Services.AddHostedService<RunProcessingBackgroundService>();
 builder.Services.AddHostedService<PresetGateBackgroundService>();
+builder.Services.AddHostedService<SenderFeedbackProjectionBackgroundService>();
 
 var app = builder.Build();
 

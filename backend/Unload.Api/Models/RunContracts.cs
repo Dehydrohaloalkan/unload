@@ -7,7 +7,9 @@ namespace Unload.Api;
 /// Используется endpoint-ом <c>POST /api/runs</c>.
 /// </summary>
 /// <param name="MemberCodes">Список кодов мемберов, выбранных клиентом.</param>
-public record RunStartRequest(IReadOnlyCollection<string> MemberCodes);
+public record RunStartRequest(
+    IReadOnlyCollection<string> MemberCodes,
+    bool AdminOverride = false);
 
 /// <summary>
 /// Контракт ответа на успешный запуск выгрузки.
@@ -43,3 +45,9 @@ public record MemberCatalogItem(
     IReadOnlyCollection<string> TargetCodes,
     string? ActiveRunCorrelationId,
     MemberRunStatusInfo? ActiveRunStatus);
+
+/// <summary>
+/// Контракт запроса запуска задачи с опциональным admin override.
+/// </summary>
+/// <param name="AdminOverride">Признак обхода стандартных gate/dependency проверок.</param>
+public record AdminTaskRequest(bool AdminOverride = false);

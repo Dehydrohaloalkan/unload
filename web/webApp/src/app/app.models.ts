@@ -52,8 +52,30 @@ export interface RunOutputArtifactInfo {
   occurredAt: string;
 }
 
+export enum SenderBatchStatus {
+  Ready = 0,
+  InProgress = 1,
+  Completed = 2,
+  Failed = 3,
+}
+
+export interface SenderFileDispatchStateInfo {
+  filePath: string;
+  sentAt: string;
+}
+
+export interface SenderBatchStatusInfo {
+  batchId: string;
+  memberName: string;
+  status: SenderBatchStatus;
+  updatedAt: string;
+  sentFiles: SenderFileDispatchStateInfo[];
+  message: string | null;
+}
+
 export interface RunStatusInfo {
   correlationId: string;
+  taskCode: string;
   status: RunLifecycleStatus;
   targetCodes: string[];
   createdAt: string;
@@ -64,6 +86,7 @@ export interface RunStatusInfo {
   memberStatuses: Record<string, MemberRunStatusInfo> | null;
   outputArtifacts: RunOutputArtifactInfo[] | null;
   workerStatuses: Record<number, RunWorkerStatusInfo> | null;
+  senderBatches: Record<string, SenderBatchStatusInfo> | null;
 }
 
 export interface RunnerEvent {
@@ -150,6 +173,33 @@ export interface ScriptTaskRunResult {
   message: string;
 }
 
+export interface TaskRecord {
+  taskCode: string;
+  startedAt: string;
+  completedAt: string;
+  correlationId: string | null;
+  message: string | null;
+  scriptsExecuted: number | null;
+  filesWritten: number | null;
+  outputPath: string | null;
+}
+
+export interface OutputFileInfo {
+  fileName: string;
+  filePath: string;
+  modifiedAt: string;
+  sizeBytes: number;
+}
+
+export interface WorkflowDashboardSnapshotResponse {
+  presetState: PresetGateState;
+  hasRunToday: boolean;
+  hasExtraToday: boolean;
+  runLastCompletedAt: string | null;
+  extraLastCompletedAt: string | null;
+  todayHistory: TaskRecord[];
+}
+
 export interface ServerTimeResponse {
   serverLocalTime: string;
   serverUtcTime: string;
@@ -171,6 +221,7 @@ export interface ProblemDetailsResponse {
 export interface TaskUiState {
   running: boolean;
   startedAt: string | null;
+  completedAt?: string | null;
   result: ScriptTaskRunResult | null;
   error: string | null;
   stale: boolean;

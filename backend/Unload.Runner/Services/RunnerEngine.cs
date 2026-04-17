@@ -64,6 +64,7 @@ public class RunnerEngine : IRunner
     {
         string? runOutputDirectory = null;
         var reportRows = new ConcurrentBag<RunReportRow>();
+        var senderBatchBuilder = new SenderBatchBuilder();
         RunnerEventEmitter? eventEmitter = null;
 
         try
@@ -73,7 +74,7 @@ public class RunnerEngine : IRunner
 
             runOutputDirectory = RunnerOutputDirectoryFactory.CreateRunOutputDirectory(request.OutputDirectory);
             var runFilesDirectory = RunnerOutputDirectoryFactory.CreateRunFilesDirectory(runOutputDirectory);
-            eventEmitter = new RunnerEventEmitter(_mqPublisher, writer, request, cancellationToken);
+            eventEmitter = new RunnerEventEmitter(writer, request, cancellationToken);
 
             await eventEmitter.EmitAsync(RunnerStep.RequestAccepted, "Run request accepted.");
 
@@ -120,6 +121,7 @@ public class RunnerEngine : IRunner
                         distributor,
                         runFilesDirectory,
                         eventEmitter,
+                        senderBatchBuilder,
                         reportRows,
                         memberChunkCounters,
                         cancellationToken),
@@ -138,6 +140,11 @@ public class RunnerEngine : IRunner
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
                 filePath: runOutputDirectory);
+
+            foreach (var batchEvent in senderBatchBuilder.BuildBatchEvents(request.CorrelationId))
+            {
+                await _mqPublisher.PublishFileBatchReadyAsync(batchEvent, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -161,6 +168,7 @@ public class RunnerEngine : IRunner
         ScriptDistributor distributor,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
+        SenderBatchBuilder senderBatchBuilder,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         CancellationToken cancellationToken)
@@ -174,7 +182,16 @@ public class RunnerEngine : IRunner
                     break;
 
                 cancellationToken.ThrowIfCancellationRequested();
-                await ProcessScriptAsync(script, workerId, client, runFilesDirectory, eventEmitter, reportRows, memberChunkCounters, cancellationToken);
+                await ProcessScriptAsync(
+                    script,
+                    workerId,
+                    client,
+                    runFilesDirectory,
+                    eventEmitter,
+                    senderBatchBuilder,
+                    reportRows,
+                    memberChunkCounters,
+                    cancellationToken);
             }
         }
         finally
@@ -192,6 +209,7 @@ public class RunnerEngine : IRunner
         IDatabaseClient client,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
+        SenderBatchBuilder senderBatchBuilder,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         CancellationToken cancellationToken)
@@ -235,6 +253,7 @@ public class RunnerEngine : IRunner
                     currentSize,
                     runFilesDirectory,
                     eventEmitter,
+                    senderBatchBuilder,
                     reportRows,
                     cancellationToken);
                 currentRows = [];
@@ -256,6 +275,7 @@ public class RunnerEngine : IRunner
                 currentSize,
                 runFilesDirectory,
                 eventEmitter,
+                senderBatchBuilder,
                 reportRows,
                 cancellationToken);
         }
@@ -278,6 +298,7 @@ public class RunnerEngine : IRunner
         int byteSize,
         string runFilesDirectory,
         RunnerEventEmitter eventEmitter,
+        SenderBatchBuilder senderBatchBuilder,
         ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
@@ -292,15 +313,15 @@ public class RunnerEngine : IRunner
         var stopwatch = Stopwatch.StartNew();
         var written = await _fileChunkWriter.WriteChunkAsync(chunk, runFilesDirectory, cancellationToken);
         stopwatch.Stop();
+        senderBatchBuilder.Add(script.MemberName, written.FilePath);
 
-        var isSentToMq = await eventEmitter.EmitForScriptAsync(
+        await eventEmitter.EmitForScriptAsync(
             script,
             RunnerStep.FileWritten,
             $"File written: {Path.GetFileName(written.FilePath)}.",
             records: written.RowsCount,
             filePath: written.FilePath,
             workerId: workerId,
-            awaitMqStatus: true,
             cancellationToken: cancellationToken);
 
         reportRows.Add(new RunReportRow(
@@ -309,7 +330,7 @@ public class RunnerEngine : IRunner
             script.FirstCodeDigit,
             Path.GetFileName(written.FilePath),
             written.RowsCount,
-            isSentToMq,
+            true,
             stopwatch.ElapsedMilliseconds));
     }
 }

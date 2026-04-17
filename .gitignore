@@ -7,6 +7,11 @@ out/
 output/
 observability/
 
+# Local build scratch (do not commit)
+temp_build/
+temp_build_*/
+backend/_build_tmp_api*/
+
 # IDE
 .vs/
 .vscode/

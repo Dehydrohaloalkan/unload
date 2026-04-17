@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Unload.Core;
 using Unload.Run.Application;
@@ -11,13 +12,25 @@ namespace Unload.Run.Runtime;
 /// </summary>
 public class InMemoryRunStateStore : IRunStateStore
 {
+    private const string PersistenceVersion = "1";
     private static readonly Regex WorkerIdRegex = new(@"Worker\s*#(?<id>\d+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+    private const string TaskCodeRun = "run";
     private readonly int _workerCount;
+    private readonly string _stateFilePath;
+    private readonly object _persistSync = new();
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
 
-    public InMemoryRunStateStore(int workerCount)
+    public InMemoryRunStateStore(
+        int workerCount,
+        string stateFilePath)
     {
         _workerCount = Math.Max(1, workerCount);
+        _stateFilePath = stateFilePath;
+        LoadFromDisk();
     }
 
     /// <summary>
@@ -42,6 +55,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 StringComparer.OrdinalIgnoreCase);
         var snapshot = new RunStatusInfo(
             correlationId,
+            TaskCodeRun,
             RunLifecycleStatus.Running,
             targetCodes.ToArray(),
             now,
@@ -49,9 +63,11 @@ public class InMemoryRunStateStore : IRunStateStore
             Message: "Run started.",
             MemberStatuses: memberStatuses,
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-            WorkerStatuses: CreateInitialWorkerStatuses(now));
+            WorkerStatuses: CreateInitialWorkerStatuses(now),
+            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase));
 
         _runs[correlationId] = snapshot;
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -65,6 +81,7 @@ public class InMemoryRunStateStore : IRunStateStore
             correlationId,
             _ => new RunStatusInfo(
                 correlationId,
+                TaskCodeRun,
                 RunLifecycleStatus.Running,
                 Array.Empty<string>(),
                 now,
@@ -72,7 +89,8 @@ public class InMemoryRunStateStore : IRunStateStore
                 Message: "Run started.",
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+                WorkerStatuses: CreateInitialWorkerStatuses(now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) =>
             {
                 if (IsTerminalStatus(current.Status))
@@ -90,6 +108,7 @@ public class InMemoryRunStateStore : IRunStateStore
                         : current.WorkerStatuses
                 };
             });
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -103,6 +122,7 @@ public class InMemoryRunStateStore : IRunStateStore
             @event.CorrelationId,
             _ => new RunStatusInfo(
                 @event.CorrelationId,
+                TaskCodeRun,
                 MapStatus(@event.Step),
                 Array.Empty<string>(),
                 now,
@@ -115,7 +135,8 @@ public class InMemoryRunStateStore : IRunStateStore
                     @event,
                     now),
                 ApplyArtifacts(Array.Empty<RunOutputArtifactInfo>(), @event),
-                ApplyWorkerEvent(CreateInitialWorkerStatuses(now), @event, now)),
+                ApplyWorkerEvent(CreateInitialWorkerStatuses(now), @event, now),
+                new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) =>
             {
                 if (IsTerminalStatus(current.Status))
@@ -141,6 +162,35 @@ public class InMemoryRunStateStore : IRunStateStore
                     WorkerStatuses = ApplyWorkerEvent(current.WorkerStatuses, @event, now)
                 };
             });
+        PersistSnapshot();
+    }
+
+    public void ApplySenderFeedback(SenderFileDispatchFeedback feedback)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _runs.AddOrUpdate(
+            feedback.CorrelationId,
+            _ => new RunStatusInfo(
+                feedback.CorrelationId,
+                TaskCodeRun,
+                RunLifecycleStatus.Running,
+                Array.Empty<string>(),
+                now,
+                now,
+                Message: "Sender feedback received.",
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: CreateInitialWorkerStatuses(now),
+                SenderBatches: ApplySenderFeedbackCore(
+                    source: null,
+                    feedback,
+                    now)),
+            (_, current) => current with
+            {
+                UpdatedAt = now,
+                SenderBatches = ApplySenderFeedbackCore(current.SenderBatches, feedback, now)
+            });
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -155,6 +205,7 @@ public class InMemoryRunStateStore : IRunStateStore
             correlationId,
             _ => new RunStatusInfo(
                 correlationId,
+                TaskCodeRun,
                 RunLifecycleStatus.Failed,
                 Array.Empty<string>(),
                 now,
@@ -163,7 +214,8 @@ public class InMemoryRunStateStore : IRunStateStore
                 message,
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+                WorkerStatuses: CreateInitialWorkerStatuses(now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) => current with
             {
                 Status = RunLifecycleStatus.Failed,
@@ -178,6 +230,7 @@ public class InMemoryRunStateStore : IRunStateStore
                     now),
                 WorkerStatuses = ResetWorkers(current.WorkerStatuses, now)
             });
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -192,6 +245,7 @@ public class InMemoryRunStateStore : IRunStateStore
             correlationId,
             _ => new RunStatusInfo(
                 correlationId,
+                TaskCodeRun,
                 RunLifecycleStatus.CancellationRequested,
                 Array.Empty<string>(),
                 now,
@@ -199,7 +253,8 @@ public class InMemoryRunStateStore : IRunStateStore
                 Message: message,
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+                WorkerStatuses: CreateInitialWorkerStatuses(now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) =>
             {
                 if (IsTerminalStatus(current.Status))
@@ -217,6 +272,7 @@ public class InMemoryRunStateStore : IRunStateStore
                         : current.WorkerStatuses
                 };
             });
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -231,6 +287,7 @@ public class InMemoryRunStateStore : IRunStateStore
             correlationId,
             _ => new RunStatusInfo(
                 correlationId,
+                TaskCodeRun,
                 RunLifecycleStatus.Cancelled,
                 Array.Empty<string>(),
                 now,
@@ -239,7 +296,8 @@ public class InMemoryRunStateStore : IRunStateStore
                 message,
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-                WorkerStatuses: CreateInitialWorkerStatuses(now)),
+                WorkerStatuses: CreateInitialWorkerStatuses(now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
             (_, current) =>
             {
                 if (IsTerminalStatus(current.Status))
@@ -262,6 +320,7 @@ public class InMemoryRunStateStore : IRunStateStore
                     WorkerStatuses = ResetWorkers(current.WorkerStatuses, now)
                 };
             });
+        PersistSnapshot();
     }
 
     /// <summary>
@@ -455,6 +514,48 @@ public class InMemoryRunStateStore : IRunStateStore
             });
     }
 
+    private static IReadOnlyDictionary<string, SenderBatchStatusInfo> ApplySenderFeedbackCore(
+        IReadOnlyDictionary<string, SenderBatchStatusInfo>? source,
+        SenderFileDispatchFeedback feedback,
+        DateTimeOffset now)
+    {
+        var map = source is null
+            ? new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, SenderBatchStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
+
+        map.TryGetValue(feedback.BatchId, out var currentBatch);
+        var sentFiles = currentBatch?.SentFiles?.ToList() ?? [];
+
+        if (feedback.Kind == SenderFeedbackKind.FileSent && !string.IsNullOrWhiteSpace(feedback.FilePath))
+        {
+            var normalizedPath = Path.GetFullPath(feedback.FilePath);
+            if (sentFiles.All(x => !string.Equals(x.FilePath, normalizedPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                sentFiles.Add(new SenderFileDispatchStateInfo(normalizedPath, feedback.OccurredAt));
+            }
+        }
+
+        var status = feedback.Kind switch
+        {
+            SenderFeedbackKind.FileSent => SenderBatchStatus.InProgress,
+            SenderFeedbackKind.BatchCompleted => SenderBatchStatus.Completed,
+            SenderFeedbackKind.BatchFailed => SenderBatchStatus.Failed,
+            _ => SenderBatchStatus.InProgress
+        };
+
+        map[feedback.BatchId] = new SenderBatchStatusInfo(
+            BatchId: feedback.BatchId,
+            MemberName: feedback.MemberName,
+            Status: status,
+            UpdatedAt: now,
+            SentFiles: sentFiles
+                .OrderBy(static x => x.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            Message: feedback.Message);
+
+        return map;
+    }
+
     private static int? TryExtractWorkerId(string? message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -480,4 +581,83 @@ public class InMemoryRunStateStore : IRunStateStore
                     null,
                     now));
     }
+
+    private void LoadFromDisk()
+    {
+        try
+        {
+            if (!File.Exists(_stateFilePath))
+            {
+                return;
+            }
+
+            var json = File.ReadAllText(_stateFilePath);
+            var snapshot = JsonSerializer.Deserialize<RunStatePersistenceSnapshot>(json, JsonOptions);
+            if (snapshot?.Runs is null || snapshot.Runs.Count == 0)
+            {
+                return;
+            }
+
+            var recoveredAt = DateTimeOffset.UtcNow;
+            foreach (var run in snapshot.Runs)
+            {
+                var normalizedRun = NormalizeRecoveredRun(run, recoveredAt);
+                _runs[normalizedRun.CorrelationId] = normalizedRun;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to load run state from '{_stateFilePath}': {ex.Message}");
+        }
+    }
+
+    private void PersistSnapshot()
+    {
+        try
+        {
+            lock (_persistSync)
+            {
+                var directory = Path.GetDirectoryName(_stateFilePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var snapshot = new RunStatePersistenceSnapshot(
+                    PersistenceVersion,
+                    DateTimeOffset.UtcNow,
+                    _runs.Values.OrderByDescending(static run => run.UpdatedAt).ToArray());
+                var json = JsonSerializer.Serialize(snapshot, JsonOptions);
+                var tempPath = $"{_stateFilePath}.tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _stateFilePath, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to persist run state to '{_stateFilePath}': {ex.Message}");
+        }
+    }
+
+    private static RunStatusInfo NormalizeRecoveredRun(RunStatusInfo run, DateTimeOffset recoveredAt)
+    {
+        if (run.Status is not (RunLifecycleStatus.Running or RunLifecycleStatus.CancellationRequested))
+        {
+            return run;
+        }
+
+        return run with
+        {
+            Status = RunLifecycleStatus.Cancelled,
+            UpdatedAt = recoveredAt,
+            LastStep = RunnerStep.Failed,
+            Message = "Run was interrupted due to server restart.",
+            WorkerStatuses = ResetWorkers(run.WorkerStatuses, recoveredAt)
+        };
+    }
+
+    private sealed record RunStatePersistenceSnapshot(
+        string Version,
+        DateTimeOffset SavedAt,
+        IReadOnlyCollection<RunStatusInfo> Runs);
 }

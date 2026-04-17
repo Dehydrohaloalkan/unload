@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(pipeline);
         services.AddSingleton<IWorkflowTaskDependencyCatalog, WorkflowTaskDependencyCatalog>();
         services.AddSingleton<IWorkflowTaskTransitionService, WorkflowTaskTransitionService>();
+        services.AddSingleton<ITaskFlowRegistryInvariant, TaskFlowRegistryInvariant>();
 
         foreach (var task in pipeline.Tasks)
         {

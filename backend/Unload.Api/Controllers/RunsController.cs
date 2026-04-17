@@ -21,6 +21,7 @@ public class RunsController : ControllerBase
     private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
     private readonly IPresetGateService _presetGateService;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
     private readonly IHubContext<RunStatusHub> _hubContext;
     private readonly ILogger<RunsController> _logger;
 
@@ -42,6 +43,7 @@ public class RunsController : ControllerBase
         IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
         IPresetGateService presetGateService,
+        ITaskExecutionHistoryStore taskExecutionHistoryStore,
         IHubContext<RunStatusHub> hubContext,
         ILogger<RunsController> logger)
     {
@@ -51,6 +53,7 @@ public class RunsController : ControllerBase
         _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
         _presetGateService = presetGateService;
+        _taskExecutionHistoryStore = taskExecutionHistoryStore;
         _hubContext = hubContext;
         _logger = logger;
     }
@@ -90,9 +93,9 @@ public class RunsController : ControllerBase
     /// Запускает preset-задачу (скрипты из <c>scripts/preset</c>).
     /// </summary>
     [HttpPost("preset")]
-    public async Task<IActionResult> RunPresetAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> RunPresetAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _runPresetUseCase.ExecuteAsync(cancellationToken);
+        var result = await _runPresetUseCase.ExecuteAsync(request?.AdminOverride == true, cancellationToken);
         return Ok(result);
     }
 
@@ -100,9 +103,9 @@ public class RunsController : ControllerBase
     /// Запускает доп-выгрузку скриптов из корня <c>scripts</c> (без подпапок).
     /// </summary>
     [HttpPost("extra")]
-    public async Task<IActionResult> RunExtraAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> RunExtraAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _runExtraUseCase.ExecuteAsync(cancellationToken);
+        var result = await _runExtraUseCase.ExecuteAsync(request?.AdminOverride == true, cancellationToken);
         return Ok(result);
     }
 
@@ -114,6 +117,41 @@ public class RunsController : ControllerBase
     public IActionResult GetRuns()
     {
         return Ok(_runStateStore.List());
+    }
+
+    [HttpGet("today")]
+    public IActionResult GetTodayRuns()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var runs = _runStateStore
+            .List()
+            .Where(run =>
+                string.Equals(run.TaskCode, WorkflowTaskCodes.Run, StringComparison.OrdinalIgnoreCase) &&
+                DateOnly.FromDateTime(run.CreatedAt.LocalDateTime) == today)
+            .OrderByDescending(static run => run.CreatedAt)
+            .ToArray();
+        return Ok(runs);
+    }
+
+    [HttpGet("dashboard")]
+    public IActionResult GetWorkflowDashboard()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var history = _taskExecutionHistoryStore.List(today);
+        var runLastCompletedAt = history
+            .FirstOrDefault(record => string.Equals(record.TaskCode, WorkflowTaskCodes.Run, StringComparison.OrdinalIgnoreCase))
+            ?.CompletedAt;
+        var extraLastCompletedAt = history
+            .FirstOrDefault(record => string.Equals(record.TaskCode, WorkflowTaskCodes.Extra, StringComparison.OrdinalIgnoreCase))
+            ?.CompletedAt;
+
+        return Ok(new WorkflowDashboardSnapshotResponse(
+            _presetGateService.Get(),
+            _taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Run, today),
+            _taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Extra, today),
+            runLastCompletedAt,
+            extraLastCompletedAt,
+            history));
     }
 
     /// <summary>

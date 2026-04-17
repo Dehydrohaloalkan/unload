@@ -29,6 +29,12 @@ public interface IRunStateStore
     void ApplyEvent(RunnerEvent @event);
 
     /// <summary>
+    /// Применяет обратное событие sender по отправке файлов.
+    /// </summary>
+    /// <param name="feedback">Событие sender о прогрессе или финале отправки batch.</param>
+    void ApplySenderFeedback(SenderFileDispatchFeedback feedback);
+
+    /// <summary>
     /// Помечает запуск как завершившийся с ошибкой.
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>

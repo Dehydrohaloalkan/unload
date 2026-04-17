@@ -17,6 +17,7 @@ import {
   MemberViewModel,
   PresetGateState,
   ProblemDetailsResponse,
+  OutputFileInfo,
   RunnerEvent,
   RunnerStep,
   RunAcceptedResponse,
@@ -25,6 +26,8 @@ import {
   RunStatusInfo,
   ServerTimeResponse,
   ScriptTaskRunResult,
+  TaskRecord,
+  WorkflowDashboardSnapshotResponse,
   TaskUiState,
 } from './app.models';
 
@@ -36,6 +39,7 @@ interface ActiveRunPayload {
 
 const MEMBER_SELECTION_STORAGE_KEY = 'unload.web.member-selection';
 const EXTRA_TASK_STORAGE_KEY = 'unload.web.extra-task';
+const PRESET_TASK_STORAGE_KEY = 'unload.web.preset-task';
 const RUN_EVENT_LIMIT = 80;
 
 @Injectable({ providedIn: 'root' })
@@ -46,6 +50,8 @@ export class WorkflowStore {
   private readonly apiBaseUrl = resolveApiBaseUrl();
   readonly buildSystemDownloadUrl = (path: string): string =>
     this.apiUrl(`/api/system/download?path=${encodeURIComponent(path)}`);
+  readonly buildSystemArchiveUrl = (path: string): string =>
+    this.apiUrl(`/api/system/download-archive?path=${encodeURIComponent(path)}`);
 
   private connection: HubConnection | null = null;
   private initialized = false;
@@ -69,6 +75,14 @@ export class WorkflowStore {
   readonly selectedMemberCodes = signal<string[]>([]);
   readonly presetTask = signal<TaskUiState>(createIdleTaskState());
   readonly extraTask = signal<TaskUiState>(createIdleTaskState());
+  readonly hasRunToday = signal(false);
+  readonly hasExtraToday = signal(false);
+  readonly runLastCompletedAt = signal<string | null>(null);
+  readonly extraLastCompletedAt = signal<string | null>(null);
+  readonly todayHistory = signal<TaskRecord[]>([]);
+  readonly todayRuns = signal<RunStatusInfo[]>([]);
+  readonly outputFilesByPath = signal<Record<string, OutputFileInfo[]>>({});
+  readonly adminMode = signal(false);
 
   readonly phase = computed<'gate' | 'tasks'>(() =>
     this.presetState()?.presetCompleted ? 'tasks' : 'gate',
@@ -104,12 +118,12 @@ export class WorkflowStore {
   readonly canStartRun = computed(
     () =>
       this.selectedCount() > 0 &&
-      this.canRunMainOrExtra() &&
+      (this.canRunMainOrExtra() || this.adminMode()) &&
       !this.isRunBusy(),
   );
 
   readonly canRunExtra = computed(
-    () => this.canRunMainOrExtra() && !this.extraTask().running,
+    () => (this.canRunMainOrExtra() || this.adminMode()) && !this.extraTask().running,
   );
 
   readonly memberGroups = computed(() =>
@@ -137,6 +151,7 @@ export class WorkflowStore {
       this.timeSyncTimerId = window.setInterval(() => {
         void this.syncServerTimeAsync();
       }, 30000);
+      this.restorePresetTaskState();
       this.restoreExtraTaskState();
     }
 
@@ -172,7 +187,7 @@ export class WorkflowStore {
   }
 
   async runPresetAsync(): Promise<void> {
-    if (!this.canRunPreset()) {
+    if (!this.canRunPreset() && !this.adminMode()) {
       return;
     }
 
@@ -181,32 +196,41 @@ export class WorkflowStore {
     this.presetTask.set({
       running: true,
       startedAt,
+      completedAt: null,
       result: null,
       error: null,
       stale: false,
     });
+    this.persistPresetTask(this.presetTask());
 
     try {
       const result = await firstValueFrom(
-        this.http.post<ScriptTaskRunResult>(this.apiUrl('/api/runs/preset'), null),
+        this.http.post<ScriptTaskRunResult>(this.apiUrl('/api/runs/preset'), {
+          adminOverride: this.adminMode(),
+        }),
       );
       this.presetTask.set({
         running: false,
         startedAt,
+        completedAt: new Date().toISOString(),
         result,
         error: null,
         stale: false,
       });
+      this.persistPresetTask(this.presetTask());
       await this.refreshPresetStateAsync();
+      await this.refreshDashboardSnapshotAsync();
     } catch (error) {
       const message = this.toErrorMessage(error, 'Не удалось запустить preset-задачу.');
       this.presetTask.set({
         running: false,
         startedAt,
+        completedAt: new Date().toISOString(),
         result: null,
         error: message,
         stale: false,
       });
+      this.persistPresetTask(this.presetTask());
       this.errorMessage.set(message);
     }
   }
@@ -221,6 +245,7 @@ export class WorkflowStore {
     const taskState: TaskUiState = {
       running: true,
       startedAt,
+      completedAt: null,
       result: null,
       error: null,
       stale: false,
@@ -231,22 +256,27 @@ export class WorkflowStore {
 
     try {
       const result = await firstValueFrom(
-        this.http.post<ScriptTaskRunResult>(this.apiUrl('/api/runs/extra'), null),
+        this.http.post<ScriptTaskRunResult>(this.apiUrl('/api/runs/extra'), {
+          adminOverride: this.adminMode(),
+        }),
       );
       const nextState: TaskUiState = {
         running: false,
         startedAt,
+        completedAt: new Date().toISOString(),
         result,
         error: null,
         stale: false,
       };
       this.extraTask.set(nextState);
       this.persistExtraTask(nextState);
+      await this.refreshDashboardSnapshotAsync();
     } catch (error) {
       const message = this.toErrorMessage(error, 'Не удалось запустить extra-задачу.');
       const nextState: TaskUiState = {
         running: false,
         startedAt,
+        completedAt: new Date().toISOString(),
         result: null,
         error: message,
         stale: false,
@@ -269,6 +299,7 @@ export class WorkflowStore {
       const response = await firstValueFrom(
         this.http.post<RunAcceptedResponse>(this.apiUrl('/api/runs'), {
           memberCodes: this.selectedMemberCodes(),
+          adminOverride: this.adminMode(),
         }),
       );
 
@@ -318,23 +349,36 @@ export class WorkflowStore {
     }
   }
 
+  setAdminMode(enabled: boolean): void {
+    this.adminMode.set(enabled);
+  }
+
   private async bootstrapAsync(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set(null);
 
     try {
-      const [catalog, members, presetState, activeRunPayload, serverTime] = await Promise.all([
+      const [catalog, members, presetState, activeRunPayload, serverTime, dashboard, runsToday] = await Promise.all([
         this.fetchCatalogAsync(),
         this.fetchMembersAsync(),
         this.fetchPresetStateAsync(),
         this.fetchActiveRunAsync(),
         this.fetchServerTimeAsync(),
+        this.fetchDashboardSnapshotAsync(),
+        this.fetchTodayRunsAsync(),
       ]);
 
       this.applyServerTime(serverTime);
       this.catalog.set(catalog);
       this.members.set(members);
-      this.presetState.set(presetState);
+      this.presetState.set(dashboard.presetState ?? presetState);
+      this.hasRunToday.set(Boolean(dashboard.hasRunToday));
+      this.hasExtraToday.set(Boolean(dashboard.hasExtraToday));
+      this.runLastCompletedAt.set(dashboard.runLastCompletedAt ?? null);
+      this.extraLastCompletedAt.set(dashboard.extraLastCompletedAt ?? null);
+      this.todayHistory.set(dashboard.todayHistory ?? []);
+      this.todayRuns.set(runsToday ?? []);
+      await this.refreshOutputFilesForHistoryAsync(dashboard.todayHistory ?? []);
       this.reconcileSelection(members);
 
       const correlationId = activeRunPayload?.correlationId ?? null;
@@ -394,6 +438,8 @@ export class WorkflowStore {
       this.activeRun.set(status);
       if (isTerminalRunStatus(status.status)) {
         this.stopRunPolling();
+        void this.refreshTodayRunsAsync();
+        void this.refreshDashboardSnapshotAsync();
       } else {
         this.ensureRunPolling();
       }
@@ -477,12 +523,31 @@ export class WorkflowStore {
     this.activeRun.set(state);
     if (isTerminalRunStatus(state.status)) {
       this.stopRunPolling();
+      await this.refreshTodayRunsAsync();
     }
   }
 
   private async refreshPresetStateAsync(): Promise<void> {
     const state = await this.fetchPresetStateAsync();
     this.presetState.set(state);
+  }
+
+  private async refreshDashboardSnapshotAsync(): Promise<void> {
+    try {
+      const snapshot = await this.fetchDashboardSnapshotAsync();
+      this.hasRunToday.set(Boolean(snapshot.hasRunToday));
+      this.hasExtraToday.set(Boolean(snapshot.hasExtraToday));
+      this.runLastCompletedAt.set(snapshot.runLastCompletedAt ?? null);
+      this.extraLastCompletedAt.set(snapshot.extraLastCompletedAt ?? null);
+      this.todayHistory.set(snapshot.todayHistory ?? []);
+      this.presetState.set(snapshot.presetState ?? this.presetState());
+      await this.refreshTodayRunsAsync();
+      await this.refreshOutputFilesForHistoryAsync(snapshot.todayHistory ?? []);
+    } catch (error) {
+      if (isDevMode()) {
+        console.error(error);
+      }
+    }
   }
 
   private async syncServerTimeAsync(): Promise<void> {
@@ -517,6 +582,63 @@ export class WorkflowStore {
     return firstValueFrom(
       this.http.get<ServerTimeResponse>(this.apiUrl('/api/system/time')),
     );
+  }
+
+  private async fetchDashboardSnapshotAsync(): Promise<WorkflowDashboardSnapshotResponse> {
+    return firstValueFrom(
+      this.http.get<WorkflowDashboardSnapshotResponse>(this.apiUrl('/api/runs/dashboard')),
+    );
+  }
+
+  private async fetchTodayRunsAsync(): Promise<RunStatusInfo[]> {
+    const runs = await firstValueFrom(this.http.get<RunStatusInfo[]>(this.apiUrl('/api/runs/today')));
+    return runs ?? [];
+  }
+
+  private async refreshTodayRunsAsync(): Promise<void> {
+    try {
+      this.todayRuns.set(await this.fetchTodayRunsAsync());
+    } catch (error) {
+      if (isDevMode()) {
+        console.error(error);
+      }
+    }
+  }
+
+  private async refreshOutputFilesForHistoryAsync(history: TaskRecord[]): Promise<void> {
+    const paths = history
+      .filter(
+        (record) =>
+          (record.taskCode === 'extra' || record.taskCode === 'preset') &&
+          !!record.outputPath,
+      )
+      .map((record) => record.outputPath as string);
+    if (paths.length === 0) {
+      return;
+    }
+
+    const cache = { ...this.outputFilesByPath() };
+    for (const path of new Set(paths)) {
+      if (cache[path]) {
+        continue;
+      }
+
+      try {
+        const files = await firstValueFrom(
+          this.http.get<OutputFileInfo[]>(
+            this.apiUrl(`/api/system/output-files?path=${encodeURIComponent(path)}`),
+          ),
+        );
+        cache[path] = files ?? [];
+      } catch (error) {
+        cache[path] = [];
+        if (isDevMode()) {
+          console.error(error);
+        }
+      }
+    }
+
+    this.outputFilesByPath.set(cache);
   }
 
   private async fetchActiveRunAsync(): Promise<RunStatusInfo | ActiveRunPayload | null> {
@@ -619,6 +741,14 @@ export class WorkflowStore {
     window.localStorage.setItem(EXTRA_TASK_STORAGE_KEY, JSON.stringify(state));
   }
 
+  private persistPresetTask(state: TaskUiState): void {
+    if (!this.browser) {
+      return;
+    }
+
+    window.localStorage.setItem(PRESET_TASK_STORAGE_KEY, JSON.stringify(state));
+  }
+
   private restoreExtraTaskState(): void {
     try {
       const raw = window.localStorage.getItem(EXTRA_TASK_STORAGE_KEY);
@@ -634,12 +764,38 @@ export class WorkflowStore {
       this.extraTask.set({
         running: false,
         startedAt: typeof payload.startedAt === 'string' ? payload.startedAt : null,
+        completedAt: typeof payload.completedAt === 'string' ? payload.completedAt : null,
         result: payload.result ?? null,
         error: payload.error ?? null,
         stale: Boolean(payload.running),
       });
     } catch {
       this.extraTask.set(createIdleTaskState());
+    }
+  }
+
+  private restorePresetTaskState(): void {
+    try {
+      const raw = window.localStorage.getItem(PRESET_TASK_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const payload = JSON.parse(raw) as Partial<TaskUiState> | null;
+      if (!payload) {
+        return;
+      }
+
+      this.presetTask.set({
+        running: false,
+        startedAt: typeof payload.startedAt === 'string' ? payload.startedAt : null,
+        completedAt: typeof payload.completedAt === 'string' ? payload.completedAt : null,
+        result: payload.result ?? null,
+        error: payload.error ?? null,
+        stale: Boolean(payload.running),
+      });
+    } catch {
+      this.presetTask.set(createIdleTaskState());
     }
   }
 
@@ -834,6 +990,7 @@ function createIdleTaskState(): TaskUiState {
   return {
     running: false,
     startedAt: null,
+    completedAt: null,
     result: null,
     error: null,
     stale: false,

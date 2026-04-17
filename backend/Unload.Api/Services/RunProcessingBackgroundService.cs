@@ -13,6 +13,7 @@ public class RunProcessingBackgroundService : BackgroundService
 {
     private readonly IRunCoordinator _runCoordinator;
     private readonly IRunStateStore _runStateStore;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
     private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
     private readonly IWorkflowTaskTransitionService _transitionService;
     private readonly IRunner _runner;
@@ -30,6 +31,7 @@ public class RunProcessingBackgroundService : BackgroundService
     public RunProcessingBackgroundService(
         IRunCoordinator runCoordinator,
         IRunStateStore runStateStore,
+        ITaskExecutionHistoryStore taskExecutionHistoryStore,
         IWorkflowTaskAccessService workflowTaskAccessService,
         IWorkflowTaskTransitionService transitionService,
         IRunner runner,
@@ -38,6 +40,7 @@ public class RunProcessingBackgroundService : BackgroundService
     {
         _runCoordinator = runCoordinator;
         _runStateStore = runStateStore;
+        _taskExecutionHistoryStore = taskExecutionHistoryStore;
         _workflowTaskAccessService = workflowTaskAccessService;
         _transitionService = transitionService;
         _runner = runner;
@@ -97,6 +100,15 @@ public class RunProcessingBackgroundService : BackgroundService
                 {
                     if (finalState.Status == RunLifecycleStatus.Completed)
                     {
+                        _taskExecutionHistoryStore.Add(
+                            WorkflowTaskCodes.Run,
+                            finalState.CreatedAt,
+                            finalState.UpdatedAt,
+                            finalState.CorrelationId,
+                            finalState.Message,
+                            scriptsExecuted: null,
+                            filesWritten: finalState.OutputArtifacts?.Count ?? 0,
+                            outputPath: finalState.OutputPath);
                         _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Run);
                         await _transitionService.HandleCompletedAsync(WorkflowTaskCodes.Run, finalState, stoppingToken);
                     }

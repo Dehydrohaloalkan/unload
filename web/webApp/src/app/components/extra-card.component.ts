@@ -1,93 +1,28 @@
-import { CommonModule } from '@angular/common';
-import { Component, computed, input, output } from '@angular/core';
+import { CommonModule, formatDate } from '@angular/common';
+import { Component, computed, inject, input, output } from '@angular/core';
+import { ConfirmationService } from 'primeng/api';
 import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
-import { Message } from 'primeng/message';
-import { ProgressSpinner } from 'primeng/progressspinner';
-import { Tag } from 'primeng/tag';
+import { ConfirmDialog } from 'primeng/confirmdialog';
 import { TaskUiState } from '../app.models';
 
 @Component({
   selector: 'app-extra-card',
   standalone: true,
-  imports: [CommonModule, Button, Card, Message, ProgressSpinner, Tag],
-  template: `
-    <p-card styleClass="task-card h-full">
-      <ng-template #header>
-        <div class="flex items-start justify-between gap-4 px-6 pt-6">
-          <div>
-            <p class="text-xs font-medium uppercase tracking-[0.28em] text-slate-400">
-              Этап 2
-            </p>
-            <h2 class="mt-2 text-2xl font-medium text-slate-800">Extra-задача</h2>
-          </div>
-          <p-tag
-            [severity]="statusSeverity()"
-            [value]="statusLabel()"
-          />
-        </div>
-      </ng-template>
-
-      <div class="flex h-full flex-col gap-5">
-        <div class="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
-          Пока карточка упрощена: один запуск, индикатор выполнения, таймер и итог выполнения через
-          текущее API.
-        </div>
-
-        @if (task().running) {
-          <div class="flex flex-col items-center gap-4 rounded-[1.75rem] border border-sky-100 bg-sky-50/80 px-5 py-8 text-center">
-            <p-progress-spinner
-              strokeWidth="4"
-              [style]="{ width: '3rem', height: '3rem' }"
-            />
-            <div>
-              <div class="text-lg font-medium text-sky-950">Extra выполняется</div>
-              <div class="mt-1 text-sm text-sky-700">
-                Прошло {{ elapsedLabel() }}
-              </div>
-            </div>
-          </div>
-        } @else {
-          <p-button
-            label="Запустить extra"
-            icon="pi pi-bolt"
-            size="large"
-            [fluid]="true"
-            [disabled]="!canRun()"
-            (onClick)="start.emit()"
-          />
-        }
-
-        @if (task().result; as result) {
-          <div class="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4 text-sm text-emerald-900">
-            <div class="font-medium">Последний запуск завершён</div>
-            <div class="mt-2">Скриптов: {{ result.scriptsExecuted }}</div>
-            <div>Файлов: {{ result.filesWritten }}</div>
-            @if (result.outputPath) {
-              <div class="break-all">Output: {{ result.outputPath }}</div>
-            }
-          </div>
-        }
-
-        @if (task().stale) {
-          <p-message
-            severity="warn"
-            text="Страница была перезагружена во время extra-задачи. У текущего backend-контракта нет отдельного live-state для extra, поэтому точный статус после reload недоступен."
-          />
-        }
-
-        @if (task().error; as error) {
-          <p-message severity="error" [text]="error" />
-        }
-      </div>
-    </p-card>
-  `,
+  imports: [CommonModule, Button, Card, ConfirmDialog],
+  providers: [ConfirmationService],
+  templateUrl: './extra-card.component.html',
+  styleUrl: './extra-card.component.css',
 })
 export class ExtraCardComponent {
   readonly task = input.required<TaskUiState>();
   readonly now = input.required<Date>();
   readonly canRun = input(false);
+  readonly hasRunToday = input(false);
+  readonly lastCompletedAt = input<string | null>(null);
   readonly start = output<void>();
+  readonly openDetails = output<void>();
+  private readonly confirmationService = inject(ConfirmationService);
 
   readonly elapsedLabel = computed(() => {
     const startedAt = this.task().startedAt;
@@ -142,6 +77,28 @@ export class ExtraCardComponent {
     }
 
     return 'secondary';
+  }
+
+  completedLabel(): string {
+    const value = this.lastCompletedAt();
+    return value ? formatDate(value, 'HH:mm:ss', 'ru-RU') : '';
+  }
+
+  handleStartClick(): void {
+    if (!this.hasRunToday()) {
+      this.start.emit();
+      return;
+    }
+
+    this.confirmationService.confirm({
+      message: 'Точно запустить выгрузку?',
+      header: 'Подтверждение',
+      acceptLabel: 'Запустить',
+      rejectLabel: 'Отмена',
+      accept: () => {
+        this.start.emit();
+      },
+    });
   }
 }
 

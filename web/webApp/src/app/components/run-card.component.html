@@ -1,0 +1,52 @@
+<p-card styleClass="stage-card">
+  <ng-template #header>
+    <div class="stage-head">
+      <div>
+        <h2 class="stage-title">3. Выгрузка</h2>
+      </div>
+      @if (lastCompletedAt()) {
+        <div class="stage-completed">
+          Выполнено<br />
+          <span>{{ formatMoment(lastCompletedAt()!) }}</span>
+        </div>
+      }
+      <i
+        class="pi stage-icon"
+        [class.pi-spin]="runBusy()"
+        [class.pi-spinner]="runBusy()"
+        [class.pi-check-circle]="!runBusy() && !!lastCompletedAt()"
+        [class.pi-times-circle]="!runBusy() && !lastCompletedAt()"
+        [class.stage-icon--spin]="runBusy()"
+        [class.stage-icon--success]="!runBusy() && !!lastCompletedAt()"
+        [class.stage-icon--danger]="!runBusy() && !lastCompletedAt()"
+      ></i>
+    </div>
+  </ng-template>
+
+  <div class="stage-body">
+    <div class="stage-actions">
+      <div class="stage-main-action">
+      <p-button
+        label="Запустить выгрузку"
+        icon="pi pi-play"
+        size="small"
+        [fluid]="true"
+        [loading]="runBusy()"
+        [disabled]="!canStartRun()"
+        [styleClass]="hasRunToday() ? 'stage-button--done' : 'pulse-button'"
+        (onClick)="handleStartRunClick()"
+      />
+      </div>
+      <p-button
+        icon="pi pi-arrow-right"
+        [rounded]="true"
+        [outlined]="true"
+        severity="secondary"
+        [attr.aria-label]="'Подробнее'"
+        (onClick)="openDetails.emit()"
+      />
+    </div>
+  </div>
+</p-card>
+
+<p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }"></p-confirmdialog>

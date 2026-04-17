@@ -1,0 +1,50 @@
+<p-card styleClass="stage-card">
+  <ng-template #header>
+    <div class="stage-head">
+      <div>
+        <h2 class="stage-title">4. Extra</h2>
+      </div>
+      @if (lastCompletedAt()) {
+        <div class="stage-completed">
+          Выполнено<br />
+          <span>{{ completedLabel() }}</span>
+        </div>
+      }
+      <i
+        class="pi stage-icon"
+        [class.pi-spin]="task().running"
+        [class.pi-spinner]="task().running"
+        [class.pi-check-circle]="!task().running && !!lastCompletedAt()"
+        [class.pi-times-circle]="!task().running && !lastCompletedAt()"
+        [class.stage-icon--spin]="task().running"
+        [class.stage-icon--success]="!task().running && !!lastCompletedAt()"
+        [class.stage-icon--danger]="!task().running && !lastCompletedAt()"
+      ></i>
+    </div>
+  </ng-template>
+
+  <div class="stage-body">
+    <div class="stage-actions">
+      <div class="stage-main-action">
+      <p-button
+        label="Запустить extra"
+        icon="pi pi-bolt"
+        size="small"
+        [fluid]="true"
+        [disabled]="!canRun()"
+        [styleClass]="hasRunToday() ? 'stage-button--done' : 'pulse-button'"
+        (onClick)="handleStartClick()"
+      />
+      </div>
+      <p-button
+        icon="pi pi-arrow-right"
+        [rounded]="true"
+        [outlined]="true"
+        severity="secondary"
+        [attr.aria-label]="'Подробнее'"
+        (onClick)="openDetails.emit()"
+      />
+    </div>
+  </div>
+</p-card>
+<p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }"></p-confirmdialog>

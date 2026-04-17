@@ -22,6 +22,6 @@ public sealed class WorkflowTaskDependencyCatalog : IWorkflowTaskDependencyCatal
             return rule;
         }
 
-        return new WorkflowTaskRule(taskCode, Array.Empty<string>(), Array.Empty<string>());
+        throw new InvalidOperationException($"Workflow task dependency rule '{taskCode}' is not configured.");
     }
 }

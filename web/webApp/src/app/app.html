@@ -1,14 +1,17 @@
-<main class="app-shell">
-  <section class="hero-section" [class.hero-section--shifted]="taskDeckVisible()">
+<main class="app-shell" [class.app-shell--drawer-open]="detailsPanelOpen">
+  <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen">
     <div class="app-header">
       <div>
-        <h1 class="app-title">Панель управления выгрузкой</h1>
+        <h1 class="app-title">Панель выгрузки</h1>
       </div>
 
       <div class="app-header__actions">
-        <p-tag
-          [severity]="store.connectionReady() ? 'success' : 'warn'"
-          [value]="store.connectionReady() ? 'Live stream connected' : 'Live stream degraded'"
+        <p-button
+          [label]="store.adminMode() ? 'Admin mode: ON' : 'Admin mode'"
+          [severity]="store.adminMode() ? 'danger' : 'secondary'"
+          [outlined]="!store.adminMode()"
+          icon="pi pi-shield"
+          (onClick)="toggleAdminMode()"
         />
       </div>
     </div>
@@ -29,33 +32,36 @@
         </div>
       </div>
     } @else {
-      <div class="hero-grid">
+      <div class="stage-stack">
         <app-live-clock
           [now]="store.currentTime()"
           [connected]="store.connectionReady()"
+          [probeCompleted]="(store.presetState()?.readyForPreset ?? false) || (store.presetState()?.presetCompleted ?? false)"
+          [completedAt]="stage1CompletedAt()"
+          [dayWindowSummary]="dayWindowSummary()"
         />
 
         <app-preset-stage
           [presetState]="store.presetState()"
           [presetTask]="store.presetTask()"
-          [canRunPreset]="store.canRunPreset()"
+          [canRunPreset]="store.canRunPreset() || store.adminMode()"
+          [completedAt]="stage2CompletedAt()"
           (startPreset)="store.runPresetAsync()"
+          (openDetails)="openDetails('preset')"
         />
-      </div>
-    }
-  </section>
 
-  <section class="task-section" [class.task-section--visible]="taskDeckVisible()">
-    <div class="task-grid">
       <app-run-card
         [groups]="store.memberGroups()"
         [run]="store.activeRun()"
         [selectedCount]="store.selectedCount()"
         [canStartRun]="store.canStartRun()"
         [runBusy]="store.isRunBusy()"
+        [hasRunToday]="store.hasRunToday()"
+        [lastCompletedAt]="store.runLastCompletedAt()"
         [buildDownloadUrl]="store.buildSystemDownloadUrl"
         (startRun)="store.startRunAsync()"
         (stopRun)="store.stopRunAsync()"
+        (openDetails)="openDetails('run')"
         (selectAll)="store.selectAllMembers()"
         (clear)="store.clearMemberSelection()"
         (toggleMember)="store.toggleMember($event.code, $event.selected)"
@@ -65,8 +71,107 @@
         [task]="store.extraTask()"
         [now]="store.currentTime()"
         [canRun]="store.canRunExtra()"
+        [hasRunToday]="store.hasExtraToday()"
+        [lastCompletedAt]="store.extraLastCompletedAt()"
         (start)="store.runExtraAsync()"
+        (openDetails)="openDetails('extra')"
+      />
+      </div>
+    }
+  </section>
+
+  <aside class="details-drawer" [class.details-drawer--open]="detailsPanelOpen">
+    <div class="details-drawer__head">
+      <div class="details-drawer__title">
+        @if (detailsPanelStage === 'run') {
+          Детали этапа 3 (выгрузка)
+        } @else if (detailsPanelStage === 'preset') {
+          Детали этапа 2 (пресет)
+        } @else {
+          Детали этапа 4 (extra)
+        }
+      </div>
+      <p-button
+        icon="pi pi-times"
+        [rounded]="true"
+        [text]="true"
+        (onClick)="closeDetails()"
       />
     </div>
-  </section>
+
+    @if (detailsPanelStage === 'run') {
+      <div class="details-drawer__body">
+        <app-details-run-panel
+          [presetTask]="store.presetTask()"
+          [memberGroups]="store.memberGroups()"
+          [selectedMemberCode]="drawerMemberCode()"
+          [canStartRun]="store.canStartRun()"
+          [activeRun]="store.activeRun()"
+          [runBusy]="store.isRunBusy()"
+          [todayRuns]="store.todayRuns()"
+          [buildDownloadUrl]="store.buildSystemDownloadUrl"
+          [buildArchiveUrl]="store.buildSystemArchiveUrl"
+          (toggleAll)="setAllMembersSelection($event)"
+          (toggleGroup)="onToggleGroupFromDetails($event.groupId, $event.selected)"
+          (toggleMember)="store.toggleMember($event.code, $event.selected)"
+          (selectMember)="selectDrawerMember($event)"
+          (startSelected)="startSelectedRunFromDrawer()"
+          (stopRun)="store.stopRunAsync()"
+        />
+      </div>
+    } @else if (detailsPanelStage === 'preset') {
+      <div class="details-drawer__body">
+        <app-details-preset-panel
+          [presetTask]="store.presetTask()"
+          [records]="presetHistoryRecords()"
+          [filesByOutputPath]="store.outputFilesByPath()"
+          [buildDownloadUrl]="store.buildSystemDownloadUrl"
+          [buildArchiveUrl]="store.buildSystemArchiveUrl"
+        />
+      </div>
+    } @else {
+      <div class="details-drawer__body">
+        <app-details-extra-panel
+          [extraTask]="store.extraTask()"
+          [records]="extraHistoryRecords()"
+          [filesByOutputPath]="store.outputFilesByPath()"
+          [buildDownloadUrl]="store.buildSystemDownloadUrl"
+          [buildArchiveUrl]="store.buildSystemArchiveUrl"
+        />
+      </div>
+    }
+  </aside>
+
+  <p-dialog
+    [visible]="adminDialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    header="Вход в admin mode"
+    [style]="{ width: '26rem', maxWidth: '92vw' }"
+    (onHide)="adminDialogVisible = false"
+  >
+    <div class="admin-dialog">
+      <label class="admin-dialog__label" for="admin-password">Пароль (4 цифры HHmm)</label>
+      <input
+        id="admin-password"
+        type="password"
+        maxlength="4"
+        pInputText
+        [(ngModel)]="adminPassword"
+        class="w-full"
+      />
+      @if (adminError; as error) {
+        <p-message severity="error" [text]="error" />
+      }
+      <div class="admin-dialog__actions">
+        <p-button
+          label="Войти"
+          icon="pi pi-check"
+          [disabled]="adminPassword.length !== 4"
+          (onClick)="confirmAdminMode()"
+        />
+      </div>
+    </div>
+  </p-dialog>
 </main>

@@ -13,3 +13,9 @@ public sealed record ServerTimeResponse(
     DateTimeOffset ServerUtcTime,
     int UtcOffsetMinutes,
     string TimeZoneId);
+
+public sealed record OutputFileInfo(
+    string FileName,
+    string FilePath,
+    DateTimeOffset ModifiedAt,
+    long SizeBytes);

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "type": "prompt",
+        "timeout": 60,
+        "loop_limit": 1,
+        "prompt": "You are a Cursor hook that runs when the main agent finishes its response. If (and only if) the agent edited any files in this run, return JSON with a single field `followup_message` that tells the agent to run the project slash-command `/docs` (defined in `.cursor/commands/docs.md`). If no files were edited, omit `followup_message`."
+      }
+    ]
+  }
+}

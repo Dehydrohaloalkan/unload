@@ -1,0 +1,266 @@
+<div class="details-section">
+  <div class="details-section__title">Пресет (этап 2)</div>
+  <div class="details-item">
+    <div class="details-item__row">
+      <span class="details-item__label">Статус</span>
+      <span class="details-item__value">
+        @if (presetTask().running) {
+          Выполняется
+        } @else if (presetTask().result) {
+          Завершено
+        } @else if (presetTask().error) {
+          Ошибка
+        } @else {
+          Ожидание
+        }
+      </span>
+    </div>
+    @if (presetTask().startedAt) {
+      <div class="details-item__row">
+        <span class="details-item__label">Старт</span>
+        <span class="details-item__value">{{ formatTimestamp(presetTask().startedAt!) }}</span>
+      </div>
+    }
+    @if (presetTask().completedAt) {
+      <div class="details-item__row">
+        <span class="details-item__label">Финиш</span>
+        <span class="details-item__value">{{ formatTimestamp(presetTask().completedAt!) }}</span>
+      </div>
+    }
+    @if (presetTask().result; as presetResult) {
+      <div class="details-item__row">
+        <span class="details-item__label">Скриптов</span>
+        <span class="details-item__value">{{ presetResult.scriptsExecuted }}</span>
+      </div>
+      <div class="details-item__message">{{ presetResult.message }}</div>
+    }
+  </div>
+</div>
+
+<div class="details-section">
+  <div class="details-section__title">Мемберы для выгрузки</div>
+
+  <label class="details-check-row">
+    <p-checkbox
+      binary="true"
+      [ngModel]="allMembersSelected()"
+      [indeterminate]="allMembersPartial()"
+      (onChange)="toggleAll.emit($event.checked)"
+    />
+    <span>Выбрать все</span>
+  </label>
+
+  @for (group of memberGroups(); track group.id) {
+    <div class="details-group">
+      <label class="details-check-row details-check-row--group">
+        <p-checkbox
+          binary="true"
+          [ngModel]="groupAllSelected(group)"
+          [indeterminate]="groupPartial(group)"
+          (onChange)="toggleGroup.emit({ groupId: group.id, selected: $event.checked })"
+        />
+        <span>{{ group.name }}</span>
+      </label>
+
+      <div class="details-members">
+        @for (member of group.members; track member.code) {
+          <div class="member-card" [class.member-card--active]="selectedMember()?.code === member.code">
+            <label class="details-check-row member-card__check">
+              <p-checkbox
+                binary="true"
+                [ngModel]="member.selected"
+                (onChange)="toggleMember.emit({ code: member.code, selected: $event.checked })"
+              />
+            </label>
+            <button
+              type="button"
+              class="member-link member-card__button"
+              (click)="selectMember.emit(member.code)"
+            >
+              {{ member.name }}
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (selectedMember(); as member) {
+    <div class="member-static-card">
+      <div class="member-static-card__title">{{ member.name }}</div>
+      <div class="member-static-card__meta">
+        Код: {{ member.code }}
+      </div>
+      <div class="member-static-card__meta">
+        Статус: {{ member.status }}
+      </div>
+      <div class="member-static-card__targets">
+        @for (targetCode of member.targetCodes; track targetCode) {
+          <span class="member-static-card__chip">{{ targetCode }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  <p-button
+    label="Выгрузить выбранное"
+    icon="pi pi-play"
+    [fluid]="true"
+    [disabled]="!canStartRun()"
+    (onClick)="startSelected.emit()"
+  />
+</div>
+
+<div class="details-section">
+  <div class="details-section__title">Активная выгрузка</div>
+  @if (activeRun(); as run) {
+    @if (isRunActive(run)) {
+    <div class="details-item">
+      <div class="details-item__row">
+        <span class="details-item__label">Correlation</span>
+        <span class="details-item__value">{{ run.correlationId }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">Статус</span>
+        <span class="details-item__value">{{ run.status }}</span>
+      </div>
+      @if (run.message) {
+        <div class="details-item__message">{{ run.message }}</div>
+      }
+      <div class="details-worker-list">
+        @for (worker of (run.workerStatuses | keyvalue); track worker.key) {
+          <div class="details-worker-item">
+            Worker #{{ worker.value.workerId }}:
+            {{ worker.value.state }}
+            @if (worker.value.scriptCode) {
+              ({{ worker.value.scriptCode }})
+            }
+          </div>
+        }
+      </div>
+      @if (senderBatches(run).length > 0) {
+        <div class="details-worker-list">
+          @for (batch of senderBatches(run); track batch.batchId) {
+            <div class="details-worker-item">
+              Sender {{ batch.memberName }}:
+              {{ resolveSenderStatusLabel(batch.status) }}
+              ({{ batch.sentFiles.length }} file(s))
+              @if (batch.message) {
+                — {{ batch.message }}
+              }
+            </div>
+          }
+        </div>
+      }
+      <p-button
+        label="Остановить выгрузку"
+        icon="pi pi-stop"
+        severity="secondary"
+        [outlined]="true"
+        [disabled]="!runBusy()"
+        (onClick)="stopRun.emit()"
+      />
+    </div>
+    } @else {
+      <div class="details-empty">Активной выгрузки сейчас нет.</div>
+    }
+  } @else {
+    <div class="details-empty">Активной выгрузки сейчас нет.</div>
+  }
+</div>
+
+<div class="details-section">
+  <div class="details-section__title">История выгрузок за сегодня</div>
+  @if (todayRuns().length === 0) {
+    <div class="details-empty">Сегодня запусков пока не было.</div>
+  } @else {
+    @for (run of todayRuns(); track run.correlationId) {
+      <details class="history-run">
+        <summary class="history-run__summary">
+          <span>{{ run.correlationId }}</span>
+          <span>{{ formatTimestamp(run.updatedAt) }}</span>
+        </summary>
+
+        <div class="history-run__body">
+          <div class="details-item__row">
+            <span class="details-item__label">Статус</span>
+            <span class="details-item__value">{{ run.status }}</span>
+          </div>
+          <div class="details-item__row">
+            <span class="details-item__label">Начало</span>
+            <span class="details-item__value">{{ formatTimestamp(run.createdAt) }}</span>
+          </div>
+          <div class="details-item__row">
+            <span class="details-item__label">Окончание</span>
+            <span class="details-item__value">{{ formatTimestamp(run.updatedAt) }}</span>
+          </div>
+
+          @if (globalRunArtifacts(run).length > 0) {
+            <div class="history-files">
+              <div class="history-files__title">Файлы результата</div>
+              @for (file of globalRunArtifacts(run); track file.filePath) {
+                <a
+                  class="history-file-link"
+                  [href]="buildDownloadUrl()(file.filePath)"
+                  [attr.download]="file.fileName"
+                >
+                  {{ file.fileName }}
+                </a>
+              }
+            </div>
+          }
+          @if (run.outputPath) {
+            <a
+              class="history-file-link history-file-link--archive"
+              [href]="buildArchiveUrl()(run.outputPath!)"
+              [attr.download]="'result-' + run.correlationId + '.zip'"
+            >
+              Скачать архив результата (.zip)
+            </a>
+          }
+
+          <div class="history-members">
+            @for (member of runMembers(run); track member.memberName) {
+              <details class="history-member">
+                <summary class="history-member__summary">
+                  <span>{{ member.memberName }}</span>
+                  <span>{{ member.status }}</span>
+                </summary>
+                <div class="history-member__body">
+                  @if (memberArtifacts(run, member.memberName).length === 0) {
+                    <div class="details-empty">Файлы для мембера не найдены.</div>
+                  } @else {
+                    @for (artifact of memberArtifacts(run, member.memberName); track artifact.filePath) {
+                      <div class="history-member-file">
+                        <span>{{ formatTimestamp(artifact.occurredAt) }}</span>
+                        <a
+                          class="history-file-link"
+                          [href]="buildDownloadUrl()(artifact.filePath)"
+                          [attr.download]="artifact.fileName"
+                        >
+                          {{ artifact.fileName }}
+                        </a>
+                      </div>
+                    }
+                  }
+                </div>
+              </details>
+            }
+          </div>
+
+          @if (senderBatches(run).length > 0) {
+            <div class="history-files">
+              <div class="history-files__title">Sender status</div>
+              @for (batch of senderBatches(run); track batch.batchId) {
+                <div class="history-member-file">
+                  <span>{{ batch.memberName }}</span>
+                  <span>{{ resolveSenderStatusLabel(batch.status) }} ({{ batch.sentFiles.length }})</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </details>
+    }
+  }
+</div>

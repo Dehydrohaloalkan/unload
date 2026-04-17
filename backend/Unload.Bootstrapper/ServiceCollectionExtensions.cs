@@ -51,14 +51,20 @@ public static class ServiceCollectionExtensions
             dbSettings.TimeoutSeconds,
             dbSettings.ConnectionString));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
-        services.AddSingleton<IMqPublisher, InMemoryMqPublisher>();
+        services.AddSingleton<InMemoryMqPublisher>();
+        services.AddSingleton<IMqPublisher>(static x => x.GetRequiredService<InMemoryMqPublisher>());
+        services.AddSingleton<IMqFileBatchSource>(static x => x.GetRequiredService<InMemoryMqPublisher>());
+        services.AddSingleton<IMqSenderFeedbackSource>(static x => x.GetRequiredService<InMemoryMqPublisher>());
+        services.AddHostedService<SenderStubMqBackgroundService>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
         services.AddSingleton<IWorkflowTaskDispatcher, WorkflowTaskDispatcher>();
         services.AddSingleton<IWorkflowTaskRegistry, WorkflowTaskRegistry>();
         var opts = runnerOptions ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
+        var stateDirectory = Path.Combine(paths.OutputDirectory, "_state");
+        var runStateFilePath = Path.Combine(stateDirectory, "runs.json");
         services.AddSingleton(opts);
         services.AddSingleton<IRunner, RunnerEngine>();
-        services.AddUnloadRunRuntime(opts.WorkerCount);
+        services.AddUnloadRunRuntime(opts.WorkerCount, runStateFilePath);
         services.AddUnloadRunApplication(paths.OutputDirectory);
         services.AddUnloadTaskFlow(presetGateOptions ?? PresetGateOptions.Default);
         services.AddUnloadTaskFlowRuntime();

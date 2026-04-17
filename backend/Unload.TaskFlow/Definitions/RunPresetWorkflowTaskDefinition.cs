@@ -30,7 +30,7 @@ public sealed class RunPresetWorkflowTaskDefinition : WorkflowTaskDefinition<Emp
         EmptyWorkflowTaskRequest request,
         CancellationToken cancellationToken)
     {
-        if (!_presetGateService.CanRunPreset(out var reason))
+        if (!request.AdminOverride && !_presetGateService.CanRunPreset(out var reason))
         {
             throw new WorkflowTaskDispatchException(
                 WorkflowTaskFailureKind.Conflict,
@@ -44,6 +44,7 @@ public sealed class RunPresetWorkflowTaskDefinition : WorkflowTaskDefinition<Emp
                 WorkflowTaskCodes.Preset,
                 () => _scriptTaskOrchestrator.RunPresetAsync(cancellationToken),
                 markCompletedOnSuccess: true,
+                request.AdminOverride,
                 cancellationToken);
             _presetGateService.MarkPresetCompleted();
             await _transitionService.HandleCompletedAsync(WorkflowTaskCodes.Preset, result, cancellationToken);

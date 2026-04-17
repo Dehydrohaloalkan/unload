@@ -13,6 +13,12 @@ public interface IScriptTaskEventPublisher
         string? scriptCode = null,
         int? records = null,
         string? filePath = null);
+
+    Task PublishFileBatchReadyAsync(
+        string correlationId,
+        string memberName,
+        IReadOnlyCollection<SenderFileDescriptor> files,
+        CancellationToken cancellationToken);
 }
 
 public sealed class ScriptTaskEventPublisher : IScriptTaskEventPublisher
@@ -34,15 +40,22 @@ public sealed class ScriptTaskEventPublisher : IScriptTaskEventPublisher
         int? records = null,
         string? filePath = null)
     {
-        var @event = new RunnerEvent(
+        await Task.CompletedTask;
+    }
+
+    public Task PublishFileBatchReadyAsync(
+        string correlationId,
+        string memberName,
+        IReadOnlyCollection<SenderFileDescriptor> files,
+        CancellationToken cancellationToken)
+    {
+        var @event = new SenderFileBatchReadyEvent(
             OccurredAt: DateTimeOffset.UtcNow,
             CorrelationId: correlationId,
-            Step: step,
-            Message: message,
-            TargetCode: targetCode,
-            ScriptCode: scriptCode,
-            Records: records,
-            FilePath: filePath);
-        await _mqPublisher.PublishAsync(@event, cancellationToken);
+            MemberName: memberName,
+            BatchId: $"{correlationId}:{memberName}",
+            Version: 1,
+            Files: files);
+        return _mqPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
     }
 }

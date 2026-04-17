@@ -64,11 +64,6 @@ public sealed class ScriptTaskOrchestrator : IScriptTaskOrchestrator
             if (scripts.Length == 0)
             {
                 _logger.LogInformation("Preset task finished with no scripts. CorrelationId: {CorrelationId}", correlationId);
-                await _eventPublisher.PublishAsync(
-                    correlationId,
-                    RunnerStep.Completed,
-                    "Preset task completed: no scripts found.",
-                    cancellationToken);
                 return new ScriptTaskRunResult(
                     TaskName: "preset",
                     CorrelationId: correlationId,
@@ -80,11 +75,6 @@ public sealed class ScriptTaskOrchestrator : IScriptTaskOrchestrator
 
             var tasks = scripts.Select(path => _presetScriptExecutor.ExecuteAsync(path, correlationId, cancellationToken));
             await Task.WhenAll(tasks);
-            await _eventPublisher.PublishAsync(
-                correlationId,
-                RunnerStep.Completed,
-                $"Preset task completed. Scripts: {scripts.Length}.",
-                cancellationToken);
             _logger.LogInformation(
                 "Preset task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}",
                 correlationId,
@@ -134,11 +124,6 @@ public sealed class ScriptTaskOrchestrator : IScriptTaskOrchestrator
             if (scripts.Length == 0)
             {
                 _logger.LogInformation("Extra task finished with no scripts. CorrelationId: {CorrelationId}", correlationId);
-                await _eventPublisher.PublishAsync(
-                    correlationId,
-                    RunnerStep.Completed,
-                    "Extra task completed: no scripts found in scripts root.",
-                    cancellationToken);
                 return new ScriptTaskRunResult(
                     TaskName: "extra",
                     CorrelationId: correlationId,
@@ -157,12 +142,6 @@ public sealed class ScriptTaskOrchestrator : IScriptTaskOrchestrator
                 _outputDirectory,
                 correlationId,
                 aggregatedLines,
-                cancellationToken);
-
-            await _eventPublisher.PublishAsync(
-                correlationId,
-                RunnerStep.Completed,
-                $"Extra task completed. Files: {writeResult.FilesWritten}.",
                 cancellationToken);
             _logger.LogInformation(
                 "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}, OutputPath: {OutputPath}",

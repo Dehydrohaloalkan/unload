@@ -32,6 +32,7 @@ public sealed class ExtraOutputWriter : IExtraOutputWriter
         Directory.CreateDirectory(filesDirectory);
 
         var filesWritten = 0;
+        var filesByMember = new Dictionary<string, List<SenderFileDescriptor>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in aggregatedLines.OrderBy(static x => x.Key, StringComparer.OrdinalIgnoreCase))
         {
             var bankKey = SanitizeFileNameSegment(item.Key);
@@ -40,14 +41,23 @@ public sealed class ExtraOutputWriter : IExtraOutputWriter
             await File.WriteAllLinesAsync(filePath, lines, cancellationToken);
             filesWritten++;
 
-            await _eventPublisher.PublishAsync(
+            var fileInfo = new FileInfo(filePath);
+            filesByMember[bankKey] =
+            [
+                new SenderFileDescriptor(
+                    FilePath: filePath,
+                    FileName: fileInfo.Name,
+                    SizeBytes: fileInfo.Length)
+            ];
+        }
+
+        foreach (var memberBatch in filesByMember)
+        {
+            await _eventPublisher.PublishFileBatchReadyAsync(
                 correlationId,
-                RunnerStep.FileWritten,
-                $"Extra file written: {Path.GetFileName(filePath)}.",
-                cancellationToken,
-                targetCode: "EXTRA",
-                records: lines.Length,
-                filePath: filePath);
+                memberBatch.Key,
+                memberBatch.Value,
+                cancellationToken);
         }
 
         return new ExtraOutputWriteResult(runDirectory, filesWritten);
