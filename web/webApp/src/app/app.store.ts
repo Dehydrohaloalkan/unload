@@ -673,10 +673,11 @@ export class WorkflowStore {
   private reconcileSelection(members: MemberCatalogItem[]): void {
     const availableCodes = members.map((member) => member.code);
     const storedSelection = this.readSelectedMemberCodes();
-    const nextCodes =
+    const filtered =
       storedSelection === null
         ? availableCodes
         : availableCodes.filter((code) => storedSelection.includes(code));
+    const nextCodes = filtered.length > 0 ? filtered : availableCodes;
 
     this.selectedMemberCodes.set(sortCodes(nextCodes));
     this.persistSelection();
