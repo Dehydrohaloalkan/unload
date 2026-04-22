@@ -5,6 +5,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideHttpClient, withFetch } from '@angular/common/http';
+import { withInterceptors } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { providePrimeNG } from 'primeng/config';
 import { definePreset } from '@primeuix/themes';
@@ -12,6 +13,7 @@ import Material from '@primeuix/themes/material';
 
 import { routes } from './app.routes';
 import { GlobalAppErrorHandler } from './app.error-store';
+import { httpLoggingInterceptor } from './http-logging.interceptor';
 
 const UnloadTheme = definePreset(Material, {
   semantic: {
@@ -36,7 +38,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     { provide: ErrorHandler, useClass: GlobalAppErrorHandler },
     { provide: LOCALE_ID, useValue: 'ru-RU' },
-    provideHttpClient(withFetch()),
+    provideHttpClient(withFetch(), withInterceptors([httpLoggingInterceptor])),
     provideRouter(routes),
     providePrimeNG({
       ripple: true,

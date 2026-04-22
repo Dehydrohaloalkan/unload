@@ -199,7 +199,7 @@ export class App {
   }
 
   selectDrawerMember(code: string): void {
-    this.drawerMemberCode.set(code);
+    this.drawerMemberCode.set(this.drawerMemberCode() === code ? null : code);
   }
 
   selectedDrawerMember(): MemberViewModel | null {

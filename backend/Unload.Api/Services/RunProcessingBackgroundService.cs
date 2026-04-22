@@ -96,6 +96,15 @@ public class RunProcessingBackgroundService : BackgroundService
             finally
             {
                 var finalState = _runStateStore.Get(request.CorrelationId);
+                if (finalState is not null &&
+                    finalState.Status == RunLifecycleStatus.Running &&
+                    finalState.LastStep == RunnerStep.Completed)
+                {
+                    // Runner finished, but MQ sender may still be dispatching artifacts.
+                    // Keep run in "active" until sender feedback promotes it to a terminal status.
+                    finalState = await WaitForTerminalStateAsync(request.CorrelationId, stoppingToken);
+                }
+
                 if (finalState is not null)
                 {
                     if (finalState.Status == RunLifecycleStatus.Completed)
@@ -122,6 +131,27 @@ public class RunProcessingBackgroundService : BackgroundService
                 _runCoordinator.Complete(request.CorrelationId);
             }
         }
+    }
+
+    private async Task<RunStatusInfo?> WaitForTerminalStateAsync(string correlationId, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var current = _runStateStore.Get(correlationId);
+            if (current is null)
+            {
+                return null;
+            }
+
+            if (current.Status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled)
+            {
+                return current;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        return _runStateStore.Get(correlationId);
     }
 
     /// <summary>

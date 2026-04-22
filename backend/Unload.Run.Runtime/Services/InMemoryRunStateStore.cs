@@ -150,7 +150,7 @@ public class InMemoryRunStateStore : IRunStateStore
                     return current;
                 }
 
-                return current with
+                var updated = current with
                 {
                     Status = MapStatus(@event.Step),
                     UpdatedAt = now,
@@ -161,6 +161,8 @@ public class InMemoryRunStateStore : IRunStateStore
                     OutputArtifacts = ApplyArtifacts(current.OutputArtifacts, @event),
                     WorkerStatuses = ApplyWorkerEvent(current.WorkerStatuses, @event, now)
                 };
+
+                return TryPromoteToCompleted(updated, now);
             });
         PersistSnapshot();
     }
@@ -185,10 +187,14 @@ public class InMemoryRunStateStore : IRunStateStore
                     source: null,
                     feedback,
                     now)),
-            (_, current) => current with
+            (_, current) =>
             {
-                UpdatedAt = now,
-                SenderBatches = ApplySenderFeedbackCore(current.SenderBatches, feedback, now)
+                var updated = current with
+                {
+                    UpdatedAt = now,
+                    SenderBatches = ApplySenderFeedbackCore(current.SenderBatches, feedback, now)
+                };
+                return TryPromoteToCompleted(updated, now);
             });
         PersistSnapshot();
     }
@@ -348,7 +354,9 @@ public class InMemoryRunStateStore : IRunStateStore
     {
         return step switch
         {
-            RunnerStep.Completed => RunLifecycleStatus.Completed,
+            // Run is considered completed only after MQ sender confirms dispatch of all artifacts.
+            // Promotion to Completed is handled in TryPromoteToCompleted.
+            RunnerStep.Completed => RunLifecycleStatus.Running,
             RunnerStep.Failed => RunLifecycleStatus.Failed,
             _ => RunLifecycleStatus.Running
         };
@@ -357,6 +365,89 @@ public class InMemoryRunStateStore : IRunStateStore
     private static bool IsTerminalStatus(RunLifecycleStatus status)
     {
         return status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled;
+    }
+
+    private static RunStatusInfo TryPromoteToCompleted(RunStatusInfo current, DateTimeOffset now)
+    {
+        if (current.Status != RunLifecycleStatus.Running)
+        {
+            return current;
+        }
+
+        if (current.LastStep != RunnerStep.Completed)
+        {
+            return current;
+        }
+
+        var senderBatches = current.SenderBatches ?? new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase);
+        if (senderBatches.Values.Any(static x => x.Status == SenderBatchStatus.Failed))
+        {
+            return current with
+            {
+                Status = RunLifecycleStatus.Failed,
+                UpdatedAt = now,
+                Message = "Sender batch failed."
+            };
+        }
+
+        var artifacts = current.OutputArtifacts ?? Array.Empty<RunOutputArtifactInfo>();
+        var memberArtifacts = artifacts.Where(static x => !string.IsNullOrWhiteSpace(x.MemberName)).ToArray();
+        if (memberArtifacts.Length == 0)
+        {
+            // No per-member artifacts to dispatch. If sender has no pending work, allow completion.
+            var allBatchesCompleted = senderBatches.Count == 0 ||
+                                     senderBatches.Values.All(static x => x.Status == SenderBatchStatus.Completed);
+            return allBatchesCompleted
+                ? current with { Status = RunLifecycleStatus.Completed, UpdatedAt = now }
+                : current;
+        }
+
+        // Require that every artifact filePath appears in sentFiles for its member batch, and that each batch is completed.
+        foreach (var batch in senderBatches.Values)
+        {
+            if (batch.Status != SenderBatchStatus.Completed)
+            {
+                return current;
+            }
+        }
+
+        foreach (var artifact in memberArtifacts)
+        {
+            var memberName = artifact.MemberName!.Trim();
+            var batch = senderBatches.Values.FirstOrDefault(x =>
+                string.Equals(x.MemberName, memberName, StringComparison.OrdinalIgnoreCase));
+            if (batch is null)
+            {
+                return current;
+            }
+
+            var artifactPath = NormalizePathSafe(artifact.FilePath);
+            var sent = (batch.SentFiles ?? Array.Empty<SenderFileDispatchStateInfo>())
+                .Any(x => string.Equals(NormalizePathSafe(x.FilePath), artifactPath, StringComparison.OrdinalIgnoreCase));
+            if (!sent)
+            {
+                return current;
+            }
+        }
+
+        return current with { Status = RunLifecycleStatus.Completed, UpdatedAt = now };
+    }
+
+    private static string NormalizePathSafe(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path.Trim());
+        }
+        catch
+        {
+            return path.Trim();
+        }
     }
 
     private static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyMemberEvent(
