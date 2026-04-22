@@ -31,8 +31,51 @@ internal sealed class SenderBatchBuilder
         memberFiles.Add(descriptor);
     }
 
+    public bool TryBuildMemberBatchEvent(
+        string correlationId,
+        string memberName,
+        out SenderFileBatchReadyEvent @event)
+    {
+        @event = default!;
+        if (string.IsNullOrWhiteSpace(correlationId) || string.IsNullOrWhiteSpace(memberName))
+        {
+            return false;
+        }
+
+        var normalizedMemberName = memberName.Trim();
+        if (!_filesByMember.TryRemove(normalizedMemberName, out var filesBag) || filesBag.Count == 0)
+        {
+            return false;
+        }
+
+        var files = filesBag
+            .DistinctBy(static file => file.FilePath, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static file => file.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (files.Length == 0)
+        {
+            return false;
+        }
+
+        @event = new SenderFileBatchReadyEvent(
+            OccurredAt: DateTimeOffset.UtcNow,
+            CorrelationId: correlationId,
+            MemberName: normalizedMemberName,
+            BatchId: $"{correlationId}:{normalizedMemberName}",
+            Version: 1,
+            Files: files);
+
+        return true;
+    }
+
     public IReadOnlyCollection<SenderFileBatchReadyEvent> BuildBatchEvents(string correlationId)
     {
+        if (string.IsNullOrWhiteSpace(correlationId))
+        {
+            return Array.Empty<SenderFileBatchReadyEvent>();
+        }
+
         return _filesByMember
             .Where(static pair => pair.Value.Count > 0)
             .OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase)

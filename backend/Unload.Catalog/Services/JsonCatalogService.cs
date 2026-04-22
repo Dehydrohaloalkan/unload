@@ -135,7 +135,7 @@ public class JsonCatalogService : ICatalogService
                 scriptNameParts.ScriptType,
                 scriptNameParts.ScriptCodes,
                 scriptNameParts.FirstCodeDigit,
-                target.MemberName,
+                target.MemberName.Trim(),
                 fullPath,
                 sqlText));
         }

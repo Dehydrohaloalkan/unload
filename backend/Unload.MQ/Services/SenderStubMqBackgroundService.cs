@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
@@ -15,6 +16,7 @@ public sealed class SenderStubMqBackgroundService : BackgroundService
     private readonly IMqFileBatchSource _batchSource;
     private readonly IMqPublisher _mqPublisher;
     private readonly ILogger<SenderStubMqBackgroundService> _logger;
+    private readonly ConcurrentDictionary<string, byte> _failedMembers = new(StringComparer.OrdinalIgnoreCase);
 
     public SenderStubMqBackgroundService(
         IMqFileBatchSource batchSource,
@@ -36,12 +38,31 @@ public sealed class SenderStubMqBackgroundService : BackgroundService
 
     private async Task ProcessBatchAsync(SenderFileBatchReadyEvent batch, CancellationToken cancellationToken)
     {
+        var memberName = (batch.MemberName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(memberName))
+        {
+            return;
+        }
+
+        if (_failedMembers.ContainsKey(memberName))
+        {
+            await PublishSafeAsync(
+                new SenderFileDispatchFeedback(
+                    OccurredAt: DateTimeOffset.UtcNow,
+                    CorrelationId: batch.CorrelationId,
+                    MemberName: memberName,
+                    BatchId: batch.BatchId,
+                    Kind: SenderFeedbackKind.BatchFailed,
+                    Message: "Member dispatch is blocked due to a previous send failure."));
+            return;
+        }
+
         try
         {
             _logger.LogInformation(
                 "Sender stub started batch. CorrelationId: {CorrelationId}, Member: {MemberName}, Files: {FilesCount}",
                 batch.CorrelationId,
-                batch.MemberName,
+                memberName,
                 batch.Files.Count);
 
             foreach (var file in batch.Files)
@@ -49,27 +70,72 @@ public sealed class SenderStubMqBackgroundService : BackgroundService
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Delay(FileSendDelay, cancellationToken);
 
+                try
+                {
+                    await _mqPublisher.PublishSenderFeedbackAsync(
+                        new SenderFileDispatchFeedback(
+                            OccurredAt: DateTimeOffset.UtcNow,
+                            CorrelationId: batch.CorrelationId,
+                            MemberName: memberName,
+                            BatchId: batch.BatchId,
+                            Kind: SenderFeedbackKind.FileSent,
+                            FilePath: file.FilePath,
+                            Message: $"File sent: {file.FileName}"),
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _failedMembers.TryAdd(memberName, 0);
+                    _logger.LogError(
+                        ex,
+                        "Sender stub failed to dispatch file. CorrelationId: {CorrelationId}, Member: {MemberName}, File: {FilePath}",
+                        batch.CorrelationId,
+                        memberName,
+                        file.FilePath);
+
+                    await PublishSafeAsync(
+                        new SenderFileDispatchFeedback(
+                            OccurredAt: DateTimeOffset.UtcNow,
+                            CorrelationId: batch.CorrelationId,
+                            MemberName: memberName,
+                            BatchId: batch.BatchId,
+                            Kind: SenderFeedbackKind.BatchFailed,
+                            FilePath: file.FilePath,
+                            Message: ex.Message));
+                    return;
+                }
+            }
+
+            try
+            {
                 await _mqPublisher.PublishSenderFeedbackAsync(
                     new SenderFileDispatchFeedback(
                         OccurredAt: DateTimeOffset.UtcNow,
                         CorrelationId: batch.CorrelationId,
-                        MemberName: batch.MemberName,
+                        MemberName: memberName,
                         BatchId: batch.BatchId,
-                        Kind: SenderFeedbackKind.FileSent,
-                        FilePath: file.FilePath,
-                        Message: $"File sent: {file.FileName}"),
+                        Kind: SenderFeedbackKind.BatchCompleted,
+                        Message: $"Batch completed. Files sent: {batch.Files.Count}."),
                     cancellationToken);
             }
+            catch (Exception ex)
+            {
+                _failedMembers.TryAdd(memberName, 0);
+                _logger.LogError(
+                    ex,
+                    "Sender stub failed to complete batch. CorrelationId: {CorrelationId}, Member: {MemberName}",
+                    batch.CorrelationId,
+                    memberName);
 
-            await _mqPublisher.PublishSenderFeedbackAsync(
-                new SenderFileDispatchFeedback(
-                    OccurredAt: DateTimeOffset.UtcNow,
-                    CorrelationId: batch.CorrelationId,
-                    MemberName: batch.MemberName,
-                    BatchId: batch.BatchId,
-                    Kind: SenderFeedbackKind.BatchCompleted,
-                    Message: $"Batch completed. Files sent: {batch.Files.Count}."),
-                cancellationToken);
+                await PublishSafeAsync(
+                    new SenderFileDispatchFeedback(
+                        OccurredAt: DateTimeOffset.UtcNow,
+                        CorrelationId: batch.CorrelationId,
+                        MemberName: memberName,
+                        BatchId: batch.BatchId,
+                        Kind: SenderFeedbackKind.BatchFailed,
+                        Message: ex.Message));
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -77,7 +143,7 @@ public sealed class SenderStubMqBackgroundService : BackgroundService
                 new SenderFileDispatchFeedback(
                     OccurredAt: DateTimeOffset.UtcNow,
                     CorrelationId: batch.CorrelationId,
-                    MemberName: batch.MemberName,
+                    MemberName: memberName,
                     BatchId: batch.BatchId,
                     Kind: SenderFeedbackKind.BatchFailed,
                     Message: "Sender was cancelled."));
@@ -88,13 +154,14 @@ public sealed class SenderStubMqBackgroundService : BackgroundService
                 ex,
                 "Sender stub failed batch. CorrelationId: {CorrelationId}, Member: {MemberName}",
                 batch.CorrelationId,
-                batch.MemberName);
+                memberName);
 
+            _failedMembers.TryAdd(memberName, 0);
             await PublishSafeAsync(
                 new SenderFileDispatchFeedback(
                     OccurredAt: DateTimeOffset.UtcNow,
                     CorrelationId: batch.CorrelationId,
-                    MemberName: batch.MemberName,
+                    MemberName: memberName,
                     BatchId: batch.BatchId,
                     Kind: SenderFeedbackKind.BatchFailed,
                     Message: ex.Message));

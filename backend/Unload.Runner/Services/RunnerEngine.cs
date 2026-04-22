@@ -102,6 +102,13 @@ public class RunnerEngine : IRunner
 
             var distributor = new ScriptDistributor(scripts, bigScriptTargetCodes);
             var memberChunkCounters = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var remainingScriptsByMember = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var group in scripts
+                         .Where(static s => !string.IsNullOrWhiteSpace(s.MemberName))
+                         .GroupBy(static s => s.MemberName.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                remainingScriptsByMember[group.Key] = group.Count();
+            }
 
             var bigWorkerCount = Math.Max(0, _options.WorkerCount - 1);
 
@@ -124,6 +131,8 @@ public class RunnerEngine : IRunner
                         senderBatchBuilder,
                         reportRows,
                         memberChunkCounters,
+                        remainingScriptsByMember,
+                        request.CorrelationId,
                         cancellationToken),
                     cancellationToken));
             }
@@ -171,6 +180,8 @@ public class RunnerEngine : IRunner
         SenderBatchBuilder senderBatchBuilder,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
+        ConcurrentDictionary<string, int> remainingScriptsByMember,
+        string correlationId,
         CancellationToken cancellationToken)
     {
         var client = _databaseClientFactory.CreateClient();
@@ -191,6 +202,8 @@ public class RunnerEngine : IRunner
                     senderBatchBuilder,
                     reportRows,
                     memberChunkCounters,
+                    remainingScriptsByMember,
+                    correlationId,
                     cancellationToken);
             }
         }
@@ -212,6 +225,8 @@ public class RunnerEngine : IRunner
         SenderBatchBuilder senderBatchBuilder,
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
+        ConcurrentDictionary<string, int> remainingScriptsByMember,
+        string correlationId,
         CancellationToken cancellationToken)
     {
         await eventEmitter.EmitForScriptAsync(
@@ -288,6 +303,21 @@ public class RunnerEngine : IRunner
             $"Worker #{workerId} finished query for script {script.ScriptCode}.",
             records: rowsRead,
             workerId: workerId);
+
+        if (!string.IsNullOrWhiteSpace(script.MemberName))
+        {
+            var memberName = script.MemberName.Trim();
+            var remaining = remainingScriptsByMember.AddOrUpdate(
+                memberName,
+                0,
+                static (_, current) => current <= 0 ? 0 : checked(current - 1));
+
+            if (remaining == 0 &&
+                senderBatchBuilder.TryBuildMemberBatchEvent(correlationId, memberName, out var memberBatch))
+            {
+                await _mqPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+            }
+        }
     }
 
     private async Task WriteAndPublishChunkAsync(

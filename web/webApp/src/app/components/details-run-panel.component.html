@@ -90,6 +90,24 @@
           <div class="details-item__message">{{ run.message }}</div>
         }
 
+        @if (run.workerStatuses; as workerStatuses) {
+          @if ((workerStatuses | keyvalue); as workers) {
+            @if (workers.length > 0) {
+              <div class="active-subtitle">Потоки</div>
+              <div class="details-worker-list">
+                @for (worker of workers; track worker.key) {
+                  <div class="details-worker-item">
+                    Worker #{{ worker.value.workerId }}: {{ worker.value.state }}
+                    @if (worker.value.scriptCode) {
+                      ({{ worker.value.scriptCode }})
+                    }
+                  </div>
+                }
+              </div>
+            }
+          }
+        }
+
         @if (activeMemberNames(run).length === 0) {
           <div class="details-empty">Деталей по мемберам пока нет.</div>
         } @else {
