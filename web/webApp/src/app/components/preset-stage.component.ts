@@ -35,14 +35,14 @@ export class PresetStageComponent {
   statusIconClass(): string {
     const task = this.presetTask();
     if (task.running) {
-      return 'pi pi-spinner pi-spin stage-icon stage-icon--spin';
+      return 'app-icon app-icon--spinner app-icon--spin stage-icon stage-icon--spin';
     }
 
     if (this.completedAt()) {
-      return 'pi pi-check-circle stage-icon stage-icon--success';
+      return 'app-icon app-icon--check-circle stage-icon stage-icon--success';
     }
 
-    return 'pi pi-times-circle stage-icon stage-icon--danger';
+    return 'app-icon app-icon--cancel stage-icon stage-icon--danger';
   }
 
   onStartClick(): void {

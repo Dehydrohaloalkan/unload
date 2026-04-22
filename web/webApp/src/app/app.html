@@ -10,7 +10,7 @@
           [label]="store.adminMode() ? 'Admin mode: ON' : 'Admin mode'"
           [severity]="store.adminMode() ? 'danger' : 'secondary'"
           [outlined]="!store.adminMode()"
-          icon="pi pi-shield"
+          icon="app-icon app-icon--shield"
           (onClick)="toggleAdminMode()"
         />
       </div>
@@ -92,7 +92,7 @@
         }
       </div>
       <p-button
-        icon="pi pi-times"
+        icon="app-icon app-icon--close"
         [rounded]="true"
         [text]="true"
         (onClick)="closeDetails()"
@@ -167,7 +167,7 @@
       <div class="admin-dialog__actions">
         <p-button
           label="Войти"
-          icon="pi pi-check"
+          icon="app-icon app-icon--check"
           [disabled]="adminPassword.length !== 4"
           (onClick)="confirmAdminMode()"
         />

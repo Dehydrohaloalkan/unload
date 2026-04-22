@@ -11,11 +11,11 @@
         </div>
       }
       <i
-        class="pi stage-icon"
-        [class.pi-spin]="task().running"
-        [class.pi-spinner]="task().running"
-        [class.pi-check-circle]="!task().running && !!lastCompletedAt()"
-        [class.pi-times-circle]="!task().running && !lastCompletedAt()"
+        class="app-icon stage-icon"
+        [class.app-icon--spin]="task().running"
+        [class.app-icon--spinner]="task().running"
+        [class.app-icon--check-circle]="!task().running && !!lastCompletedAt()"
+        [class.app-icon--cancel]="!task().running && !lastCompletedAt()"
         [class.stage-icon--spin]="task().running"
         [class.stage-icon--success]="!task().running && !!lastCompletedAt()"
         [class.stage-icon--danger]="!task().running && !lastCompletedAt()"
@@ -28,7 +28,7 @@
       <div class="stage-main-action">
       <p-button
         label="Запустить extra"
-        icon="pi pi-bolt"
+        icon="app-icon app-icon--bolt"
         size="small"
         [fluid]="true"
         [disabled]="!canRun()"
@@ -37,7 +37,7 @@
       />
       </div>
       <p-button
-        icon="pi pi-arrow-right"
+        icon="app-icon app-icon--arrow-forward"
         [rounded]="true"
         [outlined]="true"
         severity="secondary"

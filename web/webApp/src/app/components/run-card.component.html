@@ -11,11 +11,11 @@
         </div>
       }
       <i
-        class="pi stage-icon"
-        [class.pi-spin]="runBusy()"
-        [class.pi-spinner]="runBusy()"
-        [class.pi-check-circle]="!runBusy() && !!lastCompletedAt()"
-        [class.pi-times-circle]="!runBusy() && !lastCompletedAt()"
+        class="app-icon stage-icon"
+        [class.app-icon--spin]="runBusy()"
+        [class.app-icon--spinner]="runBusy()"
+        [class.app-icon--check-circle]="!runBusy() && !!lastCompletedAt()"
+        [class.app-icon--cancel]="!runBusy() && !lastCompletedAt()"
         [class.stage-icon--spin]="runBusy()"
         [class.stage-icon--success]="!runBusy() && !!lastCompletedAt()"
         [class.stage-icon--danger]="!runBusy() && !lastCompletedAt()"
@@ -28,7 +28,7 @@
       <div class="stage-main-action">
       <p-button
         label="Запустить выгрузку"
-        icon="pi pi-play"
+        icon="app-icon app-icon--play"
         size="small"
         [fluid]="true"
         [loading]="runBusy()"
@@ -38,7 +38,7 @@
       />
       </div>
       <p-button
-        icon="pi pi-arrow-right"
+        icon="app-icon app-icon--arrow-forward"
         [rounded]="true"
         [outlined]="true"
         severity="secondary"

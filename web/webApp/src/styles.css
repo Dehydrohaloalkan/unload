@@ -1,6 +1,69 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
 @import "tailwindcss";
-@import "primeicons/primeicons.css";
+
+:root {
+  --app-icon-size: 1.15rem;
+}
+
+.app-icon {
+  display: inline-block;
+  width: var(--app-icon-size);
+  height: var(--app-icon-size);
+  background-color: currentColor;
+  -webkit-mask: var(--app-icon-url) no-repeat center / contain;
+  mask: var(--app-icon-url) no-repeat center / contain;
+  vertical-align: middle;
+}
+
+.app-icon--spin {
+  animation: app-icon-spin 0.9s linear infinite;
+}
+
+@keyframes app-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-icon--play {
+  --app-icon-url: url('/icons/play_arrow.svg');
+}
+
+.app-icon--arrow-forward {
+  --app-icon-url: url('/icons/arrow_forward.svg');
+}
+
+.app-icon--bolt {
+  --app-icon-url: url('/icons/bolt.svg');
+}
+
+.app-icon--shield {
+  --app-icon-url: url('/icons/shield.svg');
+}
+
+.app-icon--close {
+  --app-icon-url: url('/icons/close.svg');
+}
+
+.app-icon--check {
+  --app-icon-url: url('/icons/check.svg');
+}
+
+.app-icon--stop {
+  --app-icon-url: url('/icons/stop.svg');
+}
+
+.app-icon--check-circle {
+  --app-icon-url: url('/icons/check_circle.svg');
+}
+
+.app-icon--cancel {
+  --app-icon-url: url('/icons/cancel.svg');
+}
+
+.app-icon--spinner {
+  --app-icon-url: url('/icons/progress_activity.svg');
+}
 
 :root {
   color-scheme: light;

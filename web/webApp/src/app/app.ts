@@ -139,10 +139,6 @@ export class App {
     return null;
   }
 
-  stage1StatusIcon(): 'pi-times-circle' | 'pi-check-circle' {
-    return this.store.presetState()?.presetCompleted ? 'pi-check-circle' : 'pi-times-circle';
-  }
-
   stage1StatusClass(): string {
     return this.store.presetState()?.presetCompleted ? 'stage1-status--ok' : 'stage1-status--fail';
   }

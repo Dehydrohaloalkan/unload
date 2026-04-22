@@ -13,9 +13,9 @@
           <div class="clock-status__completed">{{ formatTimeFromIso(completedAt()!) }}</div>
         }
         <i
-          class="pi"
-          [class.pi-check-circle]="probeCompleted()"
-          [class.pi-times-circle]="!probeCompleted()"
+          class="app-icon"
+          [class.app-icon--check-circle]="probeCompleted()"
+          [class.app-icon--cancel]="!probeCompleted()"
           [class.status-icon--success]="probeCompleted()"
           [class.status-icon--danger]="!probeCompleted()"
         ></i>

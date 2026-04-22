@@ -104,7 +104,7 @@
 
   <p-button
     label="Выгрузить выбранное"
-    icon="pi pi-play"
+    icon="app-icon app-icon--play"
     [fluid]="true"
     [disabled]="!canStartRun()"
     (onClick)="startSelected.emit()"
@@ -154,7 +154,7 @@
       }
       <p-button
         label="Остановить выгрузку"
-        icon="pi pi-stop"
+        icon="app-icon app-icon--stop"
         severity="secondary"
         [outlined]="true"
         [disabled]="!runBusy()"
