@@ -10,7 +10,7 @@ namespace Unload.WebConsole;
 /// <summary>
 /// HTTP-клиент для операций запуска и чтения статуса выгрузки.
 /// </summary>
-internal sealed class RunApiClient(HttpClient httpClient)
+internal  class RunApiClient(HttpClient httpClient)
 {
     /// <summary>
     /// Пытается запустить выгрузку через API.

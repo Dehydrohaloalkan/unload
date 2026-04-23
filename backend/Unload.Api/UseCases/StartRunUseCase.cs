@@ -12,7 +12,7 @@ public interface IStartRunUseCase
     Task<RunAcceptedResponse> ExecuteAsync(RunStartRequest request, CancellationToken cancellationToken);
 }
 
-public sealed class StartRunUseCase : IStartRunUseCase
+public  class StartRunUseCase : IStartRunUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher;
     private readonly IRunStateStore _runStateStore;

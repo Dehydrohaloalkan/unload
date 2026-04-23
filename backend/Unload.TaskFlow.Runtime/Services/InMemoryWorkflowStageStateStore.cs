@@ -5,7 +5,7 @@ namespace Unload.TaskFlow.Runtime;
 /// <summary>
 /// Потокобезопасное in-memory хранилище состояния системных workflow-стадий.
 /// </summary>
-public sealed class InMemoryWorkflowStageStateStore : IWorkflowStageStateStore
+public  class InMemoryWorkflowStageStateStore : IWorkflowStageStateStore
 {
     private readonly object _sync = new();
     private readonly HashSet<string> _completedStageCodes = new(StringComparer.OrdinalIgnoreCase);

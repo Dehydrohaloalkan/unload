@@ -10,7 +10,7 @@ public interface IRunPresetUseCase
     Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
 }
 
-public sealed class RunPresetUseCase : IRunPresetUseCase
+public  class RunPresetUseCase : IRunPresetUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher;
     private readonly IPresetGateService _presetGateService;

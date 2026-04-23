@@ -20,7 +20,7 @@ public interface ITaskExecutionHistoryStore
     bool HasRunToday(string taskCode, DateOnly day);
 }
 
-public sealed record TaskRecord(
+public  record TaskRecord(
     string TaskCode,
     DateTimeOffset StartedAt,
     DateTimeOffset CompletedAt,
@@ -30,7 +30,7 @@ public sealed record TaskRecord(
     int? FilesWritten,
     string? OutputPath);
 
-public sealed class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
+public  class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
 {
     private const string PersistenceVersion = "1";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -140,7 +140,7 @@ public sealed class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
         }
     }
 
-    private sealed record TaskHistorySnapshot(
+    private  record TaskHistorySnapshot(
         string Version,
         DateTimeOffset SavedAt,
         IReadOnlyCollection<TaskRecord> Records);

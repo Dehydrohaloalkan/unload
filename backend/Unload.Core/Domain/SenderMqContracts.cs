@@ -15,13 +15,13 @@ public enum SenderFeedbackKind
     BatchFailed
 }
 
-public sealed record SenderFileDescriptor(
+public  record SenderFileDescriptor(
     string FilePath,
     string FileName,
     long SizeBytes,
     string? Checksum = null);
 
-public sealed record SenderFileBatchReadyEvent(
+public  record SenderFileBatchReadyEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
     string MemberName,
@@ -29,7 +29,7 @@ public sealed record SenderFileBatchReadyEvent(
     int Version,
     IReadOnlyCollection<SenderFileDescriptor> Files);
 
-public sealed record SenderFileDispatchFeedback(
+public  record SenderFileDispatchFeedback(
     DateTimeOffset OccurredAt,
     string CorrelationId,
     string MemberName,

@@ -3,7 +3,7 @@ namespace Unload.Workflow;
 /// <summary>
 /// Диспетчер задач workflow, выполняющий registered definitions через реестр.
 /// </summary>
-public sealed class WorkflowTaskDispatcher : IWorkflowTaskDispatcher
+public  class WorkflowTaskDispatcher : IWorkflowTaskDispatcher
 {
     private readonly IWorkflowTaskRegistry _registry;
 

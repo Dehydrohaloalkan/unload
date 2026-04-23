@@ -2,7 +2,7 @@ using Unload.TaskFlow;
 
 namespace Unload.Api;
 
-public sealed record WorkflowDashboardSnapshotResponse(
+public  record WorkflowDashboardSnapshotResponse(
     PresetGateState PresetState,
     bool HasRunToday,
     bool HasExtraToday,

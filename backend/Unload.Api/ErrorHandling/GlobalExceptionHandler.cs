@@ -6,7 +6,7 @@ namespace Unload.Api.ErrorHandling;
 /// <summary>
 /// Глобальный обработчик исключений API с единым ProblemDetails-контрактом.
 /// </summary>
-public sealed class GlobalExceptionHandler : IExceptionHandler
+public  class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
     private readonly IApiProblemDetailsFactory _problemFactory;
@@ -79,7 +79,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         };
     }
 
-    private sealed record ExceptionMapping(
+    private  record ExceptionMapping(
         int StatusCode,
         string Title,
         string ErrorCode,

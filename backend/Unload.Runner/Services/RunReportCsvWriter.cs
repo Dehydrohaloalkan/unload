@@ -59,7 +59,7 @@ internal static class RunReportCsvWriter
     }
 }
 
-internal sealed record RunReportRow(
+internal  record RunReportRow(
     string MemberName,
     string FileType,
     int FirstCodeDigit,

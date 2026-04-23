@@ -8,7 +8,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи запуска основной выгрузки.
 /// </summary>
-public sealed class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
+public  class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 

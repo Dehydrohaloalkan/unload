@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
-internal sealed class SenderBatchBuilder
+internal  class SenderBatchBuilder
 {
     private readonly ConcurrentDictionary<string, ConcurrentBag<SenderFileDescriptor>> _filesByMember =
         new(StringComparer.OrdinalIgnoreCase);

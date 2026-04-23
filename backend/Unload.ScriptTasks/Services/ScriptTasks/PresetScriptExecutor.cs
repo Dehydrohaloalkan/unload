@@ -8,7 +8,7 @@ public interface IPresetScriptExecutor
     Task ExecuteAsync(string scriptPath, string correlationId, CancellationToken cancellationToken);
 }
 
-public sealed class PresetScriptExecutor : IPresetScriptExecutor
+public  class PresetScriptExecutor : IPresetScriptExecutor
 {
     private readonly IDatabaseClientFactory _databaseClientFactory;
     private readonly ILogger<PresetScriptExecutor> _logger;

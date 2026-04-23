@@ -6,7 +6,7 @@ namespace Unload.TaskFlow.Runtime;
 /// <summary>
 /// In-memory сервис централизованного контроля доступа к workflow-задачам.
 /// </summary>
-public sealed class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessService
+public  class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessService
 {
     private readonly object _sync = new();
     private readonly IWorkflowTaskDependencyCatalog _dependencyCatalog;

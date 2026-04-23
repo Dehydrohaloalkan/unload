@@ -3,7 +3,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Fluent builder для явной настройки task pipeline.
 /// </summary>
-public sealed class TaskPipelineBuilder
+public  class TaskPipelineBuilder
 {
     private readonly List<TaskPipelineDescriptor> _descriptors = [];
 
@@ -36,7 +36,7 @@ public sealed class TaskPipelineBuilder
     /// <summary>
     /// Builder конфигурации отдельной задачи.
     /// </summary>
-    public sealed class TaskRegistrationBuilder
+    public  class TaskRegistrationBuilder
     {
         private readonly TaskPipelineBuilder _owner;
         private readonly string _taskCode;

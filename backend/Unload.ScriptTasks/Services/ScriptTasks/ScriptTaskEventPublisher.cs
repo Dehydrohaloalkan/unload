@@ -21,7 +21,7 @@ public interface IScriptTaskEventPublisher
         CancellationToken cancellationToken);
 }
 
-public sealed class ScriptTaskEventPublisher : IScriptTaskEventPublisher
+public  class ScriptTaskEventPublisher : IScriptTaskEventPublisher
 {
     private readonly IMqPublisher _mqPublisher;
 

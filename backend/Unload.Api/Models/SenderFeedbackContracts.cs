@@ -1,6 +1,6 @@
 namespace Unload.Api;
 
-public sealed record SenderFeedbackRequest(
+public  record SenderFeedbackRequest(
     string CorrelationId,
     string MemberName,
     string BatchId,

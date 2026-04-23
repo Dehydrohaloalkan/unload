@@ -7,7 +7,7 @@ public interface ITaskFlowRegistryInvariant
     void EnsureValid();
 }
 
-public sealed class TaskFlowRegistryInvariant : ITaskFlowRegistryInvariant
+public  class TaskFlowRegistryInvariant : ITaskFlowRegistryInvariant
 {
     private readonly TaskPipeline _pipeline;
     private readonly IWorkflowTaskRegistry _registry;

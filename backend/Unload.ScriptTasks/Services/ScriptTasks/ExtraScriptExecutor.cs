@@ -14,7 +14,7 @@ public interface IExtraScriptExecutor
         CancellationToken cancellationToken);
 }
 
-public sealed class ExtraScriptExecutor : IExtraScriptExecutor
+public  class ExtraScriptExecutor : IExtraScriptExecutor
 {
     private readonly IDatabaseClientFactory _databaseClientFactory;
     private readonly ILogger<ExtraScriptExecutor> _logger;
@@ -92,4 +92,4 @@ public sealed class ExtraScriptExecutor : IExtraScriptExecutor
     }
 }
 
-public sealed record ExtraScriptExecutionResult(string ScriptCode, int Records);
+public  record ExtraScriptExecutionResult(string ScriptCode, int Records);

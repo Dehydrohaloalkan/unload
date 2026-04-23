@@ -6,7 +6,7 @@ namespace Unload.Api;
 /// <summary>
 /// Фоновая задача проверки доступности preset-этапа по расписанию.
 /// </summary>
-public sealed class PresetGateBackgroundService : BackgroundService
+public  class PresetGateBackgroundService : BackgroundService
 {
     private readonly PresetGateOptions _options;
     private readonly IPresetGateService _presetGateService;

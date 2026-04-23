@@ -13,7 +13,7 @@ public interface IApiProblemDetailsFactory
         IReadOnlyDictionary<string, object?>? extensions = null);
 }
 
-public sealed class ApiProblemDetailsFactory : IApiProblemDetailsFactory
+public  class ApiProblemDetailsFactory : IApiProblemDetailsFactory
 {
     public ProblemDetails Create(
         HttpContext httpContext,

@@ -5,6 +5,6 @@ namespace Unload.TaskFlow;
 /// </summary>
 /// <param name="TaskCode">Код завершившейся задачи.</param>
 /// <param name="Payload">Дополнительный payload результата завершения.</param>
-public sealed record WorkflowTaskCompletionContext(
+public  record WorkflowTaskCompletionContext(
     string TaskCode,
     object? Payload);

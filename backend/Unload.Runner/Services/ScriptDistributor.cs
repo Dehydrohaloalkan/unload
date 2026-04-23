@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
-internal sealed class ScriptDistributor
+internal  class ScriptDistributor
 {
     private readonly Queue<ScriptDefinition> _bigScripts;
     private readonly Queue<ScriptDefinition> _lightScripts;

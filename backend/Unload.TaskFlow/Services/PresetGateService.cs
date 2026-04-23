@@ -3,7 +3,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Потокобезопасный in-memory сервис состояния и правил preset-гейта.
 /// </summary>
-public sealed class PresetGateService : IPresetGateService
+public  class PresetGateService : IPresetGateService
 {
     private readonly object _sync = new();
     private TimeOnly _startTime = new(15, 0);

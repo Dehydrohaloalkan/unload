@@ -5,7 +5,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Сервис автоматических переходов, запускающий completion handlers после завершения задач.
 /// </summary>
-public sealed class WorkflowTaskTransitionService : IWorkflowTaskTransitionService
+public  class WorkflowTaskTransitionService : IWorkflowTaskTransitionService
 {
     private readonly IReadOnlyList<IWorkflowTaskTransitionHandler> _handlers;
     private readonly ILogger<WorkflowTaskTransitionService> _logger;

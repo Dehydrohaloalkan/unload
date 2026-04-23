@@ -12,7 +12,7 @@ namespace Unload.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/system")]
-public sealed class SystemController : ControllerBase
+public  class SystemController : ControllerBase
 {
     private readonly IGetServerTimeUseCase _getServerTimeUseCase;
     private readonly UnloadRuntimePaths _runtimePaths;

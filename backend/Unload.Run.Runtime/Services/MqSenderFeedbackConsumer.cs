@@ -3,7 +3,7 @@ using Unload.Run.Application;
 
 namespace Unload.Run.Runtime;
 
-public sealed class MqSenderFeedbackConsumer : IMqSenderFeedbackConsumer
+public  class MqSenderFeedbackConsumer : IMqSenderFeedbackConsumer
 {
     private readonly IRunStateStore _runStateStore;
 

@@ -3,7 +3,7 @@ namespace Unload.Bootstrapper;
 /// <summary>
 /// Настройки клиента БД, читаемые из appsettings.
 /// </summary>
-public sealed class DatabaseRuntimeSettings
+public  class DatabaseRuntimeSettings
 {
     /// <summary>
     /// Имя секции в appsettings.

@@ -5,7 +5,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Описание пользовательской workflow-задачи в конфигурации pipeline.
 /// </summary>
-public sealed record TaskPipelineDescriptor(
+public  record TaskPipelineDescriptor(
     string TaskCode,
     Type DefinitionType,
     IReadOnlyCollection<string> RequiresCompletedCodes,

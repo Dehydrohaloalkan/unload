@@ -3,7 +3,7 @@ using Unload.Core;
 
 namespace Unload.Runner;
 
-internal sealed class RunnerEventEmitter
+internal  class RunnerEventEmitter
 {
     private const int EventChannelCapacity = 64;
     private readonly Channel<RunnerEvent> _channel;

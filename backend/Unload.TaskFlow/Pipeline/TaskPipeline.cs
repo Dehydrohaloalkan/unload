@@ -3,7 +3,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Итоговая конфигурация task pipeline.
 /// </summary>
-public sealed class TaskPipeline
+public  class TaskPipeline
 {
     private readonly IReadOnlyDictionary<string, TaskPipelineDescriptor> _descriptorsByCode;
 

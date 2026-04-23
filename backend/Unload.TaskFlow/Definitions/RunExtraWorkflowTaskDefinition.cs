@@ -5,7 +5,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи выполнения extra.
 /// </summary>
-public sealed class RunExtraWorkflowTaskDefinition : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
+public  class RunExtraWorkflowTaskDefinition : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
 {
     private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator;
     private readonly IPresetGateService _presetGateService;

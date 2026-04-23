@@ -747,7 +747,7 @@ public class InMemoryRunStateStore : IRunStateStore
         };
     }
 
-    private sealed record RunStatePersistenceSnapshot(
+    private  record RunStatePersistenceSnapshot(
         string Version,
         DateTimeOffset SavedAt,
         IReadOnlyCollection<RunStatusInfo> Runs);

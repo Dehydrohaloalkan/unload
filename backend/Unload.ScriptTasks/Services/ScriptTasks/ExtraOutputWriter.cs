@@ -12,7 +12,7 @@ public interface IExtraOutputWriter
         CancellationToken cancellationToken);
 }
 
-public sealed class ExtraOutputWriter : IExtraOutputWriter
+public  class ExtraOutputWriter : IExtraOutputWriter
 {
     private readonly IScriptTaskEventPublisher _eventPublisher;
 
@@ -93,4 +93,4 @@ public sealed class ExtraOutputWriter : IExtraOutputWriter
     }
 }
 
-public sealed record ExtraOutputWriteResult(string OutputPath, int FilesWritten);
+public  record ExtraOutputWriteResult(string OutputPath, int FilesWritten);

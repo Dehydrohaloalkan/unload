@@ -3,7 +3,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Конфигурация фоновой проверки готовности preset-задачи.
 /// </summary>
-public sealed record PresetGateOptions(
+public  record PresetGateOptions(
     bool Enabled,
     int StartHour,
     int StartMinute,
@@ -21,7 +21,7 @@ public sealed record PresetGateOptions(
 /// <summary>
 /// Текущее состояние preset-гейта для UI-клиентов.
 /// </summary>
-public sealed record PresetGateState(
+public  record PresetGateState(
     bool Enabled,
     bool PollingStarted,
     bool RequiresPresetExecution,

@@ -15,7 +15,7 @@ internal static class WebConsoleRunner
     /// <summary>
     /// Сессионное состояние клиента web-консоли.
     /// </summary>
-    private sealed class RunnerSessionState
+    private  class RunnerSessionState
     {
         /// <summary>
         /// CorrelationId запуска, за которым ведется наблюдение.

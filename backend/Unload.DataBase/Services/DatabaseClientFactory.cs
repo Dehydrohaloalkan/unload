@@ -6,7 +6,7 @@ namespace Unload.DataBase;
 /// Фабрика клиентов БД для runtime.
 /// Создает новый экземпляр клиента на каждый запрос фабрики.
 /// </summary>
-public sealed class DatabaseClientFactory : IDatabaseClientFactory
+public  class DatabaseClientFactory : IDatabaseClientFactory
 {
     private readonly int _timeoutSeconds;
     private readonly string _connectionString;

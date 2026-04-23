@@ -4,7 +4,7 @@ namespace Unload.WebConsole;
 /// <summary>
 /// Параметры запуска web-консоли и их валидация.
 /// </summary>
-internal sealed class AppOptions
+internal  class AppOptions
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 

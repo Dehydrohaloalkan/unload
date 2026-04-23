@@ -8,7 +8,7 @@ namespace Unload.ScriptTasks;
 /// <summary>
 /// Выполняет доп-задачи на SQL-скриптах вне каталожного пайплайна.
 /// </summary>
-public sealed class ScriptTaskOrchestrator : IScriptTaskOrchestrator
+public  class ScriptTaskOrchestrator : IScriptTaskOrchestrator
 {
     private readonly string _scriptsDirectory;
     private readonly string _outputDirectory;

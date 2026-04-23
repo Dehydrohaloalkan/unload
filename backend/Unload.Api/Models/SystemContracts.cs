@@ -8,13 +8,13 @@ namespace Unload.Api;
 /// <param name="ServerUtcTime">Текущее UTC-время сервера.</param>
 /// <param name="UtcOffsetMinutes">Смещение локального времени сервера относительно UTC в минутах.</param>
 /// <param name="TimeZoneId">Идентификатор локальной таймзоны сервера.</param>
-public sealed record ServerTimeResponse(
+public  record ServerTimeResponse(
     DateTimeOffset ServerLocalTime,
     DateTimeOffset ServerUtcTime,
     int UtcOffsetMinutes,
     string TimeZoneId);
 
-public sealed record OutputFileInfo(
+public  record OutputFileInfo(
     string FileName,
     string FilePath,
     DateTimeOffset ModifiedAt,

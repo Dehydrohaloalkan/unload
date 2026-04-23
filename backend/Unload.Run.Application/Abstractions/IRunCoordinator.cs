@@ -7,7 +7,7 @@ namespace Unload.Run.Application;
 /// </summary>
 /// <param name="Request">Запрос на выполнение.</param>
 /// <param name="CancellationToken">Токен остановки конкретного запуска.</param>
-public sealed record RunActivation(RunRequest Request, CancellationToken CancellationToken);
+public  record RunActivation(RunRequest Request, CancellationToken CancellationToken);
 
 /// <summary>
 /// Контракт координатора запусков с ограничением на один активный run.

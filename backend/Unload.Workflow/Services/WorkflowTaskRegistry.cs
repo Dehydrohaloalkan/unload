@@ -3,7 +3,7 @@ namespace Unload.Workflow;
 /// <summary>
 /// In-memory реестр зарегистрированных задач workflow.
 /// </summary>
-public sealed class WorkflowTaskRegistry : IWorkflowTaskRegistry
+public  class WorkflowTaskRegistry : IWorkflowTaskRegistry
 {
     private readonly IReadOnlyDictionary<string, IWorkflowTaskDefinition> _definitions;
 

@@ -5,7 +5,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи выполнения preset.
 /// </summary>
-public sealed class RunPresetWorkflowTaskDefinition : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
+public  class RunPresetWorkflowTaskDefinition : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
 {
     private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator;
     private readonly IPresetGateService _presetGateService;

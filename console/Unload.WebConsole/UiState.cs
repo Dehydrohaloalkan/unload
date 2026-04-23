@@ -7,7 +7,7 @@ namespace Unload.WebConsole;
 /// <summary>
 /// Потокобезопасное состояние UI для live-обновления панели web-консоли.
 /// </summary>
-internal sealed class UiState
+internal  class UiState
 {
     private readonly object _sync = new();
     private readonly Queue<RunnerEventLine> _events = new();

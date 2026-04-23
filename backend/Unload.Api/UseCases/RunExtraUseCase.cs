@@ -9,7 +9,7 @@ public interface IRunExtraUseCase
     Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
 }
 
-public sealed class RunExtraUseCase : IRunExtraUseCase
+public  class RunExtraUseCase : IRunExtraUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher;
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;

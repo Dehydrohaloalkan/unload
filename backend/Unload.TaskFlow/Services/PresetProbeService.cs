@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Unload.TaskFlow;
 
-public sealed class PresetProbeService : IPresetProbeService
+public  class PresetProbeService : IPresetProbeService
 {
     private readonly PresetGateOptions _options;
     private readonly IPresetGateService _presetGateService;

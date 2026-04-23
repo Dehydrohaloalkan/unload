@@ -3,7 +3,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Каталог зависимостей задач, собранный из централизованной конфигурации pipeline.
 /// </summary>
-public sealed class WorkflowTaskDependencyCatalog : IWorkflowTaskDependencyCatalog
+public  class WorkflowTaskDependencyCatalog : IWorkflowTaskDependencyCatalog
 {
     private readonly IReadOnlyDictionary<string, WorkflowTaskRule> _rules;
 

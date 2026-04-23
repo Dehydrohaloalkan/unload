@@ -5,7 +5,7 @@ public interface IGetServerTimeUseCase
     ServerTimeResponse Execute();
 }
 
-public sealed class GetServerTimeUseCase : IGetServerTimeUseCase
+public  class GetServerTimeUseCase : IGetServerTimeUseCase
 {
     public ServerTimeResponse Execute()
     {
