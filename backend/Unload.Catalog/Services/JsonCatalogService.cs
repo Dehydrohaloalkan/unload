@@ -7,21 +7,15 @@ namespace Unload.Catalog;
 /// Сервис чтения каталога из JSON и резолва target-кодов в SQL-скрипты.
 /// Используется раннером и API для получения структуры каталога и набора скриптов к выполнению.
 /// </summary>
-public class JsonCatalogService : ICatalogService
+/// <remarks>
+/// Инициализирует сервис путями к файлу каталога и директории скриптов.
+/// </remarks>
+/// <param name="catalogPath">Путь к <c>catalog.json</c>.</param>
+/// <param name="scriptsDirectory">Путь к корню SQL-скриптов.</param>
+public class JsonCatalogService(string catalogPath, string scriptsDirectory) : ICatalogService
 {
-    private readonly string _catalogPath;
-    private readonly string _scriptsDirectory;
-
-    /// <summary>
-    /// Инициализирует сервис путями к файлу каталога и директории скриптов.
-    /// </summary>
-    /// <param name="catalogPath">Путь к <c>catalog.json</c>.</param>
-    /// <param name="scriptsDirectory">Путь к корню SQL-скриптов.</param>
-    public JsonCatalogService(string catalogPath, string scriptsDirectory)
-    {
-        _catalogPath = Path.GetFullPath(catalogPath);
-        _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
-    }
+    private readonly string _catalogPath = Path.GetFullPath(catalogPath);
+    private readonly string _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
 
     /// <summary>
     /// Загружает каталог и возвращает модель без дополнительной нормализации значений.

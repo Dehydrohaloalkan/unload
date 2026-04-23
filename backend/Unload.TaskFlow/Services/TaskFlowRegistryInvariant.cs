@@ -7,18 +7,12 @@ public interface ITaskFlowRegistryInvariant
     void EnsureValid();
 }
 
-public  class TaskFlowRegistryInvariant : ITaskFlowRegistryInvariant
+public  class TaskFlowRegistryInvariant(
+    TaskPipeline pipeline,
+    IWorkflowTaskRegistry registry) : ITaskFlowRegistryInvariant
 {
-    private readonly TaskPipeline _pipeline;
-    private readonly IWorkflowTaskRegistry _registry;
-
-    public TaskFlowRegistryInvariant(
-        TaskPipeline pipeline,
-        IWorkflowTaskRegistry registry)
-    {
-        _pipeline = pipeline;
-        _registry = registry;
-    }
+    private readonly TaskPipeline _pipeline = pipeline;
+    private readonly IWorkflowTaskRegistry _registry = registry;
 
     public void EnsureValid()
     {

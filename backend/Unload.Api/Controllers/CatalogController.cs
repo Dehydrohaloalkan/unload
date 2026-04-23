@@ -8,29 +8,22 @@ namespace Unload.Api.Controllers;
 /// <summary>
 /// Контроллер чтения каталога и доступных мемберов для запуска выгрузки.
 /// </summary>
+/// <remarks>
+/// Создает контроллер каталога.
+/// </remarks>
+/// <param name="catalogService">Сервис чтения каталога.</param>
+/// <param name="runCoordinator">Координатор активного запуска.</param>
+/// <param name="runStateStore">Хранилище статусов запусков.</param>
 [ApiController]
 [Route("api")]
-public class CatalogController : ControllerBase
+public class CatalogController(
+    ICatalogService catalogService,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore) : ControllerBase
 {
-    private readonly ICatalogService _catalogService;
-    private readonly IRunCoordinator _runCoordinator;
-    private readonly IRunStateStore _runStateStore;
-
-    /// <summary>
-    /// Создает контроллер каталога.
-    /// </summary>
-    /// <param name="catalogService">Сервис чтения каталога.</param>
-    /// <param name="runCoordinator">Координатор активного запуска.</param>
-    /// <param name="runStateStore">Хранилище статусов запусков.</param>
-    public CatalogController(
-        ICatalogService catalogService,
-        IRunCoordinator runCoordinator,
-        IRunStateStore runStateStore)
-    {
-        _catalogService = catalogService;
-        _runCoordinator = runCoordinator;
-        _runStateStore = runStateStore;
-    }
+    private readonly ICatalogService _catalogService = catalogService;
+    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly IRunStateStore _runStateStore = runStateStore;
 
     /// <summary>
     /// Возвращает полный каталог групп, мемберов и target-ов.

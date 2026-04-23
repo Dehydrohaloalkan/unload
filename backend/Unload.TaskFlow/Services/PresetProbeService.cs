@@ -4,27 +4,18 @@ using Microsoft.Extensions.Logging;
 
 namespace Unload.TaskFlow;
 
-public  class PresetProbeService : IPresetProbeService
+public  class PresetProbeService(
+    PresetGateOptions options,
+    IPresetGateService presetGateService,
+    IWorkflowStageStateStore workflowStageStateStore,
+    IDatabaseClientFactory databaseClientFactory,
+    ILogger<PresetProbeService> logger) : IPresetProbeService
 {
-    private readonly PresetGateOptions _options;
-    private readonly IPresetGateService _presetGateService;
-    private readonly IWorkflowStageStateStore _workflowStageStateStore;
-    private readonly IDatabaseClientFactory _databaseClientFactory;
-    private readonly ILogger<PresetProbeService> _logger;
-
-    public PresetProbeService(
-        PresetGateOptions options,
-        IPresetGateService presetGateService,
-        IWorkflowStageStateStore workflowStageStateStore,
-        IDatabaseClientFactory databaseClientFactory,
-        ILogger<PresetProbeService> logger)
-    {
-        _options = options;
-        _presetGateService = presetGateService;
-        _workflowStageStateStore = workflowStageStateStore;
-        _databaseClientFactory = databaseClientFactory;
-        _logger = logger;
-    }
+    private readonly PresetGateOptions _options = options;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
+    private readonly IDatabaseClientFactory _databaseClientFactory = databaseClientFactory;
+    private readonly ILogger<PresetProbeService> _logger = logger;
 
     public async Task<int> ExecuteAndApplyAsync(CancellationToken cancellationToken)
     {

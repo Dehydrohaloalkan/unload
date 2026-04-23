@@ -11,52 +11,39 @@ namespace Unload.Api.Controllers;
 /// <summary>
 /// Контроллер управления запусками выгрузки.
 /// </summary>
+/// <remarks>
+/// Создает контроллер запусков.
+/// </remarks>
+/// <param name="startRunUseCase">Use-case запуска основной выгрузки.</param>
+/// <param name="runPresetUseCase">Use-case запуска preset-задачи.</param>
+/// <param name="runExtraUseCase">Use-case запуска extra-задачи.</param>
+/// <param name="runCoordinator">Координатор активного запуска.</param>
+/// <param name="runStateStore">Хранилище статусов запусков.</param>
+/// <param name="presetGateService">Сервис правил и состояния preset-гейта.</param>
+/// <param name="hubContext">SignalR-контекст трансляции статусов.</param>
+/// <param name="logger">Логгер контроллера.</param>
 [ApiController]
 [Route("api/runs")]
-public class RunsController : ControllerBase
+public class RunsController(
+    IStartRunUseCase startRunUseCase,
+    IRunPresetUseCase runPresetUseCase,
+    IRunExtraUseCase runExtraUseCase,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    IPresetGateService presetGateService,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<RunsController> logger) : ControllerBase
 {
-    private readonly IStartRunUseCase _startRunUseCase;
-    private readonly IRunPresetUseCase _runPresetUseCase;
-    private readonly IRunExtraUseCase _runExtraUseCase;
-    private readonly IRunCoordinator _runCoordinator;
-    private readonly IRunStateStore _runStateStore;
-    private readonly IPresetGateService _presetGateService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<RunsController> _logger;
-
-    /// <summary>
-    /// Создает контроллер запусков.
-    /// </summary>
-    /// <param name="startRunUseCase">Use-case запуска основной выгрузки.</param>
-    /// <param name="runPresetUseCase">Use-case запуска preset-задачи.</param>
-    /// <param name="runExtraUseCase">Use-case запуска extra-задачи.</param>
-    /// <param name="runCoordinator">Координатор активного запуска.</param>
-    /// <param name="runStateStore">Хранилище статусов запусков.</param>
-    /// <param name="presetGateService">Сервис правил и состояния preset-гейта.</param>
-    /// <param name="hubContext">SignalR-контекст трансляции статусов.</param>
-    /// <param name="logger">Логгер контроллера.</param>
-    public RunsController(
-        IStartRunUseCase startRunUseCase,
-        IRunPresetUseCase runPresetUseCase,
-        IRunExtraUseCase runExtraUseCase,
-        IRunCoordinator runCoordinator,
-        IRunStateStore runStateStore,
-        IPresetGateService presetGateService,
-        ITaskExecutionHistoryStore taskExecutionHistoryStore,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<RunsController> logger)
-    {
-        _startRunUseCase = startRunUseCase;
-        _runPresetUseCase = runPresetUseCase;
-        _runExtraUseCase = runExtraUseCase;
-        _runCoordinator = runCoordinator;
-        _runStateStore = runStateStore;
-        _presetGateService = presetGateService;
-        _taskExecutionHistoryStore = taskExecutionHistoryStore;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly IStartRunUseCase _startRunUseCase = startRunUseCase;
+    private readonly IRunPresetUseCase _runPresetUseCase = runPresetUseCase;
+    private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
+    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<RunsController> _logger = logger;
 
     /// <summary>
     /// Создает новый запуск выгрузки по выбранным кодам мемберов.

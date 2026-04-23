@@ -8,35 +8,24 @@ namespace Unload.ScriptTasks;
 /// <summary>
 /// Выполняет доп-задачи на SQL-скриптах вне каталожного пайплайна.
 /// </summary>
-public  class ScriptTaskOrchestrator : IScriptTaskOrchestrator
+public  class ScriptTaskOrchestrator(
+    string scriptsDirectory,
+    string outputDirectory,
+    IPresetScriptExecutor presetScriptExecutor,
+    IExtraScriptExecutor extraScriptExecutor,
+    IExtraOutputWriter extraOutputWriter,
+    IScriptTaskEventPublisher eventPublisher,
+    ILogger<ScriptTaskOrchestrator> logger) : IScriptTaskOrchestrator
 {
-    private readonly string _scriptsDirectory;
-    private readonly string _outputDirectory;
-    private readonly IPresetScriptExecutor _presetScriptExecutor;
-    private readonly IExtraScriptExecutor _extraScriptExecutor;
-    private readonly IExtraOutputWriter _extraOutputWriter;
-    private readonly IScriptTaskEventPublisher _eventPublisher;
-    private readonly ILogger<ScriptTaskOrchestrator> _logger;
+    private readonly string _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
+    private readonly string _outputDirectory = Path.GetFullPath(outputDirectory);
+    private readonly IPresetScriptExecutor _presetScriptExecutor = presetScriptExecutor;
+    private readonly IExtraScriptExecutor _extraScriptExecutor = extraScriptExecutor;
+    private readonly IExtraOutputWriter _extraOutputWriter = extraOutputWriter;
+    private readonly IScriptTaskEventPublisher _eventPublisher = eventPublisher;
+    private readonly ILogger<ScriptTaskOrchestrator> _logger = logger;
     private readonly SemaphoreSlim _presetSemaphore = new(1, 1);
     private readonly SemaphoreSlim _extraSemaphore = new(1, 1);
-
-    public ScriptTaskOrchestrator(
-        string scriptsDirectory,
-        string outputDirectory,
-        IPresetScriptExecutor presetScriptExecutor,
-        IExtraScriptExecutor extraScriptExecutor,
-        IExtraOutputWriter extraOutputWriter,
-        IScriptTaskEventPublisher eventPublisher,
-        ILogger<ScriptTaskOrchestrator> logger)
-    {
-        _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
-        _outputDirectory = Path.GetFullPath(outputDirectory);
-        _presetScriptExecutor = presetScriptExecutor;
-        _extraScriptExecutor = extraScriptExecutor;
-        _extraOutputWriter = extraOutputWriter;
-        _eventPublisher = eventPublisher;
-        _logger = logger;
-    }
 
     public async Task<ScriptTaskRunResult> RunPresetAsync(CancellationToken cancellationToken)
     {

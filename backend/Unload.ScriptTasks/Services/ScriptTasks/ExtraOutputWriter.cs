@@ -12,14 +12,9 @@ public interface IExtraOutputWriter
         CancellationToken cancellationToken);
 }
 
-public  class ExtraOutputWriter : IExtraOutputWriter
+public  class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtraOutputWriter
 {
-    private readonly IScriptTaskEventPublisher _eventPublisher;
-
-    public ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher)
-    {
-        _eventPublisher = eventPublisher;
-    }
+    private readonly IScriptTaskEventPublisher _eventPublisher = eventPublisher;
 
     public async Task<ExtraOutputWriteResult> WriteAsync(
         string baseOutputDirectory,

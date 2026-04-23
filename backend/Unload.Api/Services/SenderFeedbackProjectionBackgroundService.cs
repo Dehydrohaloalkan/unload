@@ -7,27 +7,18 @@ namespace Unload.Api;
 /// <summary>
 /// Проецирует feedback sender-а в состояние run и уведомления SignalR.
 /// </summary>
-public  class SenderFeedbackProjectionBackgroundService : BackgroundService
+public  class SenderFeedbackProjectionBackgroundService(
+    IMqSenderFeedbackSource feedbackSource,
+    IMqSenderFeedbackConsumer feedbackConsumer,
+    IRunStateStore runStateStore,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<SenderFeedbackProjectionBackgroundService> logger) : BackgroundService
 {
-    private readonly IMqSenderFeedbackSource _feedbackSource;
-    private readonly IMqSenderFeedbackConsumer _feedbackConsumer;
-    private readonly IRunStateStore _runStateStore;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<SenderFeedbackProjectionBackgroundService> _logger;
-
-    public SenderFeedbackProjectionBackgroundService(
-        IMqSenderFeedbackSource feedbackSource,
-        IMqSenderFeedbackConsumer feedbackConsumer,
-        IRunStateStore runStateStore,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<SenderFeedbackProjectionBackgroundService> logger)
-    {
-        _feedbackSource = feedbackSource;
-        _feedbackConsumer = feedbackConsumer;
-        _runStateStore = runStateStore;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly IMqSenderFeedbackSource _feedbackSource = feedbackSource;
+    private readonly IMqSenderFeedbackConsumer _feedbackConsumer = feedbackConsumer;
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<SenderFeedbackProjectionBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

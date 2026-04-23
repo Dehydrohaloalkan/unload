@@ -6,18 +6,12 @@ namespace Unload.Api.ErrorHandling;
 /// <summary>
 /// Глобальный обработчик исключений API с единым ProblemDetails-контрактом.
 /// </summary>
-public  class GlobalExceptionHandler : IExceptionHandler
+public  class GlobalExceptionHandler(
+    ILogger<GlobalExceptionHandler> logger,
+    IApiProblemDetailsFactory problemFactory) : IExceptionHandler
 {
-    private readonly ILogger<GlobalExceptionHandler> _logger;
-    private readonly IApiProblemDetailsFactory _problemFactory;
-
-    public GlobalExceptionHandler(
-        ILogger<GlobalExceptionHandler> logger,
-        IApiProblemDetailsFactory problemFactory)
-    {
-        _logger = logger;
-        _problemFactory = problemFactory;
-    }
+    private readonly ILogger<GlobalExceptionHandler> _logger = logger;
+    private readonly IApiProblemDetailsFactory _problemFactory = problemFactory;
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {

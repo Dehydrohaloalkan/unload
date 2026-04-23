@@ -21,14 +21,9 @@ public interface IScriptTaskEventPublisher
         CancellationToken cancellationToken);
 }
 
-public  class ScriptTaskEventPublisher : IScriptTaskEventPublisher
+public  class ScriptTaskEventPublisher(IMqPublisher mqPublisher) : IScriptTaskEventPublisher
 {
-    private readonly IMqPublisher _mqPublisher;
-
-    public ScriptTaskEventPublisher(IMqPublisher mqPublisher)
-    {
-        _mqPublisher = mqPublisher;
-    }
+    private readonly IMqPublisher _mqPublisher = mqPublisher;
 
     public async Task PublishAsync(
         string correlationId,

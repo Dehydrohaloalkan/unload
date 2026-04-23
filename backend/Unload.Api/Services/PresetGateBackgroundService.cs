@@ -6,36 +6,24 @@ namespace Unload.Api;
 /// <summary>
 /// Фоновая задача проверки доступности preset-этапа по расписанию.
 /// </summary>
-public  class PresetGateBackgroundService : BackgroundService
+public  class PresetGateBackgroundService(
+    PresetGateOptions options,
+    IPresetGateService presetGateService,
+    IWorkflowTaskAccessService workflowTaskAccessService,
+    IWorkflowStageStateStore workflowStageStateStore,
+    IPresetProbeService presetProbeService,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<PresetGateBackgroundService> logger) : BackgroundService
 {
-    private readonly PresetGateOptions _options;
-    private readonly IPresetGateService _presetGateService;
-    private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
-    private readonly IWorkflowStageStateStore _workflowStageStateStore;
-    private readonly IPresetProbeService _presetProbeService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<PresetGateBackgroundService> _logger;
-
-    public PresetGateBackgroundService(
-        PresetGateOptions options,
-        IPresetGateService presetGateService,
-        IWorkflowTaskAccessService workflowTaskAccessService,
-        IWorkflowStageStateStore workflowStageStateStore,
-        IPresetProbeService presetProbeService,
-        ITaskExecutionHistoryStore taskExecutionHistoryStore,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<PresetGateBackgroundService> logger)
-    {
-        _options = options;
-        _presetGateService = presetGateService;
-        _workflowTaskAccessService = workflowTaskAccessService;
-        _workflowStageStateStore = workflowStageStateStore;
-        _presetProbeService = presetProbeService;
-        _taskExecutionHistoryStore = taskExecutionHistoryStore;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly PresetGateOptions _options = options;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
+    private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
+    private readonly IPresetProbeService _presetProbeService = presetProbeService;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<PresetGateBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

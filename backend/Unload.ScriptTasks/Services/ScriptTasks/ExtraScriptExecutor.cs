@@ -14,18 +14,12 @@ public interface IExtraScriptExecutor
         CancellationToken cancellationToken);
 }
 
-public  class ExtraScriptExecutor : IExtraScriptExecutor
+public  class ExtraScriptExecutor(
+    IDatabaseClientFactory databaseClientFactory,
+    ILogger<ExtraScriptExecutor> logger) : IExtraScriptExecutor
 {
-    private readonly IDatabaseClientFactory _databaseClientFactory;
-    private readonly ILogger<ExtraScriptExecutor> _logger;
-
-    public ExtraScriptExecutor(
-        IDatabaseClientFactory databaseClientFactory,
-        ILogger<ExtraScriptExecutor> logger)
-    {
-        _databaseClientFactory = databaseClientFactory;
-        _logger = logger;
-    }
+    private readonly IDatabaseClientFactory _databaseClientFactory = databaseClientFactory;
+    private readonly ILogger<ExtraScriptExecutor> _logger = logger;
 
     public async Task<ExtraScriptExecutionResult> ExecuteAsync(
         string scriptPath,

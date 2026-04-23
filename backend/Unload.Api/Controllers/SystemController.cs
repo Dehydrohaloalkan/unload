@@ -12,21 +12,14 @@ namespace Unload.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/system")]
-public  class SystemController : ControllerBase
+public  class SystemController(
+    IGetServerTimeUseCase getServerTimeUseCase,
+    UnloadRuntimePaths runtimePaths,
+    IMqSenderFeedbackConsumer mqSenderFeedbackConsumer) : ControllerBase
 {
-    private readonly IGetServerTimeUseCase _getServerTimeUseCase;
-    private readonly UnloadRuntimePaths _runtimePaths;
-    private readonly IMqSenderFeedbackConsumer _mqSenderFeedbackConsumer;
-
-    public SystemController(
-        IGetServerTimeUseCase getServerTimeUseCase,
-        UnloadRuntimePaths runtimePaths,
-        IMqSenderFeedbackConsumer mqSenderFeedbackConsumer)
-    {
-        _getServerTimeUseCase = getServerTimeUseCase;
-        _runtimePaths = runtimePaths;
-        _mqSenderFeedbackConsumer = mqSenderFeedbackConsumer;
-    }
+    private readonly IGetServerTimeUseCase _getServerTimeUseCase = getServerTimeUseCase;
+    private readonly UnloadRuntimePaths _runtimePaths = runtimePaths;
+    private readonly IMqSenderFeedbackConsumer _mqSenderFeedbackConsumer = mqSenderFeedbackConsumer;
 
     /// <summary>
     /// Возвращает текущее локальное и UTC-время сервера.

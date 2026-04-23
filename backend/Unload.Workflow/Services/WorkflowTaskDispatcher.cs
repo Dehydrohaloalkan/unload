@@ -3,14 +3,9 @@ namespace Unload.Workflow;
 /// <summary>
 /// Диспетчер задач workflow, выполняющий registered definitions через реестр.
 /// </summary>
-public  class WorkflowTaskDispatcher : IWorkflowTaskDispatcher
+public  class WorkflowTaskDispatcher(IWorkflowTaskRegistry registry) : IWorkflowTaskDispatcher
 {
-    private readonly IWorkflowTaskRegistry _registry;
-
-    public WorkflowTaskDispatcher(IWorkflowTaskRegistry registry)
-    {
-        _registry = registry;
-    }
+    private readonly IWorkflowTaskRegistry _registry = registry;
 
     public async Task<TResult> DispatchAsync<TRequest, TResult>(
         string taskCode,

@@ -8,35 +8,24 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи запуска основной выгрузки.
 /// </summary>
-public  class StartRunWorkflowTaskDefinition : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
+public  class StartRunWorkflowTaskDefinition(
+    ICatalogService catalogService,
+    IRunRequestFactory requestFactory,
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    RunApplicationOptions runOptions,
+    IPresetGateService presetGateService,
+    IWorkflowTaskAccessService taskAccessService) : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 
-    private readonly ICatalogService _catalogService;
-    private readonly IRunRequestFactory _requestFactory;
-    private readonly IRunCoordinator _runCoordinator;
-    private readonly IRunStateStore _runStateStore;
-    private readonly RunApplicationOptions _runOptions;
-    private readonly IPresetGateService _presetGateService;
-    private readonly IWorkflowTaskAccessService _taskAccessService;
-
-    public StartRunWorkflowTaskDefinition(
-        ICatalogService catalogService,
-        IRunRequestFactory requestFactory,
-        IRunCoordinator runCoordinator,
-        IRunStateStore runStateStore,
-        RunApplicationOptions runOptions,
-        IPresetGateService presetGateService,
-        IWorkflowTaskAccessService taskAccessService)
-    {
-        _catalogService = catalogService;
-        _requestFactory = requestFactory;
-        _runCoordinator = runCoordinator;
-        _runStateStore = runStateStore;
-        _runOptions = runOptions;
-        _presetGateService = presetGateService;
-        _taskAccessService = taskAccessService;
-    }
+    private readonly ICatalogService _catalogService = catalogService;
+    private readonly IRunRequestFactory _requestFactory = requestFactory;
+    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunApplicationOptions _runOptions = runOptions;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly IWorkflowTaskAccessService _taskAccessService = taskAccessService;
 
     public override string TaskCode => WorkflowTaskCodes.Run;
 

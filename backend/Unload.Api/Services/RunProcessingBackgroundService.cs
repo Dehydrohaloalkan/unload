@@ -9,44 +9,32 @@ namespace Unload.Api;
 /// Фоновый обработчик запусков API.
 /// Используется для запуска раннера, обновления статусов и отправки SignalR-событий клиентам.
 /// </summary>
-public class RunProcessingBackgroundService : BackgroundService
+/// <remarks>
+/// Создает фоновый обработчик с зависимостями диспетчера запусков, раннера и SignalR.
+/// </remarks>
+/// <param name="runCoordinator">Диспетчер запросов на выполнение.</param>
+/// <param name="runStateStore">Хранилище состояний запусков.</param>
+/// <param name="runner">Движок выполнения выгрузки.</param>
+/// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
+/// <param name="logger">Логгер фонового сервиса.</param>
+public class RunProcessingBackgroundService(
+    IRunCoordinator runCoordinator,
+    IRunStateStore runStateStore,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IWorkflowTaskAccessService workflowTaskAccessService,
+    IWorkflowTaskTransitionService transitionService,
+    IRunner runner,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<RunProcessingBackgroundService> logger) : BackgroundService
 {
-    private readonly IRunCoordinator _runCoordinator;
-    private readonly IRunStateStore _runStateStore;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
-    private readonly IWorkflowTaskAccessService _workflowTaskAccessService;
-    private readonly IWorkflowTaskTransitionService _transitionService;
-    private readonly IRunner _runner;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<RunProcessingBackgroundService> _logger;
-
-    /// <summary>
-    /// Создает фоновый обработчик с зависимостями диспетчера запусков, раннера и SignalR.
-    /// </summary>
-    /// <param name="runCoordinator">Диспетчер запросов на выполнение.</param>
-    /// <param name="runStateStore">Хранилище состояний запусков.</param>
-    /// <param name="runner">Движок выполнения выгрузки.</param>
-    /// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
-    /// <param name="logger">Логгер фонового сервиса.</param>
-    public RunProcessingBackgroundService(
-        IRunCoordinator runCoordinator,
-        IRunStateStore runStateStore,
-        ITaskExecutionHistoryStore taskExecutionHistoryStore,
-        IWorkflowTaskAccessService workflowTaskAccessService,
-        IWorkflowTaskTransitionService transitionService,
-        IRunner runner,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<RunProcessingBackgroundService> logger)
-    {
-        _runCoordinator = runCoordinator;
-        _runStateStore = runStateStore;
-        _taskExecutionHistoryStore = taskExecutionHistoryStore;
-        _workflowTaskAccessService = workflowTaskAccessService;
-        _transitionService = transitionService;
-        _runner = runner;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
+    private readonly IWorkflowTaskTransitionService _transitionService = transitionService;
+    private readonly IRunner _runner = runner;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<RunProcessingBackgroundService> _logger = logger;
 
     /// <summary>
     /// Основной цикл обработки запусков.

@@ -3,16 +3,11 @@ namespace Unload.Workflow;
 /// <summary>
 /// In-memory реестр зарегистрированных задач workflow.
 /// </summary>
-public  class WorkflowTaskRegistry : IWorkflowTaskRegistry
+public  class WorkflowTaskRegistry(IEnumerable<IWorkflowTaskDefinition> definitions) : IWorkflowTaskRegistry
 {
-    private readonly IReadOnlyDictionary<string, IWorkflowTaskDefinition> _definitions;
-
-    public WorkflowTaskRegistry(IEnumerable<IWorkflowTaskDefinition> definitions)
-    {
-        _definitions = definitions.ToDictionary(
+    private readonly IReadOnlyDictionary<string, IWorkflowTaskDefinition> _definitions = definitions.ToDictionary(
             static x => x.TaskCode,
             StringComparer.OrdinalIgnoreCase);
-    }
 
     public IWorkflowTaskDefinition GetRequired(string taskCode)
     {

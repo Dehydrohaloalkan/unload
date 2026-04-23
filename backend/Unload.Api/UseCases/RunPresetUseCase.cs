@@ -10,27 +10,18 @@ public interface IRunPresetUseCase
     Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
 }
 
-public  class RunPresetUseCase : IRunPresetUseCase
+public  class RunPresetUseCase(
+    IWorkflowTaskDispatcher dispatcher,
+    IPresetGateService presetGateService,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<RunPresetUseCase> logger) : IRunPresetUseCase
 {
-    private readonly IWorkflowTaskDispatcher _dispatcher;
-    private readonly IPresetGateService _presetGateService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<RunPresetUseCase> _logger;
-
-    public RunPresetUseCase(
-        IWorkflowTaskDispatcher dispatcher,
-        IPresetGateService presetGateService,
-        ITaskExecutionHistoryStore taskExecutionHistoryStore,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<RunPresetUseCase> logger)
-    {
-        _dispatcher = dispatcher;
-        _presetGateService = presetGateService;
-        _taskExecutionHistoryStore = taskExecutionHistoryStore;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<RunPresetUseCase> _logger = logger;
 
     public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken)
     {

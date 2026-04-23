@@ -8,18 +8,12 @@ public interface IPresetScriptExecutor
     Task ExecuteAsync(string scriptPath, string correlationId, CancellationToken cancellationToken);
 }
 
-public  class PresetScriptExecutor : IPresetScriptExecutor
+public  class PresetScriptExecutor(
+    IDatabaseClientFactory databaseClientFactory,
+    ILogger<PresetScriptExecutor> logger) : IPresetScriptExecutor
 {
-    private readonly IDatabaseClientFactory _databaseClientFactory;
-    private readonly ILogger<PresetScriptExecutor> _logger;
-
-    public PresetScriptExecutor(
-        IDatabaseClientFactory databaseClientFactory,
-        ILogger<PresetScriptExecutor> logger)
-    {
-        _databaseClientFactory = databaseClientFactory;
-        _logger = logger;
-    }
+    private readonly IDatabaseClientFactory _databaseClientFactory = databaseClientFactory;
+    private readonly ILogger<PresetScriptExecutor> _logger = logger;
 
     public async Task ExecuteAsync(string scriptPath, string correlationId, CancellationToken cancellationToken)
     {

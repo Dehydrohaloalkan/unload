@@ -5,18 +5,12 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Сервис автоматических переходов, запускающий completion handlers после завершения задач.
 /// </summary>
-public  class WorkflowTaskTransitionService : IWorkflowTaskTransitionService
+public  class WorkflowTaskTransitionService(
+    IEnumerable<IWorkflowTaskTransitionHandler> handlers,
+    ILogger<WorkflowTaskTransitionService> logger) : IWorkflowTaskTransitionService
 {
-    private readonly IReadOnlyList<IWorkflowTaskTransitionHandler> _handlers;
-    private readonly ILogger<WorkflowTaskTransitionService> _logger;
-
-    public WorkflowTaskTransitionService(
-        IEnumerable<IWorkflowTaskTransitionHandler> handlers,
-        ILogger<WorkflowTaskTransitionService> logger)
-    {
-        _handlers = handlers.ToArray();
-        _logger = logger;
-    }
+    private readonly IReadOnlyList<IWorkflowTaskTransitionHandler> _handlers = handlers.ToArray();
+    private readonly ILogger<WorkflowTaskTransitionService> _logger = logger;
 
     public async Task HandleCompletedAsync(string taskCode, object? payload, CancellationToken cancellationToken)
     {

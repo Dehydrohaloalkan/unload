@@ -12,23 +12,15 @@ public enum WorkflowTaskFailureKind
 /// <summary>
 /// Бизнес-ошибка dispatch-слоя workflow.
 /// </summary>
-public  class WorkflowTaskDispatchException : Exception
+public  class WorkflowTaskDispatchException(
+    WorkflowTaskFailureKind failureKind,
+    string errorCode,
+    string message,
+    IReadOnlyDictionary<string, object?>? extensions = null) : Exception(message)
 {
-    public WorkflowTaskDispatchException(
-        WorkflowTaskFailureKind failureKind,
-        string errorCode,
-        string message,
-        IReadOnlyDictionary<string, object?>? extensions = null)
-        : base(message)
-    {
-        FailureKind = failureKind;
-        ErrorCode = errorCode;
-        Extensions = extensions;
-    }
+    public WorkflowTaskFailureKind FailureKind { get; } = failureKind;
 
-    public WorkflowTaskFailureKind FailureKind { get; }
+    public string ErrorCode { get; } = errorCode;
 
-    public string ErrorCode { get; }
-
-    public IReadOnlyDictionary<string, object?>? Extensions { get; }
+    public IReadOnlyDictionary<string, object?>? Extensions { get; } = extensions;
 }

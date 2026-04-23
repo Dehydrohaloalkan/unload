@@ -3,14 +3,9 @@ using Unload.Run.Application;
 
 namespace Unload.Run.Runtime;
 
-public  class MqSenderFeedbackConsumer : IMqSenderFeedbackConsumer
+public  class MqSenderFeedbackConsumer(IRunStateStore runStateStore) : IMqSenderFeedbackConsumer
 {
-    private readonly IRunStateStore _runStateStore;
-
-    public MqSenderFeedbackConsumer(IRunStateStore runStateStore)
-    {
-        _runStateStore = runStateStore;
-    }
+    private readonly IRunStateStore _runStateStore = runStateStore;
 
     public Task ConsumeAsync(SenderFileDispatchFeedback feedback, CancellationToken cancellationToken)
     {

@@ -6,24 +6,17 @@ namespace Unload.TaskFlow.Runtime;
 /// <summary>
 /// In-memory сервис централизованного контроля доступа к workflow-задачам.
 /// </summary>
-public  class InMemoryWorkflowTaskAccessService : IWorkflowTaskAccessService
+public  class InMemoryWorkflowTaskAccessService(
+    IWorkflowTaskDependencyCatalog dependencyCatalog,
+    IWorkflowStageStateStore workflowStageStateStore,
+    IRunCoordinator runCoordinator) : IWorkflowTaskAccessService
 {
     private readonly object _sync = new();
-    private readonly IWorkflowTaskDependencyCatalog _dependencyCatalog;
-    private readonly IWorkflowStageStateStore _workflowStageStateStore;
-    private readonly IRunCoordinator _runCoordinator;
+    private readonly IWorkflowTaskDependencyCatalog _dependencyCatalog = dependencyCatalog;
+    private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
+    private readonly IRunCoordinator _runCoordinator = runCoordinator;
     private readonly HashSet<string> _completedTaskCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _activeForegroundTaskCodes = new(StringComparer.OrdinalIgnoreCase);
-
-    public InMemoryWorkflowTaskAccessService(
-        IWorkflowTaskDependencyCatalog dependencyCatalog,
-        IWorkflowStageStateStore workflowStageStateStore,
-        IRunCoordinator runCoordinator)
-    {
-        _dependencyCatalog = dependencyCatalog;
-        _workflowStageStateStore = workflowStageStateStore;
-        _runCoordinator = runCoordinator;
-    }
 
     public async Task<TResult> ExecuteExclusiveAsync<TResult>(
         string taskCode,

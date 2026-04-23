@@ -12,24 +12,16 @@ public interface IStartRunUseCase
     Task<RunAcceptedResponse> ExecuteAsync(RunStartRequest request, CancellationToken cancellationToken);
 }
 
-public  class StartRunUseCase : IStartRunUseCase
+public  class StartRunUseCase(
+    IWorkflowTaskDispatcher dispatcher,
+    IRunStateStore runStateStore,
+    IHubContext<RunStatusHub> hubContext,
+    ILogger<StartRunUseCase> logger) : IStartRunUseCase
 {
-    private readonly IWorkflowTaskDispatcher _dispatcher;
-    private readonly IRunStateStore _runStateStore;
-    private readonly IHubContext<RunStatusHub> _hubContext;
-    private readonly ILogger<StartRunUseCase> _logger;
-
-    public StartRunUseCase(
-        IWorkflowTaskDispatcher dispatcher,
-        IRunStateStore runStateStore,
-        IHubContext<RunStatusHub> hubContext,
-        ILogger<StartRunUseCase> logger)
-    {
-        _dispatcher = dispatcher;
-        _runStateStore = runStateStore;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly ILogger<StartRunUseCase> _logger = logger;
 
     public async Task<RunAcceptedResponse> ExecuteAsync(RunStartRequest request, CancellationToken cancellationToken)
     {

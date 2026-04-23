@@ -5,24 +5,16 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи выполнения preset.
 /// </summary>
-public  class RunPresetWorkflowTaskDefinition : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
+public  class RunPresetWorkflowTaskDefinition(
+    IScriptTaskOrchestrator scriptTaskOrchestrator,
+    IPresetGateService presetGateService,
+    IWorkflowTaskAccessService taskAccessService,
+    IWorkflowTaskTransitionService transitionService) : WorkflowTaskDefinition<EmptyWorkflowTaskRequest, ScriptTaskRunResult>
 {
-    private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator;
-    private readonly IPresetGateService _presetGateService;
-    private readonly IWorkflowTaskAccessService _taskAccessService;
-    private readonly IWorkflowTaskTransitionService _transitionService;
-
-    public RunPresetWorkflowTaskDefinition(
-        IScriptTaskOrchestrator scriptTaskOrchestrator,
-        IPresetGateService presetGateService,
-        IWorkflowTaskAccessService taskAccessService,
-        IWorkflowTaskTransitionService transitionService)
-    {
-        _scriptTaskOrchestrator = scriptTaskOrchestrator;
-        _presetGateService = presetGateService;
-        _taskAccessService = taskAccessService;
-        _transitionService = transitionService;
-    }
+    private readonly IScriptTaskOrchestrator _scriptTaskOrchestrator = scriptTaskOrchestrator;
+    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly IWorkflowTaskAccessService _taskAccessService = taskAccessService;
+    private readonly IWorkflowTaskTransitionService _transitionService = transitionService;
 
     public override string TaskCode => WorkflowTaskCodes.Preset;
 

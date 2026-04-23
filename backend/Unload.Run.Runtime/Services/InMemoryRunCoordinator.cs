@@ -9,14 +9,9 @@ namespace Unload.Run.Runtime;
 /// In-memory реализация <see cref="IRunCoordinator"/> без очереди ожидания.
 /// Гарантирует, что одновременно активен только один запуск.
 /// </summary>
-public class InMemoryRunCoordinator : IRunCoordinator
+public class InMemoryRunCoordinator(ISingleActiveWorkflow<RunRequest> workflow) : IRunCoordinator
 {
-    private readonly ISingleActiveWorkflow<RunRequest> _workflow;
-
-    public InMemoryRunCoordinator(ISingleActiveWorkflow<RunRequest> workflow)
-    {
-        _workflow = workflow;
-    }
+    private readonly ISingleActiveWorkflow<RunRequest> _workflow = workflow;
 
     /// <summary>
     /// Пытается занять слот активного запуска и передать запрос в канал обработки.

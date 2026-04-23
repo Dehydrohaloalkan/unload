@@ -9,21 +9,14 @@ public interface IRunExtraUseCase
     Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
 }
 
-public  class RunExtraUseCase : IRunExtraUseCase
+public  class RunExtraUseCase(
+    IWorkflowTaskDispatcher dispatcher,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    ILogger<RunExtraUseCase> logger) : IRunExtraUseCase
 {
-    private readonly IWorkflowTaskDispatcher _dispatcher;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore;
-    private readonly ILogger<RunExtraUseCase> _logger;
-
-    public RunExtraUseCase(
-        IWorkflowTaskDispatcher dispatcher,
-        ITaskExecutionHistoryStore taskExecutionHistoryStore,
-        ILogger<RunExtraUseCase> logger)
-    {
-        _dispatcher = dispatcher;
-        _taskExecutionHistoryStore = taskExecutionHistoryStore;
-        _logger = logger;
-    }
+    private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly ILogger<RunExtraUseCase> _logger = logger;
 
     public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken)
     {

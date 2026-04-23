@@ -3,17 +3,12 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Каталог зависимостей задач, собранный из централизованной конфигурации pipeline.
 /// </summary>
-public  class WorkflowTaskDependencyCatalog : IWorkflowTaskDependencyCatalog
+public  class WorkflowTaskDependencyCatalog(TaskPipeline pipeline) : IWorkflowTaskDependencyCatalog
 {
-    private readonly IReadOnlyDictionary<string, WorkflowTaskRule> _rules;
-
-    public WorkflowTaskDependencyCatalog(TaskPipeline pipeline)
-    {
-        _rules = pipeline.Tasks.ToDictionary(
+    private readonly IReadOnlyDictionary<string, WorkflowTaskRule> _rules = pipeline.Tasks.ToDictionary(
             static x => x.TaskCode,
             static x => x.ToRule(),
             StringComparer.OrdinalIgnoreCase);
-    }
 
     public WorkflowTaskRule GetRequired(string taskCode)
     {
