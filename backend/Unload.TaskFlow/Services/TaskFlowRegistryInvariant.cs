@@ -2,11 +2,6 @@ using Unload.Workflow;
 
 namespace Unload.TaskFlow;
 
-public interface ITaskFlowRegistryInvariant
-{
-    void EnsureValid();
-}
-
 public  class TaskFlowRegistryInvariant(
     TaskPipeline pipeline,
     IWorkflowTaskRegistry registry) : ITaskFlowRegistryInvariant

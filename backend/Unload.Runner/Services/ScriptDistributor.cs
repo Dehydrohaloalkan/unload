@@ -65,9 +65,3 @@ internal  class ScriptDistributor
         }
     }
 }
-
-internal enum WorkerQueuePreference
-{
-    BigFirst,
-    LightFirst
-}

@@ -3,33 +3,6 @@ using Unload.Bootstrapper;
 
 namespace Unload.Api;
 
-public interface ITaskExecutionHistoryStore
-{
-    TaskRecord Add(
-        string taskCode,
-        DateTimeOffset startedAt,
-        DateTimeOffset completedAt,
-        string? correlationId,
-        string? message,
-        int? scriptsExecuted = null,
-        int? filesWritten = null,
-        string? outputPath = null);
-
-    IReadOnlyList<TaskRecord> List(DateOnly day);
-
-    bool HasRunToday(string taskCode, DateOnly day);
-}
-
-public  record TaskRecord(
-    string TaskCode,
-    DateTimeOffset StartedAt,
-    DateTimeOffset CompletedAt,
-    string? CorrelationId,
-    string? Message,
-    int? ScriptsExecuted,
-    int? FilesWritten,
-    string? OutputPath);
-
 public  class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
 {
     private const string PersistenceVersion = "1";

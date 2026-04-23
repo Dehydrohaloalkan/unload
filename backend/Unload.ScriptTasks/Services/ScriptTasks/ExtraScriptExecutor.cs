@@ -5,15 +5,6 @@ using Unload.Core;
 
 namespace Unload.ScriptTasks;
 
-public interface IExtraScriptExecutor
-{
-    Task<ExtraScriptExecutionResult> ExecuteAsync(
-        string scriptPath,
-        string correlationId,
-        ConcurrentDictionary<string, ConcurrentQueue<string>> aggregatedLines,
-        CancellationToken cancellationToken);
-}
-
 public  class ExtraScriptExecutor(
     IDatabaseClientFactory databaseClientFactory,
     ILogger<ExtraScriptExecutor> logger) : IExtraScriptExecutor
@@ -85,5 +76,3 @@ public  class ExtraScriptExecutor(
         throw new InvalidOperationException($"Result set does not contain required column '{columnName}'.");
     }
 }
-
-public  record ExtraScriptExecutionResult(string ScriptCode, int Records);

@@ -1,10 +1,5 @@
 namespace Unload.Api.UseCases;
 
-public interface IGetServerTimeUseCase
-{
-    ServerTimeResponse Execute();
-}
-
 public  class GetServerTimeUseCase : IGetServerTimeUseCase
 {
     public ServerTimeResponse Execute()

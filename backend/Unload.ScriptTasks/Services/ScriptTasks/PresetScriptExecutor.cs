@@ -3,11 +3,6 @@ using Unload.Core;
 
 namespace Unload.ScriptTasks;
 
-public interface IPresetScriptExecutor
-{
-    Task ExecuteAsync(string scriptPath, string correlationId, CancellationToken cancellationToken);
-}
-
 public  class PresetScriptExecutor(
     IDatabaseClientFactory databaseClientFactory,
     ILogger<PresetScriptExecutor> logger) : IPresetScriptExecutor

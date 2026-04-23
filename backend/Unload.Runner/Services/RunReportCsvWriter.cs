@@ -58,12 +58,3 @@ internal static class RunReportCsvWriter
         return $"\"{escaped}\"";
     }
 }
-
-internal  record RunReportRow(
-    string MemberName,
-    string FileType,
-    int FirstCodeDigit,
-    string OutputFileName,
-    int RowsCount,
-    bool MqSent,
-    long ExecutionTimeMs);

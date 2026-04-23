@@ -7,11 +7,6 @@ using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
 
-public interface IStartRunUseCase
-{
-    Task<RunAcceptedResponse> ExecuteAsync(RunStartRequest request, CancellationToken cancellationToken);
-}
-
 public  class StartRunUseCase(
     IWorkflowTaskDispatcher dispatcher,
     IRunStateStore runStateStore,
