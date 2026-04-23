@@ -15,10 +15,12 @@ namespace Unload.Api.Controllers;
 public  class SystemController(
     IGetServerTimeUseCase getServerTimeUseCase,
     UnloadRuntimePaths runtimePaths,
+    IOutputFilesService outputFilesService,
     IMqSenderFeedbackConsumer mqSenderFeedbackConsumer) : ControllerBase
 {
     private readonly IGetServerTimeUseCase _getServerTimeUseCase = getServerTimeUseCase;
     private readonly UnloadRuntimePaths _runtimePaths = runtimePaths;
+    private readonly IOutputFilesService _outputFilesService = outputFilesService;
     private readonly IMqSenderFeedbackConsumer _mqSenderFeedbackConsumer = mqSenderFeedbackConsumer;
 
     /// <summary>
@@ -91,29 +93,8 @@ public  class SystemController(
                 "VALIDATION_ERROR");
         }
 
-        var outputRoot = Path.GetFullPath(_runtimePaths.OutputDirectory);
-        var fullPath = ResolveDownloadPath(outputRoot, path);
-        var outputRootPrefix = outputRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(outputRootPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status400BadRequest,
-                "Validation error",
-                "Requested file must be located inside the output directory.",
-                "INVALID_DOWNLOAD_PATH");
-        }
-
-        if (!System.IO.File.Exists(fullPath))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status404NotFound,
-                "File was not found",
-                "Requested output file was not found.",
-                "OUTPUT_FILE_NOT_FOUND");
-        }
-
-        var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        return File(stream, "application/octet-stream", Path.GetFileName(fullPath), enableRangeProcessing: true);
+        var stream = _outputFilesService.OpenOutputFile(path);
+        return File(stream, "application/octet-stream", Path.GetFileName(stream.Name), enableRangeProcessing: true);
     }
 
     [HttpGet("output-files")]
@@ -128,40 +109,7 @@ public  class SystemController(
                 "VALIDATION_ERROR");
         }
 
-        var outputRoot = Path.GetFullPath(_runtimePaths.OutputDirectory);
-        var fullPath = ResolveDownloadPath(outputRoot, path);
-        var outputRootPrefix = outputRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(outputRootPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status400BadRequest,
-                "Validation error",
-                "Requested path must be located inside the output directory.",
-                "INVALID_OUTPUT_PATH");
-        }
-
-        if (!Directory.Exists(fullPath))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status404NotFound,
-                "Directory was not found",
-                "Requested output directory was not found.",
-                "OUTPUT_DIRECTORY_NOT_FOUND");
-        }
-
-        var files = Directory
-            .EnumerateFiles(fullPath, "*", SearchOption.AllDirectories)
-            .Select(file =>
-            {
-                var info = new FileInfo(file);
-                return new OutputFileInfo(
-                    Path.GetFileName(file),
-                    file,
-                    info.LastWriteTimeUtc,
-                    info.Length);
-            })
-            .OrderByDescending(static file => file.ModifiedAt)
-            .ToArray();
+        var files = _outputFilesService.ListOutputFiles(path);
         return Ok(files);
     }
 
@@ -177,37 +125,8 @@ public  class SystemController(
                 "VALIDATION_ERROR");
         }
 
-        var outputRoot = Path.GetFullPath(_runtimePaths.OutputDirectory);
-        var fullPath = ResolveDownloadPath(outputRoot, path);
-        var outputRootPrefix = outputRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(outputRootPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status400BadRequest,
-                "Validation error",
-                "Requested path must be located inside the output directory.",
-                "INVALID_OUTPUT_PATH");
-        }
-
-        if (!Directory.Exists(fullPath))
-        {
-            throw new ApiProblemException(
-                StatusCodes.Status404NotFound,
-                "Directory was not found",
-                "Requested output directory was not found.",
-                "OUTPUT_DIRECTORY_NOT_FOUND");
-        }
-
-        var zipFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.zip");
-        using (var archiveStream = new FileStream(zipFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-        using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, leaveOpen: false))
-        {
-            foreach (var file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
-            {
-                var relativePath = Path.GetRelativePath(fullPath, file);
-                archive.CreateEntryFromFile(file, relativePath, CompressionLevel.Optimal);
-            }
-        }
+        var archiveInfo = _outputFilesService.CreateOutputArchive(path);
+        var zipFilePath = archiveInfo.ZipFilePath;
 
         Response.OnCompleted(() =>
         {
@@ -223,15 +142,7 @@ public  class SystemController(
             return Task.CompletedTask;
         });
 
-        var downloadName = $"{Path.GetFileName(fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}.zip";
         var stream = new FileStream(zipFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return File(stream, "application/zip", downloadName, enableRangeProcessing: true);
-    }
-
-    private static string ResolveDownloadPath(string outputRoot, string path)
-    {
-        return Path.IsPathRooted(path)
-            ? Path.GetFullPath(path)
-            : Path.GetFullPath(Path.Combine(outputRoot, path));
+        return File(stream, "application/zip", archiveInfo.DownloadName, enableRangeProcessing: true);
     }
 }

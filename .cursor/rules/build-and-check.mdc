@@ -1,0 +1,29 @@
+---
+description: Build & sanity-check workflow (backend + frontend)
+alwaysApply: true
+---
+
+# Build & check (definition of “works”)
+
+When validating that the project is “working” (before saying it works, before handing off, or when asked to check/fix build errors), **use this exact build sequence** and treat any non-zero exit code as a failure that must be fixed:
+
+## Backend
+
+- Run from repo root (there is a solution `.slnx` in the root):
+
+```powershell
+dotnet build
+```
+
+## Frontend
+
+- Run from repo root:
+
+```powershell
+cd ./web/webApp/
+npm run build
+```
+
+## Preferred way
+
+Prefer using the `build-check` skill (project-local) which defines the canonical commands.

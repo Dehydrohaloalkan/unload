@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Checkbox } from 'primeng/checkbox';
 import { Button } from 'primeng/button';
+import { MessageModule } from 'primeng/message';
 import {
   MemberGroupViewModel,
   MemberRunStatusInfo,
@@ -17,15 +18,17 @@ import {
   RunStatusInfo,
   TaskUiState,
 } from '../app.models';
+import { DownloadHintStore } from '../download-hint.store';
 
 @Component({
   selector: 'app-details-run-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button],
+  imports: [CommonModule, FormsModule, Checkbox, Button, MessageModule],
   templateUrl: './details-run-panel.component.html',
   styleUrl: './details-run-panel.component.css',
 })
 export class DetailsRunPanelComponent {
+  readonly downloadHint = inject(DownloadHintStore);
   readonly senderStatus = SenderBatchStatus;
   readonly presetTask = input.required<TaskUiState>();
   readonly memberGroups = input.required<MemberGroupViewModel[]>();
@@ -43,6 +46,14 @@ export class DetailsRunPanelComponent {
   readonly selectMember = output<string>();
   readonly startSelected = output<void>();
   readonly stopRun = output<void>();
+
+  onDownloadClick(): void {
+    this.downloadHint.notifyDownloadStarted();
+  }
+
+  onDownloadHintClose(): void {
+    this.downloadHint.clear();
+  }
 
   allMembersSelected(): boolean {
     const groups = this.memberGroups();

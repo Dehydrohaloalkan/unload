@@ -37,6 +37,14 @@
 
 <div class="details-section">
   <div class="details-section__title">История extra за сегодня</div>
+  @if (downloadHint.message(); as msg) {
+    <p-message
+      severity="info"
+      [text]="msg"
+      [closable]="true"
+      (onClose)="onDownloadHintClose()"
+    />
+  }
   @if (records().length === 0) {
     <div class="details-empty">Сегодня запусков пока не было.</div>
   } @else {
@@ -77,6 +85,7 @@
                   class="history-file-link"
                   [href]="buildDownloadUrl()(file.filePath)"
                   [attr.download]="file.fileName"
+                  (click)="onDownloadClick()"
                 >
                   {{ file.fileName }}
                 </a>
@@ -88,6 +97,7 @@
               class="history-file-link history-file-link--archive"
               [href]="buildArchiveUrl()(record.outputPath!)"
               [attr.download]="'extra-result-' + (record.correlationId ?? 'run') + '.zip'"
+              (click)="onDownloadClick()"
             >
               Скачать архив результата (.zip)
             </a>

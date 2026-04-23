@@ -78,6 +78,14 @@
   @if (activeRun(); as run) {
     @if (isRunActive(run)) {
       <div class="details-item active-run">
+        @if (downloadHint.message(); as msg) {
+          <p-message
+            severity="info"
+            [text]="msg"
+            [closable]="true"
+            (onClose)="onDownloadHintClose()"
+          />
+        }
         <div class="details-item__row">
           <span class="details-item__label">Correlation</span>
           <span class="details-item__value">{{ run.correlationId }}</span>
@@ -164,6 +172,7 @@
                             class="history-file-link"
                             [href]="buildDownloadUrl()(artifact.filePath)"
                             [attr.download]="artifact.fileName"
+                            (click)="onDownloadClick()"
                           >
                             {{ artifact.fileName }}
                           </a>
@@ -243,6 +252,7 @@
                   class="history-file-link"
                   [href]="buildDownloadUrl()(file.filePath)"
                   [attr.download]="file.fileName"
+                  (click)="onDownloadClick()"
                 >
                   {{ file.fileName }}
                 </a>
@@ -254,6 +264,7 @@
               class="history-file-link history-file-link--archive"
               [href]="buildArchiveUrl()(run.outputPath!)"
               [attr.download]="'result-' + run.correlationId + '.zip'"
+              (click)="onDownloadClick()"
             >
               Скачать архив результата (.zip)
             </a>
@@ -282,6 +293,7 @@
                           class="history-file-link"
                           [href]="buildDownloadUrl()(artifact.filePath)"
                           [attr.download]="artifact.fileName"
+                          (click)="onDownloadClick()"
                         >
                           {{ artifact.fileName }}
                         </a>

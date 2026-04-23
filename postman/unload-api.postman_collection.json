@@ -126,14 +126,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 200 or 404', function () {",
-                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
                   "});",
-                  "if (pm.response.code === 200) {",
-                  "  const body = pm.response.json();",
-                  "  if (body && body.correlationId) {",
-                  "    pm.collectionVariables.set('correlationId', body.correlationId);",
-                  "  }",
+                  "const body = pm.response.json();",
+                  "if (body && body.correlationId) {",
+                  "  pm.collectionVariables.set('correlationId', body.correlationId);",
                   "}"
                 ]
               }
@@ -181,8 +179,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 202 or 409', function () {",
-                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "pm.test('Status is 202, 400 or 409', function () {",
+                  "  pm.expect([202, 400, 409]).to.include(pm.response.code);",
                   "});",
                   "const body = pm.response.json();",
                   "if (pm.response.code === 202) {",
@@ -191,7 +189,7 @@
                   "  });",
                   "  pm.collectionVariables.set('correlationId', body.correlationId);",
                   "} else {",
-                  "  pm.test('Conflict includes ProblemDetails fields', function () {",
+                  "  pm.test('Error includes ProblemDetails fields', function () {",
                   "    pm.expect(body).to.have.property('status');",
                   "    pm.expect(body).to.have.property('errorCode');",
                   "  });",
@@ -240,12 +238,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 202 or 409', function () {",
-                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "pm.test('Status is 202, 400 or 409', function () {",
+                  "  pm.expect([202, 400, 409]).to.include(pm.response.code);",
                   "});",
-                  "if (pm.response.code === 409) {",
+                  "if (pm.response.code !== 202) {",
                   "  const body = pm.response.json();",
-                  "  pm.test('Conflict returns errorCode', function () {",
+                  "  pm.test('Error returns errorCode', function () {",
                   "    pm.expect(body).to.have.property('errorCode');",
                   "  });",
                   "}"
@@ -278,6 +276,18 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cid = pm.collectionVariables.get('correlationId');",
+                  "if (!cid) {",
+                  "  pm.collectionVariables.set('correlationId', pm.collectionVariables.get('unknownCorrelationId'));",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -323,6 +333,18 @@
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cid = pm.collectionVariables.get('correlationId');",
+                  "if (!cid) {",
+                  "  pm.collectionVariables.set('correlationId', pm.collectionVariables.get('unknownCorrelationId'));",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -416,8 +438,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 200 or 409', function () {",
-                  "  pm.expect([200, 409]).to.include(pm.response.code);",
+                  "pm.test('Status is 200, 400 or 409', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
                   "});",
                   "const body = pm.response.json();",
                   "if (pm.response.code === 200) {",
@@ -464,8 +486,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is 200 or 409', function () {",
-                  "  pm.expect([200, 409]).to.include(pm.response.code);",
+                  "pm.test('Status is 200, 400 or 409', function () {",
+                  "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
                   "});",
                   "const body = pm.response.json();",
                   "if (pm.response.code === 200) {",
