@@ -1,6 +1,6 @@
 using Unload.Run.Application;
 
-namespace Unload.Api;
+namespace Unload.Api.Models;
 
 /// <summary>
 /// Контракт HTTP-запроса на запуск выгрузки.

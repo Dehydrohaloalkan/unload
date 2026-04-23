@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
+using Unload.ScriptTasks.Abstractions;
+using Unload.ScriptTasks.Models;
 
 namespace Unload.ScriptTasks;
 

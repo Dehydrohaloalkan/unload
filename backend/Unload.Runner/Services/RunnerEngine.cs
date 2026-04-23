@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Unload.Core;
+using Unload.Runner.Models;
 
 namespace Unload.Runner;
 

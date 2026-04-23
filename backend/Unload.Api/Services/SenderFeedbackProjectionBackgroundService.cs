@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 using Unload.Run.Application;
 
-namespace Unload.Api;
+namespace Unload.Api.Services;
 
 /// <summary>
 /// Проецирует feedback sender-а в состояние run и уведомления SignalR.

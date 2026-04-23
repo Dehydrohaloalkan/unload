@@ -1,4 +1,4 @@
-namespace Unload.Api;
+namespace Unload.Api.Models;
 
 /// <summary>
 /// Контракт ответа со служебным серверным временем API.

@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Api.Abstractions;
 using Unload.Core;
 using Unload.Run.Application;
 using Unload.TaskFlow;
 
-namespace Unload.Api;
+namespace Unload.Api.Services;
 
 /// <summary>
 /// Фоновый обработчик запусков API.

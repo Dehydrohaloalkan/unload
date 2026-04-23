@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using Unload.Api;
 using Microsoft.AspNetCore.SignalR;
+using Unload.Api.Abstractions;
 using Unload.Api.ErrorHandling;
-using Unload.Api.UseCases;
+using Unload.Api.Models;
+using Unload.Api.UseCases.Abstractions;
 using Unload.Run.Application;
 using Unload.TaskFlow;
 

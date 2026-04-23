@@ -1,6 +1,6 @@
 using Unload.TaskFlow;
 
-namespace Unload.Api;
+namespace Unload.Api.Models;
 
 public  record WorkflowDashboardSnapshotResponse(
     PresetGateState PresetState,

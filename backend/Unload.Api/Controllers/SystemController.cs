@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using System.IO.Compression;
 using Unload.Core;
 using Unload.Api.ErrorHandling;
-using Unload.Api.UseCases;
+using Unload.Api.Abstractions;
+using Unload.Api.Models;
+using Unload.Api.UseCases.Abstractions;
 using Unload.Bootstrapper;
 
 namespace Unload.Api.Controllers;

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
+using Unload.ScriptTasks.Abstractions;
 using Unload.TaskFlow;
 
 namespace Unload.ScriptTasks;

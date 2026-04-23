@@ -1,13 +1,11 @@
 using Unload.Api.ErrorHandling;
+using Unload.Api.Abstractions;
+using Unload.Api.UseCases.Abstractions;
 using Unload.TaskFlow;
+using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
-
-public interface IRunExtraUseCase
-{
-    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
-}
 
 public  class RunExtraUseCase(
     IWorkflowTaskDispatcher dispatcher,

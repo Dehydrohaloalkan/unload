@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Api.Abstractions;
 using Unload.TaskFlow;
 
-namespace Unload.Api;
+namespace Unload.Api.Services;
 
 /// <summary>
 /// Фоновая задача проверки доступности preset-этапа по расписанию.

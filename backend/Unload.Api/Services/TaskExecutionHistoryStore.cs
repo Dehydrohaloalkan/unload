@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Unload.Api.Abstractions;
+using Unload.Api.Models;
 using Unload.Bootstrapper;
 
-namespace Unload.Api;
+namespace Unload.Api.Services;
 
 public  class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
 {

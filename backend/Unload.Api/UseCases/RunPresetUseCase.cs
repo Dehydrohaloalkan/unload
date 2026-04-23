@@ -1,14 +1,12 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
+using Unload.Api.Abstractions;
+using Unload.Api.UseCases.Abstractions;
 using Unload.TaskFlow;
+using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
-
-public interface IRunPresetUseCase
-{
-    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
-}
 
 public  class RunPresetUseCase(
     IWorkflowTaskDispatcher dispatcher,

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Unload.Api.ErrorHandling.Abstractions;
 
 namespace Unload.Api.ErrorHandling;
 

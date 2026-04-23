@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
-using Unload.Run.Application;
+using Unload.Api.ErrorHandling.Abstractions;
+using Unload.Run.Application.Exceptions;
 
 namespace Unload.Api.ErrorHandling;
 
