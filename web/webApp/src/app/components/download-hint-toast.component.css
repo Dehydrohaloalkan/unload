@@ -1,0 +1,61 @@
+.download-toast {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3000;
+  max-width: min(26rem, calc(100vw - 2rem));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem 0.95rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(255, 255, 255, 0.95);
+  color: rgb(15, 23, 42);
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.12);
+  backdrop-filter: blur(10px);
+  transform: translateX(calc(100% + 1rem));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+.download-toast--visible {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.download-toast--hidden {
+  transform: translateX(calc(100% + 1rem));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.download-toast__text {
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+}
+
+.download-toast__close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgb(71, 85, 105);
+  font-size: 1.25rem;
+  line-height: 1rem;
+  padding: 0.1rem 0.25rem;
+  cursor: pointer;
+}
+
+.download-toast__close:hover {
+  color: rgb(15, 23, 42);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-toast {
+    transition: none;
+  }
+}
+

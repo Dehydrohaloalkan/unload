@@ -1,0 +1,11 @@
+@if (downloadHint.message(); as msg) {
+  <div class="download-toast download-toast--visible" role="status" aria-live="polite">
+    <div class="download-toast__text">{{ msg }}</div>
+    <button type="button" class="download-toast__close" (click)="close()" aria-label="Закрыть">
+      ×
+    </button>
+  </div>
+} @else {
+  <div class="download-toast download-toast--hidden" aria-hidden="true"></div>
+}
+

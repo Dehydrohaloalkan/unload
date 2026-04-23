@@ -78,14 +78,6 @@
   @if (activeRun(); as run) {
     @if (isRunActive(run)) {
       <div class="details-item active-run">
-        @if (downloadHint.message(); as msg) {
-          <p-message
-            severity="info"
-            [text]="msg"
-            [closable]="true"
-            (onClose)="onDownloadHintClose()"
-          />
-        }
         <div class="details-item__row">
           <span class="details-item__label">Correlation</span>
           <span class="details-item__value">{{ run.correlationId }}</span>

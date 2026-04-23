@@ -1,13 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
-import { MessageModule } from 'primeng/message';
 import { TaskRecord, TaskUiState } from '../app.models';
 import { DownloadHintStore } from '../download-hint.store';
 
 @Component({
   selector: 'app-details-preset-panel',
   standalone: true,
-  imports: [CommonModule, MessageModule],
+  imports: [CommonModule],
   templateUrl: './details-preset-panel.component.html',
   styleUrl: './details-preset-panel.component.css',
 })
@@ -21,10 +20,6 @@ export class DetailsPresetPanelComponent {
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();
-  }
-
-  onDownloadHintClose(): void {
-    this.downloadHint.clear();
   }
 
   formatTimestamp(value: string): string {

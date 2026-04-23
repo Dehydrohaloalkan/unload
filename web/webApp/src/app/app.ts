@@ -13,6 +13,7 @@ import { DetailsRunPanelComponent } from './components/details-run-panel.compone
 import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
+import { DownloadHintToastComponent } from './components/download-hint-toast.component';
 import { AppErrorStore } from './app.error-store';
 import { MemberGroupViewModel, MemberViewModel, TaskRecord } from './app.models';
 import { WorkflowStore } from './app.store';
@@ -35,6 +36,7 @@ import { WorkflowStore } from './app.store';
     LiveClockComponent,
     PresetStageComponent,
     RunCardComponent,
+    DownloadHintToastComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',

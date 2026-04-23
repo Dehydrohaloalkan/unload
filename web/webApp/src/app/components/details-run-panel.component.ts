@@ -3,7 +3,6 @@ import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Checkbox } from 'primeng/checkbox';
 import { Button } from 'primeng/button';
-import { MessageModule } from 'primeng/message';
 import {
   MemberGroupViewModel,
   MemberRunStatusInfo,
@@ -23,7 +22,7 @@ import { DownloadHintStore } from '../download-hint.store';
 @Component({
   selector: 'app-details-run-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button, MessageModule],
+  imports: [CommonModule, FormsModule, Checkbox, Button],
   templateUrl: './details-run-panel.component.html',
   styleUrl: './details-run-panel.component.css',
 })
@@ -49,10 +48,6 @@ export class DetailsRunPanelComponent {
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();
-  }
-
-  onDownloadHintClose(): void {
-    this.downloadHint.clear();
   }
 
   allMembersSelected(): boolean {
