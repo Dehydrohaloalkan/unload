@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Unload.Api.Models;
 using Unload.Core;
 using Unload.Run.Application;
+using Unload.Workflow;
 
 namespace Unload.Api.Controllers;
 
@@ -12,17 +13,17 @@ namespace Unload.Api.Controllers;
 /// Создает контроллер каталога.
 /// </remarks>
 /// <param name="catalogService">Сервис чтения каталога.</param>
-/// <param name="runCoordinator">Координатор активного запуска.</param>
+/// <param name="runWorkflow">Single-active workflow активного запуска.</param>
 /// <param name="runStateStore">Хранилище статусов запусков.</param>
 [ApiController]
 [Route("api")]
 public class CatalogController(
     ICatalogService catalogService,
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore) : ControllerBase
 {
     private readonly ICatalogService _catalogService = catalogService;
-    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly IRunStateStore _runStateStore = runStateStore;
 
     /// <summary>
@@ -46,7 +47,7 @@ public class CatalogController(
     public async Task<IActionResult> GetMembersAsync(CancellationToken cancellationToken)
     {
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
-        var activeCorrelationId = _runCoordinator.GetActiveCorrelationId();
+        var activeCorrelationId = _runWorkflow.GetActiveCorrelationId();
         var activeRun = string.IsNullOrWhiteSpace(activeCorrelationId)
             ? null
             : _runStateStore.Get(activeCorrelationId);

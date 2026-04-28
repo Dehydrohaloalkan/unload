@@ -8,7 +8,6 @@ namespace Unload.Core;
 /// <param name="CorrelationId">Идентификатор запуска, к которому относится событие.</param>
 /// <param name="Step">Шаг процесса, на котором сгенерировано событие.</param>
 /// <param name="Message">Человекочитаемое описание события.</param>
-/// <param name="TargetCode">Target-код (если событие относится к конкретной выборке).</param>
 /// <param name="MemberName">Имя мембера (если событие относится к конкретному мемберу).</param>
 /// <param name="ScriptCode">Код скрипта (если событие относится к конкретному скрипту).</param>
 /// <param name="Records">Количество обработанных записей (если применимо).</param>
@@ -19,7 +18,6 @@ public record RunnerEvent(
     string CorrelationId,
     RunnerStep Step,
     string Message,
-    string? TargetCode = null,
     string? MemberName = null,
     string? ScriptCode = null,
     int? Records = null,

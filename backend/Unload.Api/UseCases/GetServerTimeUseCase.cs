@@ -3,7 +3,7 @@ using Unload.Api.UseCases.Abstractions;
 
 namespace Unload.Api.UseCases;
 
-public  class GetServerTimeUseCase : IGetServerTimeUseCase
+public class GetServerTimeUseCase : IGetServerTimeUseCase
 {
     public ServerTimeResponse Execute()
     {

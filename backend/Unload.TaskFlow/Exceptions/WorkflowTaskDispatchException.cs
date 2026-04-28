@@ -12,7 +12,7 @@ public enum WorkflowTaskFailureKind
 /// <summary>
 /// Бизнес-ошибка dispatch-слоя workflow.
 /// </summary>
-public  class WorkflowTaskDispatchException(
+public class WorkflowTaskDispatchException(
     WorkflowTaskFailureKind failureKind,
     string errorCode,
     string message,

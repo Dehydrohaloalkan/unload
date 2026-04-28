@@ -31,26 +31,25 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddUnloadRuntime(
         this IServiceCollection services,
         UnloadRuntimePaths paths,
-        DatabaseRuntimeSettings? databaseSettings = null,
+        DatabaseRuntimeSettings databaseSettings,
         RunnerOptions? runnerOptions = null,
         PresetGateOptions? presetGateOptions = null)
     {
-        var dbSettings = databaseSettings ?? throw new InvalidOperationException(
-            $"Database settings are required. Configure section '{DatabaseRuntimeSettings.SectionName}' in appsettings.");
-        if (dbSettings.TimeoutSeconds <= 0)
+        ArgumentNullException.ThrowIfNull(databaseSettings);
+        if (databaseSettings.TimeoutSeconds <= 0)
         {
             throw new InvalidOperationException("Database timeout must be greater than zero.");
         }
 
-        if (string.IsNullOrWhiteSpace(dbSettings.ConnectionString))
+        if (string.IsNullOrWhiteSpace(databaseSettings.ConnectionString))
         {
             throw new InvalidOperationException("Database connection string is required.");
         }
 
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
         services.AddSingleton<IDatabaseClientFactory>(_ => new DatabaseClientFactory(
-            dbSettings.TimeoutSeconds,
-            dbSettings.ConnectionString));
+            databaseSettings.TimeoutSeconds,
+            databaseSettings.ConnectionString));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.AddSingleton<InMemoryMqPublisher>();
         services.AddSingleton<IMqPublisher>(static x => x.GetRequiredService<InMemoryMqPublisher>());

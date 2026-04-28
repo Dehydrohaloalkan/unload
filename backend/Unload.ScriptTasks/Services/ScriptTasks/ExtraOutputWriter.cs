@@ -5,7 +5,7 @@ using Unload.ScriptTasks.Models;
 
 namespace Unload.ScriptTasks;
 
-public  class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtraOutputWriter
+public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtraOutputWriter
 {
     private readonly IScriptTaskEventPublisher _eventPublisher = eventPublisher;
 

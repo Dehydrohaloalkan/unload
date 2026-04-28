@@ -7,7 +7,7 @@ namespace Unload.Api.ErrorHandling;
 /// <summary>
 /// Глобальный обработчик исключений API с единым ProblemDetails-контрактом.
 /// </summary>
-public  class GlobalExceptionHandler(
+public class GlobalExceptionHandler(
     ILogger<GlobalExceptionHandler> logger,
     IApiProblemDetailsFactory problemFactory) : IExceptionHandler
 {

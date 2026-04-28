@@ -3,33 +3,24 @@ using Microsoft.AspNetCore.SignalR;
 using Unload.Api.Abstractions;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Models;
+using Unload.Core;
 using Unload.Api.UseCases.Abstractions;
 using Unload.Run.Application;
 using Unload.TaskFlow;
+using Unload.Workflow;
 
 namespace Unload.Api.Controllers;
 
 /// <summary>
 /// Контроллер управления запусками выгрузки.
 /// </summary>
-/// <remarks>
-/// Создает контроллер запусков.
-/// </remarks>
-/// <param name="startRunUseCase">Use-case запуска основной выгрузки.</param>
-/// <param name="runPresetUseCase">Use-case запуска preset-задачи.</param>
-/// <param name="runExtraUseCase">Use-case запуска extra-задачи.</param>
-/// <param name="runCoordinator">Координатор активного запуска.</param>
-/// <param name="runStateStore">Хранилище статусов запусков.</param>
-/// <param name="presetGateService">Сервис правил и состояния preset-гейта.</param>
-/// <param name="hubContext">SignalR-контекст трансляции статусов.</param>
-/// <param name="logger">Логгер контроллера.</param>
 [ApiController]
 [Route("api/runs")]
 public class RunsController(
     IStartRunUseCase startRunUseCase,
     IRunPresetUseCase runPresetUseCase,
     IRunExtraUseCase runExtraUseCase,
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     IPresetGateService presetGateService,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
@@ -39,7 +30,7 @@ public class RunsController(
     private readonly IStartRunUseCase _startRunUseCase = startRunUseCase;
     private readonly IRunPresetUseCase _runPresetUseCase = runPresetUseCase;
     private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
-    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly IPresetGateService _presetGateService = presetGateService;
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
@@ -149,7 +140,7 @@ public class RunsController(
     [HttpGet("active")]
     public IActionResult GetActiveRun()
     {
-        var correlationId = _runCoordinator.GetActiveCorrelationId();
+        var correlationId = _runWorkflow.GetActiveCorrelationId();
         if (string.IsNullOrWhiteSpace(correlationId))
         {
             return Ok(new { correlationId = (string?)null });
@@ -182,7 +173,7 @@ public class RunsController(
     [HttpPost("{correlationId}/stop")]
     public async Task<IActionResult> StopRunAsync(string correlationId, CancellationToken cancellationToken)
     {
-        if (!_runCoordinator.TryCancel(correlationId))
+        if (!_runWorkflow.TryCancel(correlationId))
         {
             throw new ApiProblemException(
                 StatusCodes.Status404NotFound,

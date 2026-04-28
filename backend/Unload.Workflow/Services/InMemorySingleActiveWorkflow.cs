@@ -7,7 +7,7 @@ namespace Unload.Workflow;
 /// Гарантирует, что одновременно активна только одна задача.
 /// </summary>
 /// <typeparam name="TPayload">Тип полезной нагрузки задачи workflow.</typeparam>
-public  class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPayload>
+public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPayload>
 {
     private readonly Channel<WorkflowActivation<TPayload>> _channel;
     private readonly object _sync = new();

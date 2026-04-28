@@ -7,7 +7,7 @@ namespace Unload.Api.Services;
 /// <summary>
 /// Проецирует feedback sender-а в состояние run и уведомления SignalR.
 /// </summary>
-public  class SenderFeedbackProjectionBackgroundService(
+public class SenderFeedbackProjectionBackgroundService(
     IMqSenderFeedbackSource feedbackSource,
     IMqSenderFeedbackConsumer feedbackConsumer,
     IRunStateStore runStateStore,

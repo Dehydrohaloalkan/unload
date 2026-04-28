@@ -6,7 +6,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи выполнения preset.
 /// </summary>
-public  class RunPresetWorkflowTaskDefinition(
+public class RunPresetWorkflowTaskDefinition(
     IScriptTaskOrchestrator scriptTaskOrchestrator,
     IPresetGateService presetGateService,
     IWorkflowTaskAccessService taskAccessService,

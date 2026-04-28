@@ -3,7 +3,7 @@ using Unload.TaskFlow.Abstractions;
 
 namespace Unload.TaskFlow;
 
-public  class TaskFlowRegistryInvariant(
+public class TaskFlowRegistryInvariant(
     TaskPipeline pipeline,
     IWorkflowTaskRegistry registry) : ITaskFlowRegistryInvariant
 {

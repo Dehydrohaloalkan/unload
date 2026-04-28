@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 
 namespace Unload.Api.ErrorHandling;
 
-public  class ApiProblemException(
+public class ApiProblemException(
     int statusCode,
     string title,
     string detail,

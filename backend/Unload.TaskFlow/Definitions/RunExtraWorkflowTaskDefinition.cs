@@ -6,7 +6,7 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи выполнения extra.
 /// </summary>
-public  class RunExtraWorkflowTaskDefinition(
+public class RunExtraWorkflowTaskDefinition(
     IScriptTaskOrchestrator scriptTaskOrchestrator,
     IPresetGateService presetGateService,
     IWorkflowTaskAccessService taskAccessService,

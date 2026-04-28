@@ -8,7 +8,7 @@ using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
 
-public  class RunPresetUseCase(
+public class RunPresetUseCase(
     IWorkflowTaskDispatcher dispatcher,
     IPresetGateService presetGateService,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
@@ -56,16 +56,7 @@ public  class RunPresetUseCase(
         catch (WorkflowTaskDispatchException ex)
         {
             _logger.LogWarning("Preset task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
-            throw new ApiProblemException(
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? StatusCodes.Status400BadRequest
-                    : StatusCodes.Status409Conflict,
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? "Validation error"
-                    : "Preset task conflict",
-                ex.Message,
-                ex.ErrorCode,
-                ex.Extensions);
+            throw WorkflowDispatchExceptions.ToApiProblem(ex, "Preset task conflict");
         }
     }
 }

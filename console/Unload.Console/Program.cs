@@ -45,7 +45,7 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
 var dispatcher = provider.ServiceProvider.GetRequiredService<IWorkflowTaskDispatcher>();
-var runCoordinator = provider.ServiceProvider.GetRequiredService<IRunCoordinator>();
+var runWorkflow = provider.ServiceProvider.GetRequiredService<ISingleActiveWorkflow<RunRequest>>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
 var presetGateService = provider.ServiceProvider.GetRequiredService<IPresetGateService>();
@@ -62,7 +62,7 @@ if (mode == "--default" && args.Length == 0)
         scriptsDirectory,
         catalogService,
         dispatcher,
-        runCoordinator,
+        runWorkflow,
         runStateStore,
         runner,
         runnerOptions,
@@ -138,7 +138,7 @@ Console.CancelKeyPress += (_, e) =>
 
 try
 {
-    await ExecuteRunAsync(dispatcher, runCoordinator, runStateStore, runner, runnerOptions, targetCodes, cts.Token);
+    await ExecuteRunAsync(dispatcher, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cts.Token);
 }
 catch (WorkflowTaskDispatchException ex)
 {
@@ -153,7 +153,7 @@ static async Task RunInteractiveSessionAsync(
     string scriptsDirectory,
     ICatalogService catalogService,
     IWorkflowTaskDispatcher dispatcher,
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     IRunner runner,
     RunnerOptions runnerOptions,
@@ -224,7 +224,7 @@ static async Task RunInteractiveSessionAsync(
             else if (string.Equals(action, "Запустить run", StringComparison.Ordinal))
             {
                 var targetCodes = await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, cancellationToken);
-                await ExecuteRunAsync(dispatcher, runCoordinator, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
+                await ExecuteRunAsync(dispatcher, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
                 Pause();
             }
             else if (string.Equals(action, "Запустить extra", StringComparison.Ordinal))
@@ -261,7 +261,7 @@ static async Task RunInteractiveSessionAsync(
 
 static async Task ExecuteRunAsync(
     IWorkflowTaskDispatcher dispatcher,
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     IRunner runner,
     RunnerOptions runnerOptions,
@@ -274,7 +274,7 @@ static async Task ExecuteRunAsync(
         cancellationToken);
 
     var correlationId = startRunResult.CorrelationId;
-    var request = await WaitForRunRequestAsync(runCoordinator, correlationId, cancellationToken);
+    var request = await WaitForRunRequestAsync(runWorkflow, correlationId, cancellationToken);
     if (request is null)
     {
         throw new InvalidOperationException("Run request was not received by processor.");
@@ -295,7 +295,7 @@ static async Task ExecuteRunAsync(
         await AnsiConsole.Live(BuildDashboard(workerStatuses, globalLogs))
             .StartAsync(async context =>
             {
-                await foreach (var @event in runner.RunAsync(request.Request, runCts.Token))
+                await foreach (var @event in runner.RunAsync(request.Payload, runCts.Token))
                 {
                     runStateStore.ApplyEvent(@event);
                     ApplyWorkerStatusUpdate(workerStatuses, @event);
@@ -316,7 +316,7 @@ static async Task ExecuteRunAsync(
     }
     finally
     {
-        runCoordinator.Complete(correlationId);
+        runWorkflow.Complete(correlationId);
     }
 
     runStopwatch.Stop();
@@ -378,15 +378,14 @@ static DateTimeOffset ResolveNextPresetWindowStart(DateTimeOffset now, int start
     return now <= todayStart ? todayStart : todayStart.AddDays(1);
 }
 
-static async Task<RunActivation?> WaitForRunRequestAsync(
-    IRunCoordinator runCoordinator,
+static async Task<WorkflowActivation<RunRequest>?> WaitForRunRequestAsync(
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     string correlationId,
     CancellationToken cancellationToken)
 {
-    await foreach (var activation in runCoordinator.ReadActivationsAsync(cancellationToken))
+    await foreach (var activation in runWorkflow.ReadActivationsAsync(cancellationToken))
     {
-        var request = activation.Request;
-        if (string.Equals(request.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(activation.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
         {
             return activation;
         }

@@ -7,7 +7,7 @@ namespace Unload.Api.Services;
 /// <summary>
 /// Фоновая задача проверки доступности preset-этапа по расписанию.
 /// </summary>
-public  class PresetGateBackgroundService(
+public class PresetGateBackgroundService(
     PresetGateOptions options,
     IPresetGateService presetGateService,
     IWorkflowTaskAccessService workflowTaskAccessService,

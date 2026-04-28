@@ -9,10 +9,10 @@ namespace Unload.TaskFlow;
 /// <summary>
 /// Definition задачи запуска основной выгрузки.
 /// </summary>
-public  class StartRunWorkflowTaskDefinition(
+public class StartRunWorkflowTaskDefinition(
     ICatalogService catalogService,
     IRunRequestFactory requestFactory,
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     RunApplicationOptions runOptions,
     IPresetGateService presetGateService,
@@ -22,7 +22,7 @@ public  class StartRunWorkflowTaskDefinition(
 
     private readonly ICatalogService _catalogService = catalogService;
     private readonly IRunRequestFactory _requestFactory = requestFactory;
-    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly RunApplicationOptions _runOptions = runOptions;
     private readonly IPresetGateService _presetGateService = presetGateService;
@@ -133,7 +133,7 @@ public  class StartRunWorkflowTaskDefinition(
         var outputDirectory = Path.GetFullPath(_runOptions.OutputDirectory);
         var request = _requestFactory.Create(normalizedCodes, outputDirectory);
 
-        if (!_runCoordinator.TryActivate(request))
+        if (!_runWorkflow.TryActivate(request.CorrelationId, request))
         {
             throw new InvalidOperationException("Run activation conflict.");
         }
@@ -150,7 +150,7 @@ public  class StartRunWorkflowTaskDefinition(
         }
         catch
         {
-            _runCoordinator.Complete(request.CorrelationId);
+            _runWorkflow.Complete(request.CorrelationId);
             throw;
         }
 

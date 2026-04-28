@@ -7,7 +7,7 @@ using Unload.ScriptTasks.Models;
 
 namespace Unload.ScriptTasks;
 
-public  class ExtraScriptExecutor(
+public class ExtraScriptExecutor(
     IDatabaseClientFactory databaseClientFactory,
     ILogger<ExtraScriptExecutor> logger) : IExtraScriptExecutor
 {

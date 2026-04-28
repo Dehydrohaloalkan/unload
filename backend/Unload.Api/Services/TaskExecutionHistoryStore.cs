@@ -5,7 +5,7 @@ using Unload.Bootstrapper;
 
 namespace Unload.Api.Services;
 
-public  class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
+public class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
 {
     private const string PersistenceVersion = "1";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

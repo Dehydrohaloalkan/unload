@@ -7,7 +7,7 @@ using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
 
-public  class RunExtraUseCase(
+public class RunExtraUseCase(
     IWorkflowTaskDispatcher dispatcher,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
     ILogger<RunExtraUseCase> logger) : IRunExtraUseCase
@@ -45,16 +45,7 @@ public  class RunExtraUseCase(
         catch (WorkflowTaskDispatchException ex)
         {
             _logger.LogWarning("Extra task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
-            throw new ApiProblemException(
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? StatusCodes.Status400BadRequest
-                    : StatusCodes.Status409Conflict,
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? "Validation error"
-                    : "Extra task conflict",
-                ex.Message,
-                ex.ErrorCode,
-                ex.Extensions);
+            throw WorkflowDispatchExceptions.ToApiProblem(ex, "Extra task conflict");
         }
     }
 }

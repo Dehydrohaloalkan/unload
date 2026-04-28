@@ -10,7 +10,7 @@ using Unload.Workflow;
 
 namespace Unload.Api.UseCases;
 
-public  class StartRunUseCase(
+public class StartRunUseCase(
     IWorkflowTaskDispatcher dispatcher,
     IRunStateStore runStateStore,
     IHubContext<RunStatusHub> hubContext,
@@ -50,16 +50,7 @@ public  class StartRunUseCase(
         catch (WorkflowTaskDispatchException ex)
         {
             _logger.LogWarning("Run launch rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
-            throw new ApiProblemException(
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? StatusCodes.Status400BadRequest
-                    : StatusCodes.Status409Conflict,
-                ex.FailureKind == WorkflowTaskFailureKind.Validation
-                    ? "Validation error"
-                    : "Run conflict",
-                ex.Message,
-                ex.ErrorCode,
-                ex.Extensions);
+            throw WorkflowDispatchExceptions.ToApiProblem(ex, "Run conflict");
         }
     }
 }

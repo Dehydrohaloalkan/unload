@@ -9,7 +9,7 @@ namespace Unload.MQ;
 /// Фоновая in-memory заглушка sender-а.
 /// Обрабатывает batch-ready сообщения и публикует feedback c задержкой 1 секунда на файл.
 /// </summary>
-public  class SenderStubMqBackgroundService(
+public class SenderStubMqBackgroundService(
     IMqFileBatchSource batchSource,
     IMqPublisher mqPublisher,
     ILogger<SenderStubMqBackgroundService> logger) : BackgroundService

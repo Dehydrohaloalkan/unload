@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Unload.TaskFlow;
 
-public  class PresetProbeService(
+public class PresetProbeService(
     PresetGateOptions options,
     IPresetGateService presetGateService,
     IWorkflowStageStateStore workflowStageStateStore,

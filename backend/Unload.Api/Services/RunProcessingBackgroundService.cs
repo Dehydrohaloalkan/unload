@@ -3,6 +3,7 @@ using Unload.Api.Abstractions;
 using Unload.Core;
 using Unload.Run.Application;
 using Unload.TaskFlow;
+using Unload.Workflow;
 
 namespace Unload.Api.Services;
 
@@ -13,13 +14,13 @@ namespace Unload.Api.Services;
 /// <remarks>
 /// Создает фоновый обработчик с зависимостями диспетчера запусков, раннера и SignalR.
 /// </remarks>
-/// <param name="runCoordinator">Диспетчер запросов на выполнение.</param>
+/// <param name="runWorkflow">Single-active workflow запросов на выполнение.</param>
 /// <param name="runStateStore">Хранилище состояний запусков.</param>
 /// <param name="runner">Движок выполнения выгрузки.</param>
 /// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
 /// <param name="logger">Логгер фонового сервиса.</param>
 public class RunProcessingBackgroundService(
-    IRunCoordinator runCoordinator,
+    ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
     IWorkflowTaskAccessService workflowTaskAccessService,
@@ -28,7 +29,7 @@ public class RunProcessingBackgroundService(
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunProcessingBackgroundService> logger) : BackgroundService
 {
-    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
@@ -44,9 +45,9 @@ public class RunProcessingBackgroundService(
     /// <returns>Задача жизненного цикла фонового сервиса.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var activation in _runCoordinator.ReadActivationsAsync(stoppingToken))
+        await foreach (var activation in _runWorkflow.ReadActivationsAsync(stoppingToken))
         {
-            var request = activation.Request;
+            var request = activation.Payload;
             using var runCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, activation.CancellationToken);
             var runToken = runCts.Token;
             _runStateStore.SetRunning(request.CorrelationId);
@@ -117,7 +118,7 @@ public class RunProcessingBackgroundService(
                         finalState.Status);
                 }
 
-                _runCoordinator.Complete(request.CorrelationId);
+                _runWorkflow.Complete(request.CorrelationId);
             }
         }
     }

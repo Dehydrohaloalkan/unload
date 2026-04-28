@@ -4,7 +4,7 @@ using Unload.ScriptTasks.Abstractions;
 
 namespace Unload.ScriptTasks;
 
-public  class PresetScriptExecutor(
+public class PresetScriptExecutor(
     IDatabaseClientFactory databaseClientFactory,
     ILogger<PresetScriptExecutor> logger) : IPresetScriptExecutor
 {

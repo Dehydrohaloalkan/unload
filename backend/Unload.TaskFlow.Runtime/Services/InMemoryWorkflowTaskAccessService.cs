@@ -1,21 +1,23 @@
+using Unload.Core;
 using Unload.Run.Application;
 using Unload.TaskFlow;
 using Unload.TaskFlow.Exceptions;
+using Unload.Workflow;
 
 namespace Unload.TaskFlow.Runtime;
 
 /// <summary>
 /// In-memory сервис централизованного контроля доступа к workflow-задачам.
 /// </summary>
-public  class InMemoryWorkflowTaskAccessService(
+public class InMemoryWorkflowTaskAccessService(
     IWorkflowTaskDependencyCatalog dependencyCatalog,
     IWorkflowStageStateStore workflowStageStateStore,
-    IRunCoordinator runCoordinator) : IWorkflowTaskAccessService
+    ISingleActiveWorkflow<RunRequest> runWorkflow) : IWorkflowTaskAccessService
 {
     private readonly object _sync = new();
     private readonly IWorkflowTaskDependencyCatalog _dependencyCatalog = dependencyCatalog;
     private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
-    private readonly IRunCoordinator _runCoordinator = runCoordinator;
+    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly HashSet<string> _completedTaskCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _activeForegroundTaskCodes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -105,7 +107,7 @@ public  class InMemoryWorkflowTaskAccessService(
                 $"Task '{conflictingForegroundTaskCode}' is already running.");
         }
 
-        var activeRunCorrelationId = _runCoordinator.GetActiveCorrelationId();
+        var activeRunCorrelationId = _runWorkflow.GetActiveCorrelationId();
         if (!string.IsNullOrWhiteSpace(activeRunCorrelationId) &&
             (string.Equals(taskCode, WorkflowTaskCodes.Run, StringComparison.OrdinalIgnoreCase) ||
              rule.ConflictsWithTaskCodes.Contains(WorkflowTaskCodes.Run, StringComparer.OrdinalIgnoreCase)))

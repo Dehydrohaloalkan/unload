@@ -19,7 +19,6 @@ public static class ServiceCollectionExtensions
         string stateFilePath)
     {
         services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
-        services.AddSingleton<IRunCoordinator, InMemoryRunCoordinator>();
         services.AddSingleton<IRunStateStore>(_ => new InMemoryRunStateStore(workerCount, stateFilePath));
         services.AddSingleton<IMqSenderFeedbackConsumer, MqSenderFeedbackConsumer>();
         return services;

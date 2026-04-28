@@ -130,7 +130,6 @@ internal  class RunnerEventEmitter
             _correlationId,
             step,
             message,
-            script?.TargetCode,
             script?.MemberName,
             script?.ScriptCode,
             records,

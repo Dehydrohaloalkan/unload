@@ -3,7 +3,7 @@ using Unload.ScriptTasks.Abstractions;
 
 namespace Unload.ScriptTasks;
 
-public  class ScriptTaskEventPublisher(IMqPublisher mqPublisher) : IScriptTaskEventPublisher
+public class ScriptTaskEventPublisher(IMqPublisher mqPublisher) : IScriptTaskEventPublisher
 {
     private readonly IMqPublisher _mqPublisher = mqPublisher;
 

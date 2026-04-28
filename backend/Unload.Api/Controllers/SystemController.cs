@@ -14,7 +14,7 @@ namespace Unload.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/system")]
-public  class SystemController(
+public class SystemController(
     IGetServerTimeUseCase getServerTimeUseCase,
     UnloadRuntimePaths runtimePaths,
     IOutputFilesService outputFilesService,
