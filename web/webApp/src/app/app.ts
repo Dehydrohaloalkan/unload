@@ -146,12 +146,14 @@ export class App {
   }
 
   stage2CompletedAt(): string | null {
-    const task = this.store.presetTask();
-    if (task.result && task.completedAt) {
-      return task.completedAt;
-    }
-
-    return null;
+    const last = this.store
+      .todayHistory()
+      .filter((record) => record.taskCode === 'preset')
+      .sort(
+        (left, right) =>
+          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
+      )[0];
+    return last?.completedAt ?? null;
   }
 
   allMembersSelected(): boolean {

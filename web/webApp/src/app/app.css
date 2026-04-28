@@ -97,7 +97,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 1rem;
+  padding: 1rem max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
   border-bottom: 1px solid rgba(226, 232, 240, 0.9);
 }
 
@@ -108,7 +108,7 @@
 }
 
 .details-drawer__body {
-  padding: 1rem;
+  padding: 1rem max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
   display: grid;
   gap: 1rem;
   overflow: auto;
@@ -294,5 +294,11 @@
 
   .details-drawer {
     width: 100vw;
+  }
+
+  .details-drawer__head,
+  .details-drawer__body {
+    padding-inline-start: max(clamp(0.8rem, 3vw, 1.4rem), env(safe-area-inset-left));
+    padding-inline-end: max(clamp(0.8rem, 3vw, 1.4rem), env(safe-area-inset-right));
   }
 }

@@ -10,26 +10,22 @@ namespace Unload.Api.Services;
 public class PresetGateBackgroundService(
     PresetGateOptions options,
     IPresetGateService presetGateService,
-    IWorkflowTaskAccessService workflowTaskAccessService,
-    IWorkflowStageStateStore workflowStageStateStore,
     IPresetProbeService presetProbeService,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IWorkflowInMemoryStateRestorer workflowInMemoryStateRestorer,
     IHubContext<RunStatusHub> hubContext,
     ILogger<PresetGateBackgroundService> logger) : BackgroundService
 {
     private readonly PresetGateOptions _options = options;
     private readonly IPresetGateService _presetGateService = presetGateService;
-    private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
-    private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
     private readonly IPresetProbeService _presetProbeService = presetProbeService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IWorkflowInMemoryStateRestorer _workflowInMemoryStateRestorer = workflowInMemoryStateRestorer;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<PresetGateBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _presetGateService.ApplyInitialOptions(_options);
-        RestoreTaskStateFromHistory();
+        _workflowInMemoryStateRestorer.RestoreForToday();
         _logger.LogInformation(
             "Preset gate service initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
             _options.Enabled,
@@ -57,49 +53,23 @@ public class PresetGateBackgroundService(
         }
     }
 
-    private void RestoreTaskStateFromHistory()
-    {
-        // Эти сервисы in-memory, но факт выполнения задач за день хранится в persisted history.
-        // После рестарта нужно восстановить "preset completed" и dependency-граф, иначе UI/dispatcher расходятся в состоянии.
-        try
-        {
-            _workflowTaskAccessService.ResetCompletedTasks();
-            _workflowStageStateStore.Reset();
-
-            var today = DateOnly.FromDateTime(DateTime.Now);
-
-            if (_taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Preset, today))
-            {
-                _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Preset);
-                _presetGateService.MarkPresetCompleted();
-            }
-
-            if (_taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Extra, today))
-            {
-                _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Extra);
-            }
-
-            if (_taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Run, today))
-            {
-                _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Run);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to restore task state from history on startup.");
-        }
-    }
-
     private async Task CheckAsync(CancellationToken cancellationToken)
     {
         if (_presetGateService.RefreshDailyWindowState())
         {
-            RestoreTaskStateFromHistory();
+            _workflowInMemoryStateRestorer.RestoreForToday();
             _logger.LogInformation("Preset gate daily window state updated.");
             await PublishStateAsync(cancellationToken);
         }
 
         if (!_options.Enabled)
+        {
+            return;
+        }
+
+        // If preset is already completed for the current day, do not start polling/probing.
+        var currentState = _presetGateService.Get();
+        if (currentState.PresetCompleted)
         {
             return;
         }

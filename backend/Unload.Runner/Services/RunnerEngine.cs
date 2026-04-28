@@ -318,6 +318,17 @@ public class RunnerEngine : IRunner
             {
                 await _mqPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
             }
+            else if (remaining == 0)
+            {
+                await eventEmitter.EmitForScriptAsync(
+                    script,
+                    RunnerStep.ScriptCompleted,
+                    "Member completed. No output files were produced.",
+                    records: rowsRead,
+                    filePath: null,
+                    workerId: workerId,
+                    cancellationToken: cancellationToken);
+            }
         }
     }
 

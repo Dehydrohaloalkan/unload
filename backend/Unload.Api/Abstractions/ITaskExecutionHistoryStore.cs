@@ -16,6 +16,10 @@ public interface ITaskExecutionHistoryStore
 
     IReadOnlyList<TaskRecord> List(DateOnly day);
 
+    IReadOnlyList<TaskRecord> ListRange(DateOnly fromInclusive, DateOnly toInclusive);
+
     bool HasRunToday(string taskCode, DateOnly day);
+
+    int Prune(DateOnly oldestDayToKeepInclusive);
 }
 

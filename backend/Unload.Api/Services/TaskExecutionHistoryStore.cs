@@ -62,6 +62,26 @@ public class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
         }
     }
 
+    public IReadOnlyList<TaskRecord> ListRange(DateOnly fromInclusive, DateOnly toInclusive)
+    {
+        if (toInclusive < fromInclusive)
+        {
+            return Array.Empty<TaskRecord>();
+        }
+
+        lock (_sync)
+        {
+            return _records
+                .Where(record =>
+                {
+                    var day = DateOnly.FromDateTime(record.CompletedAt.LocalDateTime);
+                    return day >= fromInclusive && day <= toInclusive;
+                })
+                .OrderByDescending(static record => record.CompletedAt)
+                .ToArray();
+        }
+    }
+
     public bool HasRunToday(string taskCode, DateOnly day)
     {
         var normalizedTaskCode = string.IsNullOrWhiteSpace(taskCode) ? "unknown" : taskCode.Trim().ToLowerInvariant();
@@ -70,6 +90,22 @@ public class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
             return _records.Any(record =>
                 string.Equals(record.TaskCode, normalizedTaskCode, StringComparison.OrdinalIgnoreCase) &&
                 DateOnly.FromDateTime(record.CompletedAt.LocalDateTime) == day);
+        }
+    }
+
+    public int Prune(DateOnly oldestDayToKeepInclusive)
+    {
+        lock (_sync)
+        {
+            var beforeCount = _records.Count;
+            _records.RemoveAll(record => DateOnly.FromDateTime(record.CompletedAt.LocalDateTime) < oldestDayToKeepInclusive);
+            var removed = beforeCount - _records.Count;
+            if (removed > 0)
+            {
+                PersistLocked();
+            }
+
+            return removed;
         }
     }
 

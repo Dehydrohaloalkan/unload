@@ -33,6 +33,10 @@ var runnerOptions = builder.Configuration.GetSection("Runner").Get<RunnerOptions
     ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
 var presetGateOptions = builder.Configuration.GetSection("PresetGate").Get<PresetGateOptions>()
     ?? PresetGateOptions.Default;
+var historyRetentionOptions = builder.Configuration
+    .GetSection(HistoryRetentionOptions.SectionName)
+    .Get<HistoryRetentionOptions>()
+    ?? HistoryRetentionOptions.Default;
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
@@ -45,8 +49,12 @@ builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
 builder.Services.AddScoped<IGetServerTimeUseCase, GetServerTimeUseCase>();
 builder.Services.AddScoped<IOutputFilesService, OutputFilesService>();
 builder.Services.AddSingleton<ITaskExecutionHistoryStore, TaskExecutionHistoryStore>();
+builder.Services.AddSingleton<IWorkflowInMemoryStateRestorer, WorkflowInMemoryStateRestorer>();
+builder.Services.AddSingleton(historyRetentionOptions);
 builder.Services.AddSingleton(runtimePaths);
 builder.Services.AddUnloadRuntime(runtimePaths, databaseSettings, runnerOptions, presetGateOptions);
+builder.Services.AddHostedService<WorkflowStateRestoreHostedService>();
+builder.Services.AddHostedService<HistoryRetentionBackgroundService>();
 builder.Services.AddHostedService<RunProcessingBackgroundService>();
 builder.Services.AddHostedService<PresetGateBackgroundService>();
 builder.Services.AddHostedService<SenderFeedbackProjectionBackgroundService>();

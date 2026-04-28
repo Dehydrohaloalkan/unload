@@ -19,6 +19,8 @@ public class InMemoryRunStateStore : IRunStateStore
         PropertyNameCaseInsensitive = true
     };
     private const string TaskCodeRun = "run";
+    private const string TaskCodePreset = "preset";
+    private const string TaskCodeExtra = "extra";
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
     private readonly RunStatePersistence _persistence;
     private readonly RunStateProjector _projector;
@@ -82,7 +84,21 @@ public class InMemoryRunStateStore : IRunStateStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         var now = DateTimeOffset.UtcNow;
-        UpdateExistingRun(correlationId, current => _projector.UpdateForRunning(current, now));
+        UpsertRun(
+            correlationId,
+            () => new RunStatusInfo(
+                CorrelationId: correlationId,
+                TaskCode: TaskCodeRun,
+                Status: RunLifecycleStatus.Running,
+                TargetCodes: Array.Empty<string>(),
+                CreatedAt: now,
+                UpdatedAt: now,
+                Message: "Run started.",
+                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+                WorkerStatuses: _projector.CreateInitialWorkerStatuses(now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
+            current => _projector.UpdateForRunning(current, now));
         PersistSnapshot();
     }
 
@@ -178,6 +194,53 @@ public class InMemoryRunStateStore : IRunStateStore
         return _runs.Values
             .OrderByDescending(static x => x.UpdatedAt)
             .ToArray();
+    }
+
+    public int PruneTerminalRuns(DateOnly oldestDayToKeepInclusive)
+    {
+        var removed = 0;
+        foreach (var pair in _runs.ToArray())
+        {
+            var run = pair.Value;
+            if (run.Status is not (RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled))
+            {
+                continue;
+            }
+
+            var runDay = DateOnly.FromDateTime(run.CreatedAt.LocalDateTime);
+            if (runDay >= oldestDayToKeepInclusive)
+            {
+                continue;
+            }
+
+            if (_runs.TryRemove(pair.Key, out _))
+            {
+                removed++;
+            }
+        }
+
+        if (removed > 0)
+        {
+            PersistSnapshot();
+        }
+
+        return removed;
+    }
+
+    private static string ResolveTaskCodeByCorrelationId(string correlationId)
+    {
+        var normalized = correlationId?.Trim() ?? string.Empty;
+        if (normalized.StartsWith("extra-", StringComparison.OrdinalIgnoreCase))
+        {
+            return TaskCodeExtra;
+        }
+
+        if (normalized.StartsWith("preset-", StringComparison.OrdinalIgnoreCase))
+        {
+            return TaskCodePreset;
+        }
+
+        return TaskCodeRun;
     }
 
     private RunStatusInfo UpdateExistingRun(string correlationId, Func<RunStatusInfo, RunStatusInfo> updater)
@@ -416,7 +479,7 @@ public class InMemoryRunStateStore : IRunStateStore
         {
             return new RunStatusInfo(
                 feedback.CorrelationId,
-                TaskCodeRun,
+                InMemoryRunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
                 RunLifecycleStatus.Running,
                 Array.Empty<string>(),
                 now,
@@ -639,9 +702,12 @@ public class InMemoryRunStateStore : IRunStateStore
             }
 
             var memberName = @event.MemberName.Trim();
-            var status = @event.Step == RunnerStep.Failed
-                ? MemberRunLifecycleStatus.Failed
-                : MemberRunLifecycleStatus.Running;
+            var status = @event.Step switch
+            {
+                RunnerStep.Failed => MemberRunLifecycleStatus.Failed,
+                RunnerStep.ScriptCompleted => MemberRunLifecycleStatus.Completed,
+                _ => MemberRunLifecycleStatus.Running
+            };
             map[memberName] = new MemberRunStatusInfo(
                 memberName,
                 status,

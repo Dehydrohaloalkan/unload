@@ -28,6 +28,7 @@ public class PresetGateService : IPresetGateService
     {
         lock (_sync)
         {
+            EnsureCurrentDayState();
             return _state;
         }
     }
@@ -65,9 +66,23 @@ public class PresetGateService : IPresetGateService
     {
         lock (_sync)
         {
+            EnsureCurrentDayState();
             if (_state.PollingStarted)
             {
                 return false;
+            }
+
+            if (_state.PresetCompleted)
+            {
+                // Preset was already completed for the current day; polling is unnecessary.
+                var completedNext = _state with
+                {
+                    PollingStarted = false,
+                    RequiresPresetExecution = false,
+                    ReadyForPreset = false,
+                    Message = "Preset task already completed for the current day."
+                };
+                return ReplaceIfChanged(completedNext);
             }
 
             var next = _state with

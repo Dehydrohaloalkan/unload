@@ -67,4 +67,11 @@ public interface IRunStateStore
     /// </summary>
     /// <returns>Снимок списка запусков, обычно отсортированный по времени обновления.</returns>
     IReadOnlyList<RunStatusInfo> List();
+
+    /// <summary>
+    /// Удаляет из хранилища завершённые (terminal) запуски, которые старше указанной даты (по локальной дате сервера).
+    /// </summary>
+    /// <param name="oldestDayToKeepInclusive">Самая старая дата (включительно), которую нужно сохранить.</param>
+    /// <returns>Количество удалённых запусков.</returns>
+    int PruneTerminalRuns(DateOnly oldestDayToKeepInclusive);
 }

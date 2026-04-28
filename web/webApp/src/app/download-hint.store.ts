@@ -3,23 +3,35 @@ import { Injectable, signal } from '@angular/core';
 @Injectable({ providedIn: 'root' })
 export class DownloadHintStore {
   readonly message = signal<string | null>(null);
+  readonly visible = signal(false);
 
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly exitMs = 200;
 
   notifyDownloadStarted(): void {
     this.message.set('Скачивание началось. Загрузка начнется через пару секунд.');
-    this.restartTimer();
+    this.visible.set(false);
+    setTimeout(() => {
+      this.visible.set(true);
+      this.restartTimer();
+    }, 0);
   }
 
   clear(): void {
-    this.message.set(null);
     this.clearTimer();
+    this.visible.set(false);
+    setTimeout(() => {
+      this.message.set(null);
+    }, this.exitMs);
   }
 
   private restartTimer(): void {
     this.clearTimer();
     this.hideTimer = setTimeout(() => {
-      this.message.set(null);
+      this.visible.set(false);
+      setTimeout(() => {
+        this.message.set(null);
+      }, this.exitMs);
       this.hideTimer = null;
     }, 5000);
   }

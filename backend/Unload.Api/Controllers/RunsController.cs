@@ -24,6 +24,7 @@ public class RunsController(
     IRunStateStore runStateStore,
     IPresetGateService presetGateService,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    HistoryRetentionOptions historyRetentionOptions,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunsController> logger) : ControllerBase
 {
@@ -34,6 +35,7 @@ public class RunsController(
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly IPresetGateService _presetGateService = presetGateService;
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly HistoryRetentionOptions _historyRetentionOptions = historyRetentionOptions;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunsController> _logger = logger;
 
@@ -131,6 +133,39 @@ public class RunsController(
             runLastCompletedAt,
             extraLastCompletedAt,
             history));
+    }
+
+    /// <summary>
+    /// Возвращает историю RUN + PRESET + EXTRA за последние N дней.
+    /// По умолчанию N берётся из настроек HistoryRetention:RetentionDays.
+    /// </summary>
+    [HttpGet("history")]
+    public IActionResult GetWorkflowHistory([FromQuery] int? days)
+    {
+        var effectiveDays = days ?? _historyRetentionOptions.RetentionDays;
+        effectiveDays = Math.Clamp(effectiveDays, 1, 365);
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var fromDay = today.AddDays(-(effectiveDays - 1));
+
+        var runs = _runStateStore
+            .List()
+            .Where(run =>
+            {
+                var day = DateOnly.FromDateTime(run.CreatedAt.LocalDateTime);
+                return day >= fromDay && day <= today;
+            })
+            .OrderByDescending(static run => run.CreatedAt)
+            .ToArray();
+
+        var taskHistory = _taskExecutionHistoryStore.ListRange(fromDay, today);
+
+        return Ok(new WorkflowHistoryResponse(
+            FromDayInclusive: fromDay,
+            ToDayInclusive: today,
+            Days: effectiveDays,
+            Runs: runs,
+            TaskHistory: taskHistory));
     }
 
     /// <summary>

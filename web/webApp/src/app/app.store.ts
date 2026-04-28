@@ -377,7 +377,9 @@ export class WorkflowStore {
       this.runLastCompletedAt.set(dashboard.runLastCompletedAt ?? null);
       this.extraLastCompletedAt.set(dashboard.extraLastCompletedAt ?? null);
       this.todayHistory.set(dashboard.todayHistory ?? []);
-      this.todayRuns.set(runsToday ?? []);
+      const runOnlyToday = (runsToday ?? []).filter((run) => this.isMainRunHistoryEntry(run));
+      this.todayRuns.set(runOnlyToday);
+      this.recalculateRunTodayFlags(runOnlyToday);
       await this.refreshOutputFilesForHistoryAsync(dashboard.todayHistory ?? []);
       this.reconcileSelection(members);
 
@@ -437,6 +439,13 @@ export class WorkflowStore {
       this.trackedCorrelationId.set(status.correlationId);
       this.activeRun.set(status);
       if (isTerminalRunStatus(status.status)) {
+        // Reflect terminal result immediately in stage card UI,
+        // then reconcile with server snapshots.
+        this.hasRunToday.set(true);
+        if (status.status === RunLifecycleStatus.Completed) {
+          this.runLastCompletedAt.set(status.updatedAt);
+        }
+
         this.stopRunPolling();
         void this.refreshTodayRunsAsync();
         void this.refreshDashboardSnapshotAsync();
@@ -597,12 +606,31 @@ export class WorkflowStore {
 
   private async refreshTodayRunsAsync(): Promise<void> {
     try {
-      this.todayRuns.set(await this.fetchTodayRunsAsync());
+      const runs = (await this.fetchTodayRunsAsync()).filter((run) => this.isMainRunHistoryEntry(run));
+      this.todayRuns.set(runs);
+      this.recalculateRunTodayFlags(runs);
     } catch (error) {
       if (isDevMode()) {
         console.error(error);
       }
     }
+  }
+
+  private recalculateRunTodayFlags(runs: RunStatusInfo[]): void {
+    const sorted = [...runs].sort(
+      (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+
+    this.hasRunToday.set(sorted.length > 0);
+
+    const completedRun = sorted.find((run) => run.status === RunLifecycleStatus.Completed) ?? null;
+    this.runLastCompletedAt.set(completedRun?.updatedAt ?? null);
+  }
+
+  private isMainRunHistoryEntry(run: RunStatusInfo): boolean {
+    const taskCode = (run.taskCode ?? '').trim().toLowerCase();
+    const correlationId = (run.correlationId ?? '').trim().toLowerCase();
+    return taskCode === 'run' && correlationId.startsWith('req-');
   }
 
   private async refreshOutputFilesForHistoryAsync(history: TaskRecord[]): Promise<void> {

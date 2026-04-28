@@ -1,11 +1,21 @@
-@if (downloadHint.message(); as msg) {
-  <div class="download-toast download-toast--visible" role="status" aria-live="polite">
-    <div class="download-toast__text">{{ msg }}</div>
-    <button type="button" class="download-toast__close" (click)="close()" aria-label="Закрыть">
-      ×
-    </button>
-  </div>
-} @else {
-  <div class="download-toast download-toast--hidden" aria-hidden="true"></div>
-}
+@let msg = downloadHint.message();
+<div
+  class="download-toast"
+  [class.download-toast--visible]="downloadHint.visible() && !!msg"
+  [class.download-toast--hidden]="!downloadHint.visible() || !msg"
+  [attr.aria-hidden]="!msg"
+  role="status"
+  aria-live="polite"
+>
+  <div class="download-toast__text">{{ msg }}</div>
+  <button
+    type="button"
+    class="download-toast__close"
+    (click)="close()"
+    aria-label="Закрыть"
+    [disabled]="!msg"
+  >
+    ×
+  </button>
+</div>
 
