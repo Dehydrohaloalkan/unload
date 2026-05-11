@@ -9,6 +9,7 @@ namespace Unload.Api.Models;
 /// <param name="MemberCodes">Список кодов мемберов, выбранных клиентом.</param>
 public record RunStartRequest(
     IReadOnlyCollection<string> MemberCodes,
+    IReadOnlyCollection<string>? TargetCodes = null,
     bool AdminOverride = false,
     bool PublishToMq = true);
 

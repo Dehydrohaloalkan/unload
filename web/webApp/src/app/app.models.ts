@@ -288,7 +288,8 @@ export interface MemberLogLine {
 }
 
 export interface MemberViewModel {
-  code: string;
+  key: string;
+  memberCode: string;
   name: string;
   targetCodes: string[];
   selected: boolean;

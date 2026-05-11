@@ -40,7 +40,7 @@ interface ActiveRunPayload {
   createdAt?: string;
 }
 
-const MEMBER_SELECTION_STORAGE_KEY = 'unload.web.member-selection';
+const TARGET_SELECTION_STORAGE_KEY = 'unload.web.target-selection';
 const EXTRA_TASK_STORAGE_KEY = 'unload.web.extra-task';
 const PRESET_TASK_STORAGE_KEY = 'unload.web.preset-task';
 const RUN_EVENT_LIMIT = 80;
@@ -75,7 +75,7 @@ export class WorkflowStore {
   readonly activeRun = signal<RunStatusInfo | null>(null);
   readonly trackedCorrelationId = signal<string | null>(null);
   readonly runEvents = signal<RunnerEvent[]>([]);
-  readonly selectedMemberCodes = signal<string[]>([]);
+  readonly selectedTargetCodes = signal<string[]>([]);
   readonly publishRunToMq = signal(true);
   readonly presetTask = signal<TaskUiState>(createIdleTaskState());
   readonly extraTask = signal<TaskUiState>(createIdleTaskState());
@@ -97,7 +97,7 @@ export class WorkflowStore {
     this.presetState()?.presetCompleted ? 'tasks' : 'gate',
   );
 
-  readonly selectedCount = computed(() => this.selectedMemberCodes().length);
+  readonly selectedCount = computed(() => this.selectedTargetCodes().length);
 
   readonly isRunBusy = computed(() => {
     const run = this.activeRun();
@@ -141,7 +141,7 @@ export class WorkflowStore {
       this.members(),
       this.activeRun(),
       this.runEvents(),
-      this.selectedMemberCodes(),
+      this.selectedTargetCodes(),
     ),
   );
 
@@ -168,15 +168,17 @@ export class WorkflowStore {
     void this.bootstrapAsync();
   }
 
-  toggleMember(code: string, selected: boolean): void {
-    const next = new Set<string>(this.selectedMemberCodes());
-    if (selected) {
-      next.add(code);
-    } else {
-      next.delete(code);
+  toggleMember(targetCodes: string[], selected: boolean): void {
+    const next = new Set<string>(this.selectedTargetCodes());
+    for (const targetCode of targetCodes) {
+      if (selected) {
+        next.add(targetCode);
+      } else {
+        next.delete(targetCode);
+      }
     }
 
-    this.selectedMemberCodes.set(sortCodes(next));
+    this.selectedTargetCodes.set(sortCodes(next));
     this.persistSelection();
   }
 
@@ -189,13 +191,13 @@ export class WorkflowStore {
   }
 
   selectAllMembers(): void {
-    const codes = this.members().map((member: MemberCatalogItem) => member.code);
-    this.selectedMemberCodes.set(sortCodes(codes));
+    const codes = this.catalog()?.targets.map((target) => target.targetCode) ?? [];
+    this.selectedTargetCodes.set(sortCodes(codes));
     this.persistSelection();
   }
 
   clearMemberSelection(): void {
-    this.selectedMemberCodes.set([]);
+    this.selectedTargetCodes.set([]);
     this.persistSelection();
   }
 
@@ -316,7 +318,8 @@ export class WorkflowStore {
     try {
       const response = await firstValueFrom(
         this.http.post<RunAcceptedResponse>(this.apiUrl('/api/runs'), {
-          memberCodes: this.selectedMemberCodes(),
+          targetCodes: this.selectedTargetCodes(),
+          memberCodes: this.resolveSelectedMemberCodes(),
           adminOverride: this.adminMode(),
           publishToMq: this.publishRunToMq(),
         }),
@@ -453,7 +456,7 @@ export class WorkflowStore {
       this.todayRuns.set(runOnlyToday);
       this.recalculateRunTodayFlags(runOnlyToday);
       await this.refreshOutputFilesForHistoryAsync(dashboard.todayHistory ?? []);
-      this.reconcileSelection(members);
+      this.reconcileSelection(catalog);
 
       const correlationId = activeRunPayload?.correlationId ?? null;
       this.trackedCorrelationId.set(correlationId);
@@ -773,17 +776,31 @@ export class WorkflowStore {
     }
   }
 
-  private reconcileSelection(members: MemberCatalogItem[]): void {
-    const availableCodes = members.map((member) => member.code);
-    const storedSelection = this.readSelectedMemberCodes();
+  private reconcileSelection(catalog: CatalogInfo): void {
+    const availableCodes = catalog.targets.map((target) => target.targetCode);
+    const storedSelection = this.readSelectedTargetCodes();
     const filtered =
       storedSelection === null
         ? availableCodes
         : availableCodes.filter((code) => storedSelection.includes(code));
     const nextCodes = filtered.length > 0 ? filtered : availableCodes;
 
-    this.selectedMemberCodes.set(sortCodes(nextCodes));
+    this.selectedTargetCodes.set(sortCodes(nextCodes));
     this.persistSelection();
+  }
+
+  private resolveSelectedMemberCodes(): string[] {
+    const catalog = this.catalog();
+    if (!catalog) {
+      return [];
+    }
+
+    const selectedTargets = new Set(this.selectedTargetCodes());
+    const memberCodes = catalog.targets
+      .filter((target) => selectedTargets.has(target.targetCode))
+      .map((target) => target.memberCode);
+
+    return sortCodes(memberCodes);
   }
 
   private shouldProcessCorrelation(correlationId: string): boolean {
@@ -817,18 +834,18 @@ export class WorkflowStore {
     }
 
     window.localStorage.setItem(
-      MEMBER_SELECTION_STORAGE_KEY,
-      JSON.stringify(this.selectedMemberCodes()),
+      TARGET_SELECTION_STORAGE_KEY,
+      JSON.stringify(this.selectedTargetCodes()),
     );
   }
 
-  private readSelectedMemberCodes(): string[] | null {
+  private readSelectedTargetCodes(): string[] | null {
     if (!this.browser) {
       return null;
     }
 
     try {
-      const raw = window.localStorage.getItem(MEMBER_SELECTION_STORAGE_KEY);
+      const raw = window.localStorage.getItem(TARGET_SELECTION_STORAGE_KEY);
       if (!raw) {
         return null;
       }
@@ -933,54 +950,79 @@ function buildMemberGroups(
   members: MemberCatalogItem[],
   activeRun: RunStatusInfo | null,
   events: RunnerEvent[],
-  selectedMemberCodes: string[],
+  selectedTargetCodes: string[],
 ): MemberGroupViewModel[] {
   if (!catalog) {
     return [];
   }
 
-  const selected = new Set(selectedMemberCodes);
+  const selected = new Set(selectedTargetCodes);
   const membersByCode = new Map(members.map((member) => [member.code, member]));
   const memberLogs = buildMemberLogs(activeRun, events);
   const memberArtifacts = buildMemberArtifacts(activeRun?.outputArtifacts ?? []);
   const memberStatuses = activeRun?.memberStatuses ?? {};
+  const memberStatusesByName = new Map(
+    Object.values(memberStatuses).map((status) => [status.memberName.toLowerCase(), status]),
+  );
 
   return catalog.groups
     .map((group) => {
       const groupTargets = catalog.targets.filter((target) => target.groupId === group.id);
-      const memberCodes = Array.from(new Set(groupTargets.map((target) => target.memberCode)));
+      const memberBuckets = new Map<string, typeof groupTargets>();
 
-      const groupMembers = memberCodes
-        .map((memberCode) => {
-          const catalogMember = catalog.members.find((member) => member.code === memberCode);
-          const memberRecord = membersByCode.get(memberCode);
-          if (!catalogMember || !memberRecord) {
+      for (const target of groupTargets) {
+        const targetMemberName = (target.memberName ?? '').trim();
+        const bucketKey = `${target.memberCode}::${targetMemberName.toLowerCase()}`;
+        const bucket = memberBuckets.get(bucketKey);
+        if (bucket) {
+          bucket.push(target);
+        } else {
+          memberBuckets.set(bucketKey, [target]);
+        }
+      }
+
+      const groupMembers = Array.from(memberBuckets.values())
+        .map((memberTargets) => {
+          if (memberTargets.length === 0) {
             return null;
           }
 
+          const primaryTarget = memberTargets[0];
+          const memberRecord = membersByCode.get(primaryTarget.memberCode) ?? null;
+          const targetCodes = memberTargets
+            .map((target) => target.targetCode)
+            .sort((left, right) => left.localeCompare(right));
+          const nameCandidates = sortCodes([
+            ...memberTargets
+              .map((target) => target.memberName?.trim() ?? '')
+              .filter((name) => name.length > 0),
+            memberRecord?.name ?? '',
+          ]);
+          const memberName = memberTargets[0].memberName?.trim() || memberRecord?.name || primaryTarget.memberCode;
           const status = resolveMemberStatus(
             memberRecord,
-            memberStatuses[catalogMember.name],
+            findMemberRunStatus(memberStatusesByName, nameCandidates),
           );
 
           return {
-            code: memberCode,
-            name: catalogMember.name,
-            targetCodes: groupTargets
-              .filter((target) => target.memberCode === memberCode)
-              .map((target) => target.targetCode)
-              .sort((left, right) => left.localeCompare(right)),
-            selected: selected.has(memberCode),
+            key: buildMemberKey(group.id, primaryTarget.memberCode, memberName),
+            memberCode: primaryTarget.memberCode,
+            name: memberName,
+            targetCodes,
+            selected: targetCodes.every((code) => selected.has(code)),
             status: status.status,
             lastStep: status.lastStep,
             message: status.message,
             updatedAt: status.updatedAt,
-            logs: memberLogs.get(catalogMember.name) ?? [],
-            outputArtifacts: memberArtifacts.get(catalogMember.name) ?? [],
+            logs: mergeMemberLogsByNames(memberLogs, nameCandidates),
+            outputArtifacts: mergeMemberArtifactsByNames(memberArtifacts, nameCandidates),
           } satisfies MemberViewModel;
         })
         .filter((member): member is MemberViewModel => !!member)
-        .sort((left, right) => left.name.localeCompare(right.name));
+        .sort(
+          (left, right) =>
+            left.name.localeCompare(right.name) || left.memberCode.localeCompare(right.memberCode),
+        );
 
       return {
         id: group.id,
@@ -994,7 +1036,7 @@ function buildMemberGroups(
 }
 
 function resolveMemberStatus(
-  member: MemberCatalogItem,
+  member: MemberCatalogItem | null,
   liveStatus: MemberRunStatusInfo | undefined,
 ): {
   status: MemberRunLifecycleStatus;
@@ -1002,7 +1044,7 @@ function resolveMemberStatus(
   message: string | null;
   updatedAt: string | null;
 } {
-  const status = liveStatus ?? member.activeRunStatus;
+  const status = liveStatus ?? member?.activeRunStatus;
   if (status) {
     return {
       status: status.status,
@@ -1028,7 +1070,7 @@ function buildMemberLogs(
 
   if (activeRun?.memberStatuses) {
     for (const member of Object.values(activeRun.memberStatuses)) {
-      result.set(member.memberName, [
+      result.set(member.memberName.toLowerCase(), [
         {
           time: member.updatedAt,
           step: member.lastStep ?? RunnerStep.RequestAccepted,
@@ -1043,7 +1085,8 @@ function buildMemberLogs(
       continue;
     }
 
-    const current = result.get(event.memberName) ?? [];
+    const memberKey = event.memberName.toLowerCase();
+    const current = result.get(memberKey) ?? [];
     const line = {
       time: event.occurredAt,
       step: event.step,
@@ -1054,7 +1097,7 @@ function buildMemberLogs(
       current.unshift(line);
     }
 
-    result.set(event.memberName, current.slice(0, 6));
+    result.set(memberKey, current.slice(0, 6));
   }
 
   return result;
@@ -1070,16 +1113,82 @@ function buildMemberArtifacts(
       continue;
     }
 
-    const current = result.get(artifact.memberName) ?? [];
+    const memberKey = artifact.memberName.toLowerCase();
+    const current = result.get(memberKey) ?? [];
     current.push(artifact);
     current.sort(
       (left, right) =>
         new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
     );
-    result.set(artifact.memberName, current);
+    result.set(memberKey, current);
   }
 
   return result;
+}
+
+function buildMemberKey(groupId: number, memberCode: string, memberName: string): string {
+  return `${groupId}:${memberCode}:${memberName.trim().toLowerCase()}`;
+}
+
+function findMemberRunStatus(
+  statusesByName: Map<string, MemberRunStatusInfo>,
+  nameCandidates: string[],
+): MemberRunStatusInfo | undefined {
+  for (const candidate of nameCandidates) {
+    const key = candidate.trim().toLowerCase();
+    if (!key) {
+      continue;
+    }
+
+    const status = statusesByName.get(key);
+    if (status) {
+      return status;
+    }
+  }
+
+  return undefined;
+}
+
+function mergeMemberLogsByNames(
+  logsByName: Map<string, MemberLogLine[]>,
+  nameCandidates: string[],
+): MemberLogLine[] {
+  const unique = new Map<string, MemberLogLine>();
+  for (const candidate of nameCandidates) {
+    const key = candidate.trim().toLowerCase();
+    if (!key) {
+      continue;
+    }
+
+    for (const line of logsByName.get(key) ?? []) {
+      unique.set(`${line.time}|${line.step}|${line.message}`, line);
+    }
+  }
+
+  return Array.from(unique.values())
+    .sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
+    .slice(0, 6);
+}
+
+function mergeMemberArtifactsByNames(
+  artifactsByName: Map<string, RunOutputArtifactInfo[]>,
+  nameCandidates: string[],
+): RunOutputArtifactInfo[] {
+  const unique = new Map<string, RunOutputArtifactInfo>();
+  for (const candidate of nameCandidates) {
+    const key = candidate.trim().toLowerCase();
+    if (!key) {
+      continue;
+    }
+
+    for (const artifact of artifactsByName.get(key) ?? []) {
+      unique.set(`${artifact.filePath}|${artifact.occurredAt}`, artifact);
+    }
+  }
+
+  return Array.from(unique.values()).sort(
+    (left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
+  );
 }
 
 function resolveApiBaseUrl(): string {

@@ -65,7 +65,7 @@
         (openDetails)="openDetails('run')"
         (selectAll)="store.selectAllMembers()"
         (clear)="store.clearMemberSelection()"
-        (toggleMember)="store.toggleMember($event.code, $event.selected)"
+        (toggleMember)="store.toggleMember($event.targetCodes, $event.selected)"
       />
 
       <app-extra-card
@@ -105,7 +105,7 @@
         <app-details-run-panel
           [presetTask]="store.presetTask()"
           [memberGroups]="store.memberGroups()"
-          [selectedMemberCode]="drawerMemberCode()"
+          [selectedMemberKey]="drawerMemberKey()"
           [canStartRun]="store.canStartRun()"
           [activeRun]="store.activeRun()"
           [runBusy]="store.isRunBusy()"
@@ -121,7 +121,7 @@
           [buildArchiveUrl]="store.buildSystemArchiveUrl"
           (toggleAll)="setAllMembersSelection($event)"
           (toggleGroup)="onToggleGroupFromDetails($event.groupId, $event.selected)"
-          (toggleMember)="store.toggleMember($event.code, $event.selected)"
+          (toggleMember)="store.toggleMember($event.targetCodes, $event.selected)"
           (selectMember)="selectDrawerMember($event)"
           (startSelected)="startSelectedRunFromDrawer()"
           (stopRun)="store.stopRunAsync()"

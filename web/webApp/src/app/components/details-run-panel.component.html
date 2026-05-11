@@ -42,28 +42,28 @@
             </label>
 
             <div class="details-members">
-              @for (member of group.members; track member.code) {
-                <div class="member-card" [class.member-card--active]="selectedMember()?.code === member.code">
+              @for (member of group.members; track member.key) {
+                <div class="member-card" [class.member-card--active]="selectedMember()?.key === member.key">
                   <label class="details-check-row member-card__check">
                     <p-checkbox
                       binary="true"
                       [ngModel]="member.selected"
-                      (onChange)="toggleMember.emit({ code: member.code, selected: $event.checked })"
+                      (onChange)="toggleMember.emit({ targetCodes: member.targetCodes, selected: $event.checked })"
                     />
                   </label>
                   <button
                     type="button"
                     class="member-link member-card__button"
-                    (click)="selectMember.emit(member.code)"
+                    (click)="selectMember.emit(member.key)"
                   >
                     {{ member.name }}
                   </button>
 
-                  @if (selectedMember()?.code === member.code) {
+                  @if (selectedMember()?.key === member.key) {
                     <div class="member-card__details">
                       <div class="member-card__meta">
                         <span class="member-card__meta-label">Код</span>
-                        <span class="member-card__meta-value">{{ member.code }}</span>
+                        <span class="member-card__meta-value">{{ member.memberCode }}</span>
                       </div>
                       <div class="member-card__meta">
                         <span class="member-card__meta-label">Статус</span>
@@ -89,6 +89,125 @@
           [disabled]="!canStartRun()"
           (onClick)="startSelected.emit()"
         />
+
+        <div class="details-section">
+          <div class="details-section__title">Активная выгрузка</div>
+          @if (activeRun(); as run) {
+            @if (isRunActive(run)) {
+              <div class="details-item active-run">
+                <div class="details-item__row">
+                  <span class="details-item__label">Correlation</span>
+                  <span class="details-item__value">{{ run.correlationId }}</span>
+                </div>
+                <div class="details-item__row">
+                  <span class="details-item__label">Статус</span>
+                  <span class="details-item__value">{{ resolveRunStatusLabel(run.status) }}</span>
+                </div>
+                @if (run.message) {
+                  <div class="details-item__message">{{ run.message }}</div>
+                }
+
+                @if (activeMemberNames(run).length === 0) {
+                  <div class="details-empty">Деталей по мемберам пока нет.</div>
+                } @else {
+                  <div class="active-members">
+                    @for (memberName of activeMemberNames(run); track memberName) {
+                      <details class="active-member">
+                        <summary class="active-member__summary">
+                          <span class="active-member__name">{{ memberName }}</span>
+                          <span class="active-member__status">
+                            @if (memberStatus(run, memberName); as status) {
+                              {{ resolveMemberStatusLabel(status.status) }}
+                            } @else {
+                              —
+                            }
+                            @if (senderBatchForMember(run, memberName); as batch) {
+                              · MQ: {{ resolveSenderStatusLabel(batch.status) }}
+                            }
+                          </span>
+                        </summary>
+
+                        <div class="active-member__body">
+                          @if (memberStatus(run, memberName); as status) {
+                            <div class="details-item__row">
+                              <span class="details-item__label">Шаг</span>
+                              <span class="details-item__value">{{ resolveRunnerStepLabel(status.lastStep) }}</span>
+                            </div>
+                            @if (status.message) {
+                              <div class="details-item__message">{{ status.message }}</div>
+                            }
+                          }
+
+                          @if (memberWorkers(run, memberName).length > 0) {
+                            <div class="active-subtitle">Скрипты / worker</div>
+                            <div class="details-worker-list">
+                              @for (worker of memberWorkers(run, memberName); track worker.workerId) {
+                                <div class="details-worker-item">
+                                  Worker #{{ worker.workerId }}: {{ worker.state }}
+                                  @if (worker.scriptCode) {
+                                    ({{ worker.scriptCode }})
+                                  }
+                                </div>
+                              }
+                            </div>
+                          }
+
+                          <div class="active-subtitle">Файлы выгрузки</div>
+                          @if (memberArtifacts(run, memberName).length === 0) {
+                            <div class="details-empty">Файлы для мембера пока не найдены.</div>
+                          } @else {
+                            <div class="active-files">
+                              @for (artifact of memberArtifacts(run, memberName); track artifact.filePath) {
+                                <div class="active-file">
+                                  <a
+                                    class="history-file-link"
+                                    [href]="buildDownloadUrl()(artifact.filePath)"
+                                    [attr.download]="artifact.fileName"
+                                    (click)="onDownloadClick()"
+                                  >
+                                    {{ artifact.fileName }}
+                                  </a>
+                                  @if (senderBatchForMember(run, memberName); as batch) {
+                                    @if (isFileSentToMq(artifact.filePath, batch.sentFiles)) {
+                                      <span class="active-file__badge active-file__badge--sent">MQ: sent</span>
+                                    } @else {
+                                      <span class="active-file__badge active-file__badge--pending">MQ: not sent</span>
+                                    }
+                                  } @else {
+                                    <span class="active-file__badge active-file__badge--pending">MQ: n/a</span>
+                                  }
+                                </div>
+                              }
+                            </div>
+                          }
+
+                          @if (senderBatchForMember(run, memberName); as batch) {
+                            @if (batch.message) {
+                              <div class="details-item__message">{{ batch.message }}</div>
+                            }
+                          }
+                        </div>
+                      </details>
+                    }
+                  </div>
+                }
+
+                <p-button
+                  label="Остановить выгрузку"
+                  icon="app-icon app-icon--stop"
+                  severity="secondary"
+                  [outlined]="true"
+                  [disabled]="!runBusy()"
+                  (onClick)="stopRun.emit()"
+                />
+              </div>
+            } @else {
+              <div class="details-empty">Активной выгрузки сейчас нет.</div>
+            }
+          } @else {
+            <div class="details-empty">Активной выгрузки сейчас нет.</div>
+          }
+        </div>
       </div>
     </p-tabpanel>
 
@@ -213,122 +332,3 @@
 </p-tabs>
 
 <p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }"></p-confirmdialog>
-
-<div class="details-section">
-  <div class="details-section__title">Активная выгрузка</div>
-  @if (activeRun(); as run) {
-    @if (isRunActive(run)) {
-      <div class="details-item active-run">
-        <div class="details-item__row">
-          <span class="details-item__label">Correlation</span>
-          <span class="details-item__value">{{ run.correlationId }}</span>
-        </div>
-        <div class="details-item__row">
-          <span class="details-item__label">Статус</span>
-          <span class="details-item__value">{{ resolveRunStatusLabel(run.status) }}</span>
-        </div>
-        @if (run.message) {
-          <div class="details-item__message">{{ run.message }}</div>
-        }
-
-        @if (activeMemberNames(run).length === 0) {
-          <div class="details-empty">Деталей по мемберам пока нет.</div>
-        } @else {
-          <div class="active-members">
-            @for (memberName of activeMemberNames(run); track memberName) {
-              <details class="active-member">
-                <summary class="active-member__summary">
-                  <span class="active-member__name">{{ memberName }}</span>
-                  <span class="active-member__status">
-                    @if (memberStatus(run, memberName); as status) {
-                      {{ resolveMemberStatusLabel(status.status) }}
-                    } @else {
-                      —
-                    }
-                    @if (senderBatchForMember(run, memberName); as batch) {
-                      · MQ: {{ resolveSenderStatusLabel(batch.status) }}
-                    }
-                  </span>
-                </summary>
-
-                <div class="active-member__body">
-                  @if (memberStatus(run, memberName); as status) {
-                    <div class="details-item__row">
-                      <span class="details-item__label">Шаг</span>
-                      <span class="details-item__value">{{ resolveRunnerStepLabel(status.lastStep) }}</span>
-                    </div>
-                    @if (status.message) {
-                      <div class="details-item__message">{{ status.message }}</div>
-                    }
-                  }
-
-                  @if (memberWorkers(run, memberName).length > 0) {
-                    <div class="active-subtitle">Скрипты / worker</div>
-                    <div class="details-worker-list">
-                      @for (worker of memberWorkers(run, memberName); track worker.workerId) {
-                        <div class="details-worker-item">
-                          Worker #{{ worker.workerId }}: {{ worker.state }}
-                          @if (worker.scriptCode) {
-                            ({{ worker.scriptCode }})
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  <div class="active-subtitle">Файлы выгрузки</div>
-                  @if (memberArtifacts(run, memberName).length === 0) {
-                    <div class="details-empty">Файлы для мембера пока не найдены.</div>
-                  } @else {
-                    <div class="active-files">
-                      @for (artifact of memberArtifacts(run, memberName); track artifact.filePath) {
-                        <div class="active-file">
-                          <a
-                            class="history-file-link"
-                            [href]="buildDownloadUrl()(artifact.filePath)"
-                            [attr.download]="artifact.fileName"
-                            (click)="onDownloadClick()"
-                          >
-                            {{ artifact.fileName }}
-                          </a>
-                          @if (senderBatchForMember(run, memberName); as batch) {
-                            @if (isFileSentToMq(artifact.filePath, batch.sentFiles)) {
-                              <span class="active-file__badge active-file__badge--sent">MQ: sent</span>
-                            } @else {
-                              <span class="active-file__badge active-file__badge--pending">MQ: not sent</span>
-                            }
-                          } @else {
-                            <span class="active-file__badge active-file__badge--pending">MQ: n/a</span>
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  @if (senderBatchForMember(run, memberName); as batch) {
-                    @if (batch.message) {
-                      <div class="details-item__message">{{ batch.message }}</div>
-                    }
-                  }
-                </div>
-              </details>
-            }
-          </div>
-        }
-
-        <p-button
-          label="Остановить выгрузку"
-          icon="app-icon app-icon--stop"
-          severity="secondary"
-          [outlined]="true"
-          [disabled]="!runBusy()"
-          (onClick)="stopRun.emit()"
-        />
-      </div>
-    } @else {
-      <div class="details-empty">Активной выгрузки сейчас нет.</div>
-    }
-  } @else {
-    <div class="details-empty">Активной выгрузки сейчас нет.</div>
-  }
-</div>

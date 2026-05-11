@@ -49,7 +49,7 @@ export class App {
   adminError: string | null = null;
   detailsPanelOpen = false;
   detailsPanelStage: 'run' | 'preset' | 'extra' = 'run';
-  drawerMemberCode = signal<string | null>(null);
+  drawerMemberKey = signal<string | null>(null);
 
   constructor() {
     this.store.init();
@@ -89,7 +89,7 @@ export class App {
   openDetails(stage: 'run' | 'preset' | 'extra'): void {
     this.detailsPanelStage = stage;
     this.detailsPanelOpen = true;
-    this.drawerMemberCode.set(null);
+    this.drawerMemberKey.set(null);
   }
 
   closeDetails(): void {
@@ -189,7 +189,7 @@ export class App {
 
   setGroupSelection(group: MemberGroupViewModel, selected: boolean): void {
     for (const member of group.members) {
-      this.store.toggleMember(member.code, selected);
+      this.store.toggleMember(member.targetCodes, selected);
     }
   }
 
@@ -202,18 +202,18 @@ export class App {
     this.setGroupSelection(group, selected);
   }
 
-  selectDrawerMember(code: string): void {
-    this.drawerMemberCode.set(this.drawerMemberCode() === code ? null : code);
+  selectDrawerMember(memberKey: string): void {
+    this.drawerMemberKey.set(this.drawerMemberKey() === memberKey ? null : memberKey);
   }
 
   selectedDrawerMember(): MemberViewModel | null {
-    const code = this.drawerMemberCode();
-    if (!code) {
+    const memberKey = this.drawerMemberKey();
+    if (!memberKey) {
       return null;
     }
 
     for (const group of this.store.memberGroups()) {
-      const member = group.members.find((item) => item.code === code);
+      const member = group.members.find((item) => item.key === memberKey);
       if (member) {
         return member;
       }

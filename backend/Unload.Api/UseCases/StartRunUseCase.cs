@@ -25,9 +25,20 @@ public class StartRunUseCase(
     {
         try
         {
+            var selectedTargetCodes = request.TargetCodes?
+                .Where(static code => !string.IsNullOrWhiteSpace(code))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? [];
+            var selectionMode = selectedTargetCodes.Length > 0
+                ? RunSelectionMode.TargetCodes
+                : RunSelectionMode.MemberCodes;
+            var selectedCodes = selectionMode == RunSelectionMode.TargetCodes
+                ? selectedTargetCodes
+                : request.MemberCodes;
+
             var result = await _dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
                 WorkflowTaskCodes.Run,
-                new StartRunTaskRequest(request.MemberCodes, RunSelectionMode.MemberCodes, request.AdminOverride, request.PublishToMq),
+                new StartRunTaskRequest(selectedCodes, selectionMode, request.AdminOverride, request.PublishToMq),
                 cancellationToken);
 
             _logger.LogInformation("Run accepted. CorrelationId: {CorrelationId}", result.CorrelationId);

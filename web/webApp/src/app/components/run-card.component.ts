@@ -36,10 +36,10 @@ export class RunCardComponent {
   readonly openDetails = output<void>();
   readonly selectAll = output<void>();
   readonly clear = output<void>();
-  readonly toggleMember = output<{ code: string; selected: boolean }>();
+  readonly toggleMember = output<{ targetCodes: string[]; selected: boolean }>();
 
   readonly memberStatus = MemberRunLifecycleStatus;
-  readonly expandedMemberCode = signal<string | null>(null);
+  readonly expandedMemberKey = signal<string | null>(null);
   private readonly confirmationService = inject(ConfirmationService);
 
   resolveRunLabel(): string {
@@ -116,18 +116,18 @@ export class RunCardComponent {
     return formatDate(value, 'HH:mm:ss', 'ru-RU');
   }
 
-  toggleExpanded(code: string): void {
-    this.expandedMemberCode.update((current) => (current === code ? null : code));
+  toggleExpanded(memberKey: string): void {
+    this.expandedMemberKey.update((current) => (current === memberKey ? null : memberKey));
   }
 
   resolveExpandedMember(): MemberGroupViewModel['members'][number] | null {
-    const expandedCode = this.expandedMemberCode();
-    if (!expandedCode) {
+    const expandedMemberKey = this.expandedMemberKey();
+    if (!expandedMemberKey) {
       return null;
     }
 
     for (const group of this.groups()) {
-      const member = group.members.find((item) => item.code === expandedCode);
+      const member = group.members.find((item) => item.key === expandedMemberKey);
       if (member) {
         return member;
       }
@@ -137,7 +137,7 @@ export class RunCardComponent {
   }
 
   closeExpandedMember(): void {
-    this.expandedMemberCode.set(null);
+    this.expandedMemberKey.set(null);
   }
 
   resolveWorkers(run: RunStatusInfo): RunWorkerStatusInfo[] {
@@ -158,9 +158,9 @@ export class RunCardComponent {
     return (run.outputArtifacts ?? []).filter((artifact) => !artifact.memberName);
   }
 
-  onToggleMember(code: string, selected: boolean, event: MouseEvent): void {
+  onToggleMember(targetCodes: string[], selected: boolean, event: MouseEvent): void {
     event.stopPropagation();
-    this.toggleMember.emit({ code, selected: !selected });
+    this.toggleMember.emit({ targetCodes, selected: !selected });
   }
 
   handleStartRunClick(): void {

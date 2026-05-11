@@ -67,7 +67,7 @@ export class DetailsRunPanelComponent {
   readonly senderStatus = SenderBatchStatus;
   readonly presetTask = input.required<TaskUiState>();
   readonly memberGroups = input.required<MemberGroupViewModel[]>();
-  readonly selectedMemberCode = input<string | null>(null);
+  readonly selectedMemberKey = input<string | null>(null);
   readonly canStartRun = input(false);
   readonly activeRun = input<RunStatusInfo | null>(null);
   readonly runBusy = input(false);
@@ -84,7 +84,7 @@ export class DetailsRunPanelComponent {
 
   readonly toggleAll = output<boolean>();
   readonly toggleGroup = output<{ groupId: number; selected: boolean }>();
-  readonly toggleMember = output<{ code: string; selected: boolean }>();
+  readonly toggleMember = output<{ targetCodes: string[]; selected: boolean }>();
   readonly selectMember = output<string>();
   readonly startSelected = output<void>();
   readonly stopRun = output<void>();
@@ -298,13 +298,13 @@ export class DetailsRunPanelComponent {
   }
 
   selectedMember() {
-    const code = this.selectedMemberCode();
-    if (!code) {
+    const memberKey = this.selectedMemberKey();
+    if (!memberKey) {
       return null;
     }
 
     for (const group of this.memberGroups()) {
-      const member = group.members.find((item) => item.code === code);
+      const member = group.members.find((item) => item.key === memberKey);
       if (member) {
         return member;
       }
