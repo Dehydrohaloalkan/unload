@@ -454,14 +454,13 @@ export class DetailsRunPanelComponent {
   }
 
   memberLastUploadToday(member: MemberViewModel): string | null {
-    const todayArtifacts = member.outputArtifacts
-      .filter((artifact) => this.isTodayDate(artifact.occurredAt))
-      .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+    const todayArtifacts = this.memberArtifactsToday(member.name);
     return todayArtifacts[0]?.occurredAt ?? null;
   }
 
   memberCardBorderClass(member: MemberViewModel): string {
-    if (member.outputArtifacts.length === 0) {
+    const todayArtifacts = this.memberArtifactsToday(member.name);
+    if (todayArtifacts.length === 0) {
       return 'member-card--border-yellow';
     }
 
@@ -665,10 +664,8 @@ export class DetailsRunPanelComponent {
   }
 
   private memberSentToMq(member: MemberViewModel): boolean {
-    const run = this.activeRun();
-    if (!run) {
-      return false;
-    }
+    const run = this.latestTodayRun();
+    if (!run) return false;
 
     const batch = this.senderBatchForMember(run, member.name);
     if (!batch) {
@@ -676,6 +673,34 @@ export class DetailsRunPanelComponent {
     }
 
     return batch.status === SenderBatchStatus.Completed || (batch.sentFiles?.length ?? 0) > 0;
+  }
+
+  private memberArtifactsToday(memberName: string): RunOutputArtifactInfo[] {
+    const key = memberName.trim().toLowerCase();
+    const artifacts: RunOutputArtifactInfo[] = [];
+
+    const run = this.latestTodayRun();
+    if (run?.outputArtifacts?.length) {
+      for (const artifact of run.outputArtifacts) {
+        if (!artifact || !artifact.occurredAt) continue;
+        const aKey = (artifact.memberName ?? '').trim().toLowerCase();
+        if (aKey !== key) continue;
+        if (!this.isTodayDate(artifact.occurredAt)) continue;
+        artifacts.push(artifact);
+      }
+    }
+
+    artifacts.sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+    return artifacts;
+  }
+
+  private latestTodayRun(): RunStatusInfo | null {
+    const runs = this.todayRuns() ?? [];
+    if (runs.length === 0) return null;
+    return (
+      [...runs].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ??
+      null
+    );
   }
 
   private isTodayDate(value: string | null | undefined): boolean {
