@@ -74,6 +74,7 @@ export class DetailsRunPanelComponent {
   readonly todayRuns = input.required<RunStatusInfo[]>();
   readonly todayHistory = input.required<TaskRecord[]>();
   readonly filesByOutputPath = input<Record<string, OutputFileInfo[]>>({});
+  readonly historyMemberNames = input<string[]>([]);
   readonly publishToMq = input(true);
   readonly requeueRunning = input(false);
   readonly requeueResult = input<RequeueToMqResponse | null>(null);
@@ -182,6 +183,7 @@ export class DetailsRunPanelComponent {
 
   private buildHistoryNodes(): HistoryRunNode[] {
     const nodeMap = new Map<string, HistoryRunNode>();
+    const knownMemberNames = this.allKnownMemberNames();
 
     for (const run of this.todayRuns()) {
       const correlationId = run.correlationId?.trim();
@@ -190,6 +192,10 @@ export class DetailsRunPanelComponent {
       }
 
       const memberMap = new Map<string, HistoryFileRow[]>();
+      for (const memberName of this.runMemberNames(run, knownMemberNames)) {
+        memberMap.set(memberName, []);
+      }
+
       for (const artifact of run.outputArtifacts ?? []) {
         if (!artifact.filePath || !artifact.fileName) {
           continue;
@@ -226,6 +232,9 @@ export class DetailsRunPanelComponent {
 
       const correlationId = record.correlationId;
       const memberMap = new Map<string, HistoryFileRow[]>();
+      for (const memberName of knownMemberNames) {
+        memberMap.set(memberName, []);
+      }
       const files = this.filesByOutputPath()?.[record.outputPath] ?? [];
 
       for (const file of files) {
@@ -259,6 +268,34 @@ export class DetailsRunPanelComponent {
     );
   }
 
+  private allKnownMemberNames(): string[] {
+    return this.historyMemberNames();
+  }
+
+  private runMemberNames(run: RunStatusInfo, knownMemberNames: string[]): string[] {
+    const names = new Set<string>(knownMemberNames);
+
+    for (const status of Object.values(run.memberStatuses ?? {})) {
+      if (status.memberName?.trim()) {
+        names.add(status.memberName);
+      }
+    }
+
+    for (const batch of Object.values(run.senderBatches ?? {})) {
+      if (batch.memberName?.trim()) {
+        names.add(batch.memberName);
+      }
+    }
+
+    for (const artifact of run.outputArtifacts ?? []) {
+      if (artifact.memberName?.trim()) {
+        names.add(artifact.memberName);
+      }
+    }
+
+    return [...names].sort((left, right) => left.localeCompare(right));
+  }
+
   private memberNameFromFile(fileName: string): string {
     if (!fileName) {
       return 'UNKNOWN';
@@ -266,6 +303,21 @@ export class DetailsRunPanelComponent {
 
     const dotIndex = fileName.lastIndexOf('.');
     return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  }
+
+  formatFileCount(count: number): string {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+
+    if (mod10 === 1 && mod100 !== 11) {
+      return `${count} файл`;
+    }
+
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return `${count} файла`;
+    }
+
+    return `${count} файлов`;
   }
 
   allMembersSelected(): boolean {

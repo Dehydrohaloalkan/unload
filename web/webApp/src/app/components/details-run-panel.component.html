@@ -234,23 +234,27 @@
                         <details class="history-member">
                           <summary class="history-member__summary">
                             <span>{{ member.memberName }}</span>
-                            <span>{{ member.files.length }} файл(ов)</span>
+                            <span>{{ formatFileCount(member.files.length) }}</span>
                           </summary>
                           <div class="history-member__body">
-                            @for (file of member.files; track file.key) {
-                              <label class="history-member-file">
-                                <p-checkbox
-                                  binary="true"
-                                  [ngModel]="isHistoryFileSelected(file.key)"
-                                  (onChange)="toggleHistoryFile(file, $event.checked)"
-                                />
-                                <a
-                                  class="history-file-link"
-                                  [href]="buildDownloadUrl()(file.filePath)"
-                                  [attr.download]="file.fileName"
-                                  (click)="onDownloadClick()"
-                                >{{ file.fileName }}</a>
-                              </label>
+                            @if (member.files.length === 0) {
+                              <div class="details-empty">0 файлов.</div>
+                            } @else {
+                              @for (file of member.files; track file.key) {
+                                <label class="history-member-file">
+                                  <p-checkbox
+                                    binary="true"
+                                    [ngModel]="isHistoryFileSelected(file.key)"
+                                    (onChange)="toggleHistoryFile(file, $event.checked)"
+                                  />
+                                  <a
+                                    class="history-file-link"
+                                    [href]="buildDownloadUrl()(file.filePath)"
+                                    [attr.download]="file.fileName"
+                                    (click)="onDownloadClick()"
+                                  >{{ file.fileName }}</a>
+                                </label>
+                              }
                             }
                           </div>
                         </details>

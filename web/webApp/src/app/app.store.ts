@@ -144,6 +144,9 @@ export class WorkflowStore {
       this.selectedTargetCodes(),
     ),
   );
+  readonly historyMemberNames = computed(() =>
+    buildHistoryMemberNames(this.catalog(), this.members()),
+  );
 
   init(): void {
     if (this.initialized) {
@@ -1231,4 +1234,30 @@ function isRunStatusPayload(
 
 function sortCodes(codes: Iterable<string>): string[] {
   return Array.from(new Set(codes)).sort((left, right) => left.localeCompare(right));
+}
+
+function buildHistoryMemberNames(
+  catalog: CatalogInfo | null,
+  members: MemberCatalogItem[],
+): string[] {
+  if (!catalog) {
+    return sortCodes(members.map((member) => member.name).filter((name) => name.trim().length > 0));
+  }
+
+  const names = new Set<string>();
+  for (const target of catalog.targets) {
+    const memberName = target.memberName?.trim();
+    if (memberName) {
+      names.add(memberName);
+    }
+  }
+
+  for (const member of members) {
+    const memberName = member.name?.trim();
+    if (memberName) {
+      names.add(memberName);
+    }
+  }
+
+  return sortCodes(names);
 }
