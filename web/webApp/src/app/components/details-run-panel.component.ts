@@ -1,8 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Checkbox } from 'primeng/checkbox';
 import { Button } from 'primeng/button';
+import { TabsModule } from 'primeng/tabs';
+import { ConfirmDialog } from 'primeng/confirmdialog';
+import { ConfirmationService } from 'primeng/api';
 import {
   MemberGroupViewModel,
   MemberRunStatusInfo,
@@ -16,18 +19,51 @@ import {
   SenderFileDispatchStateInfo,
   RunStatusInfo,
   TaskUiState,
+  TaskRecord,
+  RequeueItem,
+  RequeueToMqResponse,
+  MqUploadResponse,
+  OutputFileInfo,
 } from '../app.models';
 import { DownloadHintStore } from '../download-hint.store';
+
+type HistoryFileRow = {
+  key: string;
+  taskCode: 'run' | 'extra';
+  correlationId: string;
+  memberName: string;
+  fileName: string;
+  filePath: string;
+  occurredAt: string;
+};
+
+type HistoryRunNode = {
+  key: string;
+  taskCode: 'run' | 'extra';
+  correlationId: string;
+  status: string;
+  occurredAt: string;
+  members: { memberName: string; files: HistoryFileRow[] }[];
+};
 
 @Component({
   selector: 'app-details-run-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button],
+  imports: [
+    CommonModule,
+    FormsModule,
+    Checkbox,
+    Button,
+    TabsModule,
+    ConfirmDialog,
+  ],
+  providers: [ConfirmationService],
   templateUrl: './details-run-panel.component.html',
   styleUrl: './details-run-panel.component.css',
 })
 export class DetailsRunPanelComponent {
   readonly downloadHint = inject(DownloadHintStore);
+  private readonly confirmationService = inject(ConfirmationService);
   readonly senderStatus = SenderBatchStatus;
   readonly presetTask = input.required<TaskUiState>();
   readonly memberGroups = input.required<MemberGroupViewModel[]>();
@@ -36,6 +72,13 @@ export class DetailsRunPanelComponent {
   readonly activeRun = input<RunStatusInfo | null>(null);
   readonly runBusy = input(false);
   readonly todayRuns = input.required<RunStatusInfo[]>();
+  readonly todayHistory = input.required<TaskRecord[]>();
+  readonly filesByOutputPath = input<Record<string, OutputFileInfo[]>>({});
+  readonly publishToMq = input(true);
+  readonly requeueRunning = input(false);
+  readonly requeueResult = input<RequeueToMqResponse | null>(null);
+  readonly uploadRunning = input(false);
+  readonly uploadResult = input<MqUploadResponse | null>(null);
   readonly buildDownloadUrl = input.required<(path: string) => string>();
   readonly buildArchiveUrl = input.required<(path: string) => string>();
 
@@ -45,9 +88,184 @@ export class DetailsRunPanelComponent {
   readonly selectMember = output<string>();
   readonly startSelected = output<void>();
   readonly stopRun = output<void>();
+  readonly publishToMqChange = output<boolean>();
+  readonly requeueToMq = output<RequeueItem[]>();
+  readonly uploadToMq = output<{ files: File[]; memberName: string | null }>();
+
+  selectedHistoryFiles: HistoryFileRow[] = [];
+  readonly historyNodes = computed(() => this.buildHistoryNodes());
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();
+  }
+
+  canRequeue(): boolean {
+    return this.selectedHistoryFiles.length > 0;
+  }
+
+  emitRequeue(): void {
+    const grouped = new Map<string, { taskCode: 'run' | 'extra'; correlationId: string; filePaths: Set<string> }>();
+    for (const row of this.selectedHistoryFiles) {
+      const key = `${row.taskCode}|${row.correlationId}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.filePaths.add(row.filePath);
+        continue;
+      }
+
+      grouped.set(key, {
+        taskCode: row.taskCode,
+        correlationId: row.correlationId,
+        filePaths: new Set([row.filePath]),
+      });
+    }
+
+    const items: RequeueItem[] = Array.from(grouped.values()).map((item) => ({
+      taskCode: item.taskCode,
+      correlationId: item.correlationId,
+      filePaths: Array.from(item.filePaths),
+    }));
+
+    if (items.length > 0) {
+      this.requeueToMq.emit(items);
+    }
+  }
+
+  confirmRequeue(): void {
+    if (!this.canRequeue() || this.requeueRunning()) {
+      return;
+    }
+
+    this.confirmationService.confirm({
+      header: 'Подтверждение',
+      message: 'Отправить выбранные результаты в MQ?',
+      acceptLabel: 'Отправить',
+      rejectLabel: 'Отмена',
+      accept: () => this.emitRequeue(),
+    });
+  }
+
+  onFileInputChange(event: Event, inputEl: HTMLInputElement): void {
+    const files = Array.from((event.target as HTMLInputElement).files ?? []);
+    if (files.length === 0) {
+      return;
+    }
+
+    this.confirmationService.confirm({
+      header: 'Подтверждение',
+      message: `Отправить в MQ выбранные файлы (${files.length})?`,
+      acceptLabel: 'Отправить',
+      rejectLabel: 'Отмена',
+      accept: () => {
+        this.uploadToMq.emit({ files, memberName: null });
+        inputEl.value = '';
+      },
+      reject: () => {
+        inputEl.value = '';
+      },
+    });
+  }
+
+  isHistoryFileSelected(key: string): boolean {
+    return this.selectedHistoryFiles.some((f) => f.key === key);
+  }
+
+  toggleHistoryFile(row: HistoryFileRow, checked: boolean): void {
+    if (checked) {
+      if (!this.selectedHistoryFiles.some((f) => f.key === row.key)) {
+        this.selectedHistoryFiles = [...this.selectedHistoryFiles, row];
+      }
+    } else {
+      this.selectedHistoryFiles = this.selectedHistoryFiles.filter((f) => f.key !== row.key);
+    }
+  }
+
+  private buildHistoryNodes(): HistoryRunNode[] {
+    const nodeMap = new Map<string, HistoryRunNode>();
+
+    for (const run of this.todayRuns()) {
+      const correlationId = run.correlationId?.trim();
+      if (!correlationId) {
+        continue;
+      }
+
+      const memberMap = new Map<string, HistoryFileRow[]>();
+      for (const artifact of run.outputArtifacts ?? []) {
+        if (!artifact.filePath || !artifact.fileName) {
+          continue;
+        }
+        const memberName = artifact.memberName || 'GLOBAL';
+        if (!memberMap.has(memberName)) {
+          memberMap.set(memberName, []);
+        }
+        memberMap.get(memberName)!.push({
+          key: `run|${correlationId}|${artifact.filePath}`,
+          taskCode: 'run',
+          correlationId,
+          memberName,
+          fileName: artifact.fileName,
+          filePath: artifact.filePath,
+          occurredAt: artifact.occurredAt || run.updatedAt,
+        });
+      }
+
+      nodeMap.set(`run|${correlationId}`, {
+        key: `run|${correlationId}`,
+        taskCode: 'run',
+        correlationId,
+        status: this.resolveRunStatusLabel(run.status),
+        occurredAt: run.updatedAt,
+        members: Array.from(memberMap.entries()).map(([memberName, files]) => ({ memberName, files })),
+      });
+    }
+
+    for (const record of this.todayHistory()) {
+      if (record.taskCode !== 'extra' || !record.correlationId || !record.outputPath) {
+        continue;
+      }
+
+      const correlationId = record.correlationId;
+      const memberMap = new Map<string, HistoryFileRow[]>();
+      const files = this.filesByOutputPath()?.[record.outputPath] ?? [];
+
+      for (const file of files) {
+        const memberName = this.memberNameFromFile(file.fileName);
+        if (!memberMap.has(memberName)) {
+          memberMap.set(memberName, []);
+        }
+        memberMap.get(memberName)!.push({
+          key: `extra|${correlationId}|${file.filePath}`,
+          taskCode: 'extra',
+          correlationId,
+          memberName,
+          fileName: file.fileName,
+          filePath: file.filePath,
+          occurredAt: file.modifiedAt || record.completedAt,
+        });
+      }
+
+      nodeMap.set(`extra|${correlationId}`, {
+        key: `extra|${correlationId}`,
+        taskCode: 'extra',
+        correlationId,
+        status: 'Completed',
+        occurredAt: record.completedAt,
+        members: Array.from(memberMap.entries()).map(([memberName, files]) => ({ memberName, files })),
+      });
+    }
+
+    return Array.from(nodeMap.values()).sort(
+      (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
+    );
+  }
+
+  private memberNameFromFile(fileName: string): string {
+    if (!fileName) {
+      return 'UNKNOWN';
+    }
+
+    const dotIndex = fileName.lastIndexOf('.');
+    return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
   }
 
   allMembersSelected(): boolean {
@@ -184,6 +402,8 @@ export class DetailsRunPanelComponent {
         return 'Completed';
       case SenderBatchStatus.Failed:
         return 'Failed';
+      case SenderBatchStatus.SkippedByRequest:
+        return 'Skipped';
       default:
         return 'Unknown';
     }
@@ -214,6 +434,10 @@ export class DetailsRunPanelComponent {
 
     if (batch.status === SenderBatchStatus.Failed) {
       return 'Failed';
+    }
+
+    if (batch.status === SenderBatchStatus.SkippedByRequest) {
+      return this.resolveMemberStatusLabel(member.status);
     }
 
     // If sender didn't complete, member is not complete yet (even if runner says Completed).

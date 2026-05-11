@@ -226,6 +226,17 @@ export class App {
     void this.store.startRunAsync();
   }
 
+  startRunFromMainCard(): void {
+    this.store.selectAllMembers();
+    this.store.setPublishRunToMq(true);
+    void this.store.startRunAsync();
+  }
+
+  startExtraFromMainCard(): void {
+    this.store.setPublishExtraToMq(true);
+    void this.store.runExtraAsync();
+  }
+
   extraHistoryRecords(): TaskRecord[] {
     return this.detailRecords('extra');
   }

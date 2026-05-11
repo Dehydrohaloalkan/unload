@@ -66,8 +66,8 @@ public class StartRunWorkflowTaskDefinition(
 
         var correlationId = request.SelectionMode switch
         {
-            RunSelectionMode.MemberCodes => await StartByMemberCodesAsync(normalizedCodes, request.AdminOverride, cancellationToken),
-            RunSelectionMode.TargetCodes => StartByTargetCodes(normalizedCodes, request.AdminOverride),
+            RunSelectionMode.MemberCodes => await StartByMemberCodesAsync(normalizedCodes, request.AdminOverride, request.PublishToMq, cancellationToken),
+            RunSelectionMode.TargetCodes => StartByTargetCodes(normalizedCodes, request.AdminOverride, request.PublishToMq),
             _ => throw new WorkflowTaskDispatchException(
                 WorkflowTaskFailureKind.Validation,
                 "VALIDATION_ERROR",
@@ -80,6 +80,7 @@ public class StartRunWorkflowTaskDefinition(
     private async Task<string> StartByMemberCodesAsync(
         IReadOnlyCollection<string> memberCodes,
         bool adminOverride,
+        bool publishToMq,
         CancellationToken cancellationToken)
     {
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
@@ -115,23 +116,23 @@ public class StartRunWorkflowTaskDefinition(
 
         return _taskAccessService.ExecuteDeferredStart(
             WorkflowTaskCodes.Run,
-            () => StartRunCore(targetCodes, selectedMembers.Select(static x => x.Name).ToArray()),
+            () => StartRunCore(targetCodes, selectedMembers.Select(static x => x.Name).ToArray(), publishToMq),
             adminOverride);
     }
 
-    private string StartByTargetCodes(IReadOnlyCollection<string> targetCodes, bool adminOverride)
+    private string StartByTargetCodes(IReadOnlyCollection<string> targetCodes, bool adminOverride, bool publishToMq)
     {
         return _taskAccessService.ExecuteDeferredStart(
             WorkflowTaskCodes.Run,
-            () => StartRunCore(targetCodes, memberNames: null),
+            () => StartRunCore(targetCodes, memberNames: null, publishToMq),
             adminOverride);
     }
 
-    private string StartRunCore(IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string>? memberNames)
+    private string StartRunCore(IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string>? memberNames, bool publishToMq)
     {
         var normalizedCodes = NormalizeTargetCodes(targetCodes);
         var outputDirectory = Path.GetFullPath(_runOptions.OutputDirectory);
-        var request = _requestFactory.Create(normalizedCodes, outputDirectory);
+        var request = _requestFactory.Create(normalizedCodes, outputDirectory, publishToMq);
 
         if (!_runWorkflow.TryActivate(request.CorrelationId, request))
         {
@@ -146,7 +147,8 @@ public class StartRunWorkflowTaskDefinition(
                 memberNames?.Where(static x => !string.IsNullOrWhiteSpace(x))
                     .Select(static x => x.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray() ?? Array.Empty<string>());
+                    .ToArray() ?? Array.Empty<string>(),
+                publishToMq);
         }
         catch
         {

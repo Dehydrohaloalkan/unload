@@ -41,7 +41,7 @@ public class InMemoryRunStateStore : IRunStateStore
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
     /// <param name="memberNames">Мемберы, выбранные для выгрузки.</param>
-    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames)
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToMq = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentNullException.ThrowIfNull(targetCodes);
@@ -70,7 +70,8 @@ public class InMemoryRunStateStore : IRunStateStore
             MemberStatuses: memberStatuses,
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
             WorkerStatuses: _projector.CreateInitialWorkerStatuses(now),
-            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase));
+            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
+            PublishToMq: publishToMq);
 
         _runs[correlationId] = snapshot;
         PersistSnapshot();
@@ -90,6 +91,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 CorrelationId: correlationId,
                 TaskCode: TaskCodeRun,
                 Status: RunLifecycleStatus.Running,
+                PublishToMq: true,
                 TargetCodes: Array.Empty<string>(),
                 CreatedAt: now,
                 UpdatedAt: now,
@@ -429,22 +431,23 @@ public class InMemoryRunStateStore : IRunStateStore
         public RunStatusInfo CreateFromEvent(RunnerEvent @event, DateTimeOffset now)
         {
             return new RunStatusInfo(
-                @event.CorrelationId,
-                TaskCodeRun,
-                MapStatus(@event.Step),
-                Array.Empty<string>(),
-                now,
-                now,
-                @event.Step,
-                @event.Message,
-                @event.FilePath,
-                ApplyMemberEvent(
+                CorrelationId: @event.CorrelationId,
+                TaskCode: TaskCodeRun,
+                Status: MapStatus(@event.Step),
+                PublishToMq: true,
+                TargetCodes: Array.Empty<string>(),
+                CreatedAt: now,
+                UpdatedAt: now,
+                LastStep: @event.Step,
+                Message: @event.Message,
+                OutputPath: @event.FilePath,
+                MemberStatuses: ApplyMemberEvent(
                     new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                     @event,
                     now),
-                ApplyArtifacts(Array.Empty<RunOutputArtifactInfo>(), @event),
-                ApplyWorkerEvent(CreateInitialWorkerStatuses(now), @event, now),
-                new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase));
+                OutputArtifacts: ApplyArtifacts(Array.Empty<RunOutputArtifactInfo>(), @event),
+                WorkerStatuses: ApplyWorkerEvent(CreateInitialWorkerStatuses(now), @event, now),
+                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase));
         }
 
         public RunStatusInfo ApplyRunnerEvent(RunStatusInfo current, RunnerEvent @event, DateTimeOffset now)
@@ -478,12 +481,13 @@ public class InMemoryRunStateStore : IRunStateStore
         public RunStatusInfo CreateFromSenderFeedback(SenderFileDispatchFeedback feedback, DateTimeOffset now)
         {
             return new RunStatusInfo(
-                feedback.CorrelationId,
-                InMemoryRunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
-                RunLifecycleStatus.Running,
-                Array.Empty<string>(),
-                now,
-                now,
+                CorrelationId: feedback.CorrelationId,
+                TaskCode: InMemoryRunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
+                Status: RunLifecycleStatus.Running,
+                PublishToMq: true,
+                TargetCodes: Array.Empty<string>(),
+                CreatedAt: now,
+                UpdatedAt: now,
                 Message: "Sender feedback received.",
                 MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
@@ -608,6 +612,53 @@ public class InMemoryRunStateStore : IRunStateStore
                 return current;
             }
 
+            if (!current.PublishToMq)
+            {
+                var batchMap = new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase);
+                var memberNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (current.MemberStatuses is not null)
+                {
+                    foreach (var memberName in current.MemberStatuses.Keys)
+                    {
+                        if (!string.IsNullOrWhiteSpace(memberName))
+                        {
+                            memberNames.Add(memberName.Trim());
+                        }
+                    }
+                }
+
+                if (current.OutputArtifacts is not null)
+                {
+                    foreach (var artifact in current.OutputArtifacts)
+                    {
+                        if (!string.IsNullOrWhiteSpace(artifact.MemberName))
+                        {
+                            memberNames.Add(artifact.MemberName.Trim());
+                        }
+                    }
+                }
+
+                foreach (var memberName in memberNames)
+                {
+                    var key = $"skipped:{memberName}";
+                    batchMap[key] = new SenderBatchStatusInfo(
+                        BatchId: key,
+                        MemberName: memberName,
+                        Status: SenderBatchStatus.SkippedByRequest,
+                        UpdatedAt: now,
+                        SentFiles: Array.Empty<SenderFileDispatchStateInfo>(),
+                        Message: "MQ publish skipped by request.");
+                }
+
+                return current with
+                {
+                    Status = RunLifecycleStatus.Completed,
+                    UpdatedAt = now,
+                    SenderBatches = batchMap
+                };
+            }
+
             var senderBatches = current.SenderBatches ?? new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase);
             if (senderBatches.Values.Any(static x => x.Status == SenderBatchStatus.Failed))
             {
@@ -624,7 +675,8 @@ public class InMemoryRunStateStore : IRunStateStore
             if (memberArtifacts.Length == 0)
             {
                 var allBatchesCompleted = senderBatches.Count == 0 ||
-                                         senderBatches.Values.All(static x => x.Status == SenderBatchStatus.Completed);
+                                         senderBatches.Values.All(static x =>
+                                             x.Status is SenderBatchStatus.Completed or SenderBatchStatus.SkippedByRequest);
                 return allBatchesCompleted
                     ? current with { Status = RunLifecycleStatus.Completed, UpdatedAt = now }
                     : current;
@@ -632,7 +684,7 @@ public class InMemoryRunStateStore : IRunStateStore
 
             foreach (var batch in senderBatches.Values)
             {
-                if (batch.Status != SenderBatchStatus.Completed)
+                if (batch.Status is not (SenderBatchStatus.Completed or SenderBatchStatus.SkippedByRequest))
                 {
                     return current;
                 }
@@ -646,6 +698,11 @@ public class InMemoryRunStateStore : IRunStateStore
                 if (batch is null)
                 {
                     return current;
+                }
+
+                if (batch.Status == SenderBatchStatus.SkippedByRequest)
+                {
+                    continue;
                 }
 
                 var artifactPath = NormalizePathSafe(artifact.FilePath);

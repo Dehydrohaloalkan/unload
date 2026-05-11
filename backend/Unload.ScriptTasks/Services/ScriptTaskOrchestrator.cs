@@ -89,7 +89,7 @@ public class ScriptTaskOrchestrator(
         }
     }
 
-    public async Task<ScriptTaskRunResult> RunExtraAsync(CancellationToken cancellationToken)
+    public async Task<ScriptTaskRunResult> RunExtraAsync(bool publishToMq, CancellationToken cancellationToken)
     {
         if (!await _extraSemaphore.WaitAsync(0, cancellationToken))
         {
@@ -132,6 +132,7 @@ public class ScriptTaskOrchestrator(
                 _outputDirectory,
                 correlationId,
                 aggregatedLines,
+                publishToMq,
                 cancellationToken);
             _logger.LogInformation(
                 "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}, OutputPath: {OutputPath}",

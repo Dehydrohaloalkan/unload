@@ -133,6 +133,7 @@ public class RunnerEngine : IRunner
                         reportRows,
                         memberChunkCounters,
                         remainingScriptsByMember,
+                        request.PublishToMq,
                         request.CorrelationId,
                         cancellationToken),
                     cancellationToken));
@@ -150,6 +151,14 @@ public class RunnerEngine : IRunner
                 RunnerStep.Completed,
                 $"Run completed successfully. Output: {runOutputDirectory}",
                 filePath: runOutputDirectory);
+
+            if (!request.PublishToMq)
+            {
+                await eventEmitter.EmitAsync(
+                    RunnerStep.PublishedToMq,
+                    "MQ publish skipped by request (PublishToMq=false).");
+                return;
+            }
 
             foreach (var batchEvent in senderBatchBuilder.BuildBatchEvents(request.CorrelationId))
             {
@@ -182,6 +191,7 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentDictionary<string, int> remainingScriptsByMember,
+        bool publishToMq,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -204,6 +214,7 @@ public class RunnerEngine : IRunner
                     reportRows,
                     memberChunkCounters,
                     remainingScriptsByMember,
+                    publishToMq,
                     correlationId,
                     cancellationToken);
             }
@@ -227,6 +238,7 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentDictionary<string, int> remainingScriptsByMember,
+        bool publishToMq,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -316,7 +328,10 @@ public class RunnerEngine : IRunner
             if (remaining == 0 &&
                 senderBatchBuilder.TryBuildMemberBatchEvent(correlationId, memberName, out var memberBatch))
             {
-                await _mqPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                if (publishToMq)
+                {
+                    await _mqPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                }
             }
             else if (remaining == 0)
             {

@@ -4,6 +4,6 @@ namespace Unload.Api.UseCases.Abstractions;
 
 public interface IRunExtraUseCase
 {
-    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken);
+    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, bool publishToMq, CancellationToken cancellationToken);
 }
 

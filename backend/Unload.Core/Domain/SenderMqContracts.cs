@@ -5,7 +5,8 @@ public enum SenderBatchStatus
     Ready,
     InProgress,
     Completed,
-    Failed
+    Failed,
+    SkippedByRequest
 }
 
 public enum SenderFeedbackKind

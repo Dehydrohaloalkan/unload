@@ -13,6 +13,7 @@ public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtr
         string baseOutputDirectory,
         string correlationId,
         ConcurrentDictionary<string, ConcurrentQueue<string>> aggregatedLines,
+        bool publishToMq,
         CancellationToken cancellationToken)
     {
         var runDirectory = CreateRunDirectory(baseOutputDirectory);
@@ -39,13 +40,16 @@ public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtr
             ];
         }
 
-        foreach (var memberBatch in filesByMember)
+        if (publishToMq)
         {
-            await _eventPublisher.PublishFileBatchReadyAsync(
-                correlationId,
-                memberBatch.Key,
-                memberBatch.Value,
-                cancellationToken);
+            foreach (var memberBatch in filesByMember)
+            {
+                await _eventPublisher.PublishFileBatchReadyAsync(
+                    correlationId,
+                    memberBatch.Key,
+                    memberBatch.Value,
+                    cancellationToken);
+            }
         }
 
         return new ExtraOutputWriteResult(runDirectory, filesWritten);

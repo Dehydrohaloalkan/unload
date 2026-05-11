@@ -27,6 +27,9 @@ import {
   ServerTimeResponse,
   ScriptTaskRunResult,
   TaskRecord,
+  RequeueItem,
+  RequeueToMqResponse,
+  MqUploadResponse,
   WorkflowDashboardSnapshotResponse,
   TaskUiState,
 } from './app.models';
@@ -73,8 +76,10 @@ export class WorkflowStore {
   readonly trackedCorrelationId = signal<string | null>(null);
   readonly runEvents = signal<RunnerEvent[]>([]);
   readonly selectedMemberCodes = signal<string[]>([]);
+  readonly publishRunToMq = signal(true);
   readonly presetTask = signal<TaskUiState>(createIdleTaskState());
   readonly extraTask = signal<TaskUiState>(createIdleTaskState());
+  readonly publishExtraToMq = signal(true);
   readonly hasRunToday = signal(false);
   readonly hasExtraToday = signal(false);
   readonly runLastCompletedAt = signal<string | null>(null);
@@ -83,6 +88,10 @@ export class WorkflowStore {
   readonly todayRuns = signal<RunStatusInfo[]>([]);
   readonly outputFilesByPath = signal<Record<string, OutputFileInfo[]>>({});
   readonly adminMode = signal(false);
+  readonly requeueRunning = signal(false);
+  readonly requeueResult = signal<RequeueToMqResponse | null>(null);
+  readonly uploadRunning = signal(false);
+  readonly uploadResult = signal<MqUploadResponse | null>(null);
 
   readonly phase = computed<'gate' | 'tasks'>(() =>
     this.presetState()?.presetCompleted ? 'tasks' : 'gate',
@@ -169,6 +178,14 @@ export class WorkflowStore {
 
     this.selectedMemberCodes.set(sortCodes(next));
     this.persistSelection();
+  }
+
+  setPublishRunToMq(enabled: boolean): void {
+    this.publishRunToMq.set(Boolean(enabled));
+  }
+
+  setPublishExtraToMq(enabled: boolean): void {
+    this.publishExtraToMq.set(Boolean(enabled));
   }
 
   selectAllMembers(): void {
@@ -258,6 +275,7 @@ export class WorkflowStore {
       const result = await firstValueFrom(
         this.http.post<ScriptTaskRunResult>(this.apiUrl('/api/runs/extra'), {
           adminOverride: this.adminMode(),
+          publishToMq: this.publishExtraToMq(),
         }),
       );
       const nextState: TaskUiState = {
@@ -300,6 +318,7 @@ export class WorkflowStore {
         this.http.post<RunAcceptedResponse>(this.apiUrl('/api/runs'), {
           memberCodes: this.selectedMemberCodes(),
           adminOverride: this.adminMode(),
+          publishToMq: this.publishRunToMq(),
         }),
       );
 
@@ -346,6 +365,59 @@ export class WorkflowStore {
       );
     } catch (error) {
       this.errorMessage.set(this.toErrorMessage(error, 'Не удалось отправить запрос на остановку.'));
+    }
+  }
+
+  async requeueToMqAsync(items: RequeueItem[]): Promise<void> {
+    if (!items || items.length === 0) {
+      return;
+    }
+
+    this.errorMessage.set(null);
+    this.requeueRunning.set(true);
+    this.requeueResult.set(null);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<RequeueToMqResponse>(this.apiUrl('/api/runs/requeue'), {
+          idempotencyKey: crypto.randomUUID(),
+          items,
+          dryRun: false,
+        }),
+      );
+      this.requeueResult.set(response ?? null);
+      await this.refreshDashboardSnapshotAsync();
+    } catch (error) {
+      this.errorMessage.set(this.toErrorMessage(error, 'Не удалось отправить выбранное в MQ.'));
+    } finally {
+      this.requeueRunning.set(false);
+    }
+  }
+
+  async uploadFilesToMqAsync(files: File[], memberName: string | null = null): Promise<void> {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    this.errorMessage.set(null);
+    this.uploadRunning.set(true);
+    this.uploadResult.set(null);
+    try {
+      const form = new FormData();
+      for (const file of files) {
+        form.append('files', file, file.name);
+      }
+      if (memberName && memberName.trim()) {
+        form.append('memberName', memberName.trim());
+      }
+
+      const response = await firstValueFrom(
+        this.http.post<MqUploadResponse>(this.apiUrl('/api/system/mq-upload'), form),
+      );
+      this.uploadResult.set(response ?? null);
+    } catch (error) {
+      this.errorMessage.set(this.toErrorMessage(error, 'Не удалось загрузить файлы и отправить в MQ.'));
+    } finally {
+      this.uploadRunning.set(false);
     }
   }
 
@@ -526,6 +598,9 @@ export class WorkflowStore {
 
     const state = await this.fetchRunStatusAsync(correlationId);
     if (!state) {
+      this.stopRunPolling();
+      this.trackedCorrelationId.set(null);
+      this.activeRun.set(null);
       return;
     }
 
@@ -713,7 +788,12 @@ export class WorkflowStore {
 
   private shouldProcessCorrelation(correlationId: string): boolean {
     const tracked = this.trackedCorrelationId();
-    return !tracked || tracked === correlationId;
+    if (tracked) {
+      return tracked === correlationId;
+    }
+    // Ignore side-effect "runs" created by MQ uploads — they are never terminal
+    // and would lock the active-run section indefinitely.
+    return !correlationId.trim().toLowerCase().startsWith('upload-');
   }
 
   private apiUrl(path: string): string {

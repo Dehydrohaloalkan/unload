@@ -1,0 +1,319 @@
+using System.Collections.Concurrent;
+using Unload.Api.Abstractions;
+using Unload.Api.Models;
+using Unload.Api.UseCases.Abstractions;
+using Unload.Core;
+using Unload.Run.Application;
+
+namespace Unload.Api.UseCases;
+
+public class RequeueToMqUseCase(
+    IRunStateStore runStateStore,
+    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    IMqPublisher mqPublisher,
+    ILogger<RequeueToMqUseCase> logger) : IRequeueToMqUseCase
+{
+    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly IMqPublisher _mqPublisher = mqPublisher;
+    private readonly ILogger<RequeueToMqUseCase> _logger = logger;
+
+    private static readonly ConcurrentDictionary<string, (DateTimeOffset SavedAt, RequeueToMqResponse Response)> IdempotencyCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public async Task<RequeueToMqResponse> ExecuteAsync(RequeueToMqRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var items = request.Items ?? Array.Empty<RequeueItem>();
+        if (items.Count == 0)
+        {
+            return new RequeueToMqResponse(
+                RequestId: "empty",
+                AcceptedBatches: 0,
+                FailedBatches: 0,
+                Results: Array.Empty<RequeueItemResult>());
+        }
+
+        var requestId = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            ? Guid.NewGuid().ToString("N")
+            : request.IdempotencyKey.Trim();
+
+        EvictExpired();
+
+        if (IdempotencyCache.TryGetValue(requestId, out var cached))
+        {
+            return cached.Response;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var results = new List<RequeueItemResult>(items.Count);
+        var totalAccepted = 0;
+        var totalFailed = 0;
+
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var itemResult = await HandleItemAsync(item, request.DryRun, now, cancellationToken);
+            results.Add(itemResult);
+            totalAccepted += itemResult.AcceptedBatches;
+            totalFailed += itemResult.FailedBatches;
+        }
+
+        var response = new RequeueToMqResponse(
+            RequestId: requestId,
+            AcceptedBatches: totalAccepted,
+            FailedBatches: totalFailed,
+            Results: results);
+
+        IdempotencyCache[requestId] = (DateTimeOffset.UtcNow, response);
+        return response;
+    }
+
+    private async Task<RequeueItemResult> HandleItemAsync(
+        RequeueItem item,
+        bool dryRun,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        var taskCode = (item.TaskCode ?? string.Empty).Trim().ToLowerInvariant();
+        var correlationId = (item.CorrelationId ?? string.Empty).Trim();
+        var memberFilter = new HashSet<string>(
+            (item.MemberNames ?? Array.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var hasMemberFilter = memberFilter.Count > 0;
+        var fileFilter = new HashSet<string>(
+            (item.FilePaths ?? Array.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(static x => NormalizePath(x)),
+            StringComparer.OrdinalIgnoreCase);
+        var hasFileFilter = fileFilter.Count > 0;
+
+        if (string.IsNullOrWhiteSpace(taskCode) || string.IsNullOrWhiteSpace(correlationId))
+        {
+            return new RequeueItemResult(
+                TaskCode: taskCode,
+                CorrelationId: correlationId,
+                AcceptedBatches: 0,
+                FailedBatches: 1,
+                Batches:
+                [
+                    new RequeueBatchResult(
+                        MemberName: "unknown",
+                        BatchId: "invalid",
+                        Status: SenderBatchStatus.Failed,
+                        Message: "TaskCode and CorrelationId are required.")
+                ]);
+        }
+
+        try
+        {
+            var batchDescriptors = taskCode switch
+            {
+                "run" => BuildRunBatches(
+                    correlationId,
+                    hasMemberFilter ? memberFilter : null,
+                    hasFileFilter ? fileFilter : null),
+                "extra" => BuildExtraBatches(
+                    correlationId,
+                    hasMemberFilter ? memberFilter : null,
+                    hasFileFilter ? fileFilter : null),
+                _ => throw new InvalidOperationException($"Unsupported taskCode '{taskCode}'.")
+            };
+
+            if (batchDescriptors.Count == 0)
+            {
+                return new RequeueItemResult(
+                    TaskCode: taskCode,
+                    CorrelationId: correlationId,
+                    AcceptedBatches: 0,
+                    FailedBatches: 0,
+                    Batches: Array.Empty<RequeueBatchResult>());
+            }
+
+            var accepted = 0;
+            var failed = 0;
+            var batches = new List<RequeueBatchResult>(batchDescriptors.Count);
+
+            foreach (var (memberName, files) in batchDescriptors)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var batchId = $"requeue-{Guid.NewGuid():N}"[..24];
+                var evt = new SenderFileBatchReadyEvent(
+                    OccurredAt: occurredAt,
+                    CorrelationId: correlationId,
+                    MemberName: memberName,
+                    BatchId: batchId,
+                    Version: 1,
+                    Files: files);
+
+                if (!dryRun)
+                {
+                    await _mqPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
+                }
+
+                accepted++;
+                batches.Add(new RequeueBatchResult(
+                    MemberName: memberName,
+                    BatchId: batchId,
+                    Status: SenderBatchStatus.Ready,
+                    Message: dryRun ? "Dry run: not published." : "Published to MQ."));
+            }
+
+            return new RequeueItemResult(
+                TaskCode: taskCode,
+                CorrelationId: correlationId,
+                AcceptedBatches: accepted,
+                FailedBatches: failed,
+                Batches: batches);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Requeue failed. TaskCode: {TaskCode}, CorrelationId: {CorrelationId}", taskCode, correlationId);
+            return new RequeueItemResult(
+                TaskCode: taskCode,
+                CorrelationId: correlationId,
+                AcceptedBatches: 0,
+                FailedBatches: 1,
+                Batches:
+                [
+                    new RequeueBatchResult(
+                        MemberName: "unknown",
+                        BatchId: "failed",
+                        Status: SenderBatchStatus.Failed,
+                        Message: ex.Message)
+                ]);
+        }
+    }
+
+    private IReadOnlyList<(string MemberName, IReadOnlyCollection<SenderFileDescriptor> Files)> BuildRunBatches(
+        string correlationId,
+        HashSet<string>? memberFilter,
+        HashSet<string>? fileFilter)
+    {
+        var run = _runStateStore.Get(correlationId);
+        if (run is null)
+        {
+            throw new InvalidOperationException("Run was not found.");
+        }
+
+        var artifacts = run.OutputArtifacts ?? Array.Empty<RunOutputArtifactInfo>();
+        var grouped = artifacts
+            .Where(x => !string.IsNullOrWhiteSpace(x.MemberName))
+            .GroupBy(x => x.MemberName!.Trim(), StringComparer.OrdinalIgnoreCase);
+
+        var batches = new List<(string, IReadOnlyCollection<SenderFileDescriptor>)>();
+        foreach (var group in grouped)
+        {
+            var memberName = group.Key;
+            if (memberFilter is not null && !memberFilter.Contains(memberName))
+            {
+                continue;
+            }
+
+            var files = group
+                .Select(x => x.FilePath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path.Trim())
+                .Where(path => fileFilter is null || fileFilter.Contains(NormalizePath(path)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(CreateDescriptorOrThrow)
+                .ToArray();
+
+            if (files.Length > 0)
+            {
+                batches.Add((memberName, files));
+            }
+        }
+
+        return batches;
+    }
+
+    private IReadOnlyList<(string MemberName, IReadOnlyCollection<SenderFileDescriptor> Files)> BuildExtraBatches(
+        string correlationId,
+        HashSet<string>? memberFilter,
+        HashSet<string>? fileFilter)
+    {
+        var record = _taskExecutionHistoryStore.TryGetByCorrelationId(correlationId);
+        if (record is null || !string.Equals(record.TaskCode, "extra", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Extra history record was not found.");
+        }
+
+        if (string.IsNullOrWhiteSpace(record.OutputPath))
+        {
+            throw new InvalidOperationException("Extra output path is missing.");
+        }
+
+        var baseDir = Path.GetFullPath(record.OutputPath.Trim());
+        var filesDir = Path.Combine(baseDir, "output-files");
+        if (!Directory.Exists(filesDir))
+        {
+            throw new DirectoryNotFoundException($"Extra output files directory was not found: {filesDir}");
+        }
+
+        var files = Directory.EnumerateFiles(filesDir, "*.*", SearchOption.TopDirectoryOnly)
+            .Where(path => fileFilter is null || fileFilter.Contains(NormalizePath(path)))
+            .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var grouped = files.GroupBy(
+            path => Path.GetFileNameWithoutExtension(path)?.Trim() ?? "UNKNOWN",
+            StringComparer.OrdinalIgnoreCase);
+
+        var batches = new List<(string, IReadOnlyCollection<SenderFileDescriptor>)>();
+        foreach (var group in grouped)
+        {
+            var memberName = string.IsNullOrWhiteSpace(group.Key) ? "UNKNOWN" : group.Key;
+            if (memberFilter is not null && !memberFilter.Contains(memberName))
+            {
+                continue;
+            }
+
+            var descriptors = group.Select(CreateDescriptorOrThrow).ToArray();
+            if (descriptors.Length > 0)
+            {
+                batches.Add((memberName, descriptors));
+            }
+        }
+
+        return batches;
+    }
+
+    private static SenderFileDescriptor CreateDescriptorOrThrow(string filePath)
+    {
+        var full = Path.GetFullPath(filePath);
+        if (!File.Exists(full))
+        {
+            throw new FileNotFoundException("File was not found.", full);
+        }
+
+        var info = new FileInfo(full);
+        return new SenderFileDescriptor(
+            FilePath: full,
+            FileName: info.Name,
+            SizeBytes: info.Length);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return Path.GetFullPath(path.Trim());
+    }
+
+    private static void EvictExpired()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-30);
+        foreach (var pair in IdempotencyCache)
+        {
+            if (pair.Value.SavedAt < cutoff)
+            {
+                IdempotencyCache.TryRemove(pair.Key, out _);
+            }
+        }
+    }
+}
+

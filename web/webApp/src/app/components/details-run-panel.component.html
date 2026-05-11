@@ -1,77 +1,218 @@
-<div class="details-section">
-  <div class="details-section__title">Мемберы для выгрузки</div>
+<p-tabs value="run">
+  <p-tablist>
+    <p-tab value="run">Запуск</p-tab>
+    <p-tab value="history">История</p-tab>
+    <p-tab value="upload">Загрузка в MQ</p-tab>
+  </p-tablist>
 
-  <label class="details-check-row">
-    <p-checkbox
-      binary="true"
-      [ngModel]="allMembersSelected()"
-      [indeterminate]="allMembersPartial()"
-      (onChange)="toggleAll.emit($event.checked)"
-    />
-    <span>Выбрать все</span>
-  </label>
+  <p-tabpanels>
+    <p-tabpanel value="run">
+      <div class="details-section">
+        <div class="details-section__title">Мемберы для выгрузки</div>
 
-  @for (group of memberGroups(); track group.id) {
-    <div class="details-group">
-      <label class="details-check-row details-check-row--group">
-        <p-checkbox
-          binary="true"
-          [ngModel]="groupAllSelected(group)"
-          [indeterminate]="groupPartial(group)"
-          (onChange)="toggleGroup.emit({ groupId: group.id, selected: $event.checked })"
-        />
-        <span>{{ group.name }}</span>
-      </label>
+        <label class="details-check-row">
+          <p-checkbox
+            binary="true"
+            [ngModel]="publishToMq()"
+            (onChange)="publishToMqChange.emit($event.checked)"
+          />
+          <span>Отправлять в очередь (MQ)</span>
+        </label>
 
-      <div class="details-members">
-        @for (member of group.members; track member.code) {
-          <div class="member-card" [class.member-card--active]="selectedMember()?.code === member.code">
-            <label class="details-check-row member-card__check">
+        <label class="details-check-row">
+          <p-checkbox
+            binary="true"
+            [ngModel]="allMembersSelected()"
+            [indeterminate]="allMembersPartial()"
+            (onChange)="toggleAll.emit($event.checked)"
+          />
+          <span>Выбрать все</span>
+        </label>
+
+        @for (group of memberGroups(); track group.id) {
+          <div class="details-group">
+            <label class="details-check-row details-check-row--group">
               <p-checkbox
                 binary="true"
-                [ngModel]="member.selected"
-                (onChange)="toggleMember.emit({ code: member.code, selected: $event.checked })"
+                [ngModel]="groupAllSelected(group)"
+                [indeterminate]="groupPartial(group)"
+                (onChange)="toggleGroup.emit({ groupId: group.id, selected: $event.checked })"
               />
+              <span>{{ group.name }}</span>
             </label>
-            <button
-              type="button"
-              class="member-link member-card__button"
-              (click)="selectMember.emit(member.code)"
-            >
-              {{ member.name }}
-            </button>
 
-            @if (selectedMember()?.code === member.code) {
-              <div class="member-card__details">
-                <div class="member-card__meta">
-                  <span class="member-card__meta-label">Код</span>
-                  <span class="member-card__meta-value">{{ member.code }}</span>
-                </div>
-                <div class="member-card__meta">
-                  <span class="member-card__meta-label">Статус</span>
-                  <span class="member-card__meta-value">{{ resolveMemberStatusLabel(member.status) }}</span>
-                </div>
-                <div class="member-card__targets">
-                  @for (targetCode of member.targetCodes; track targetCode) {
-                    <span class="member-card__chip">{{ targetCode }}</span>
+            <div class="details-members">
+              @for (member of group.members; track member.code) {
+                <div class="member-card" [class.member-card--active]="selectedMember()?.code === member.code">
+                  <label class="details-check-row member-card__check">
+                    <p-checkbox
+                      binary="true"
+                      [ngModel]="member.selected"
+                      (onChange)="toggleMember.emit({ code: member.code, selected: $event.checked })"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="member-link member-card__button"
+                    (click)="selectMember.emit(member.code)"
+                  >
+                    {{ member.name }}
+                  </button>
+
+                  @if (selectedMember()?.code === member.code) {
+                    <div class="member-card__details">
+                      <div class="member-card__meta">
+                        <span class="member-card__meta-label">Код</span>
+                        <span class="member-card__meta-value">{{ member.code }}</span>
+                      </div>
+                      <div class="member-card__meta">
+                        <span class="member-card__meta-label">Статус</span>
+                        <span class="member-card__meta-value">{{ resolveMemberStatusLabel(member.status) }}</span>
+                      </div>
+                      <div class="member-card__targets">
+                        @for (targetCode of member.targetCodes; track targetCode) {
+                          <span class="member-card__chip">{{ targetCode }}</span>
+                        }
+                      </div>
+                    </div>
                   }
                 </div>
-              </div>
+              }
+            </div>
+          </div>
+        }
+
+        <p-button
+          label="Выгрузить выбранное"
+          icon="app-icon app-icon--play"
+          [fluid]="true"
+          [disabled]="!canStartRun()"
+          (onClick)="startSelected.emit()"
+        />
+      </div>
+    </p-tabpanel>
+
+    <p-tabpanel value="history">
+      <div class="details-section">
+        <div class="details-section__title">Повторная отправка в MQ</div>
+
+        @if (historyNodes().length === 0) {
+          <div class="details-empty">История выгрузок пуста.</div>
+        } @else {
+          <div class="history-runs">
+            @for (node of historyNodes(); track node.key) {
+              <details class="history-run">
+                <summary class="history-run__summary">
+                  <span>{{ node.taskCode === 'run' ? 'Выгрузка' : 'Доп. выгрузка' }} · {{ node.correlationId }}</span>
+                  <span class="history-run__meta">{{ node.status }} · {{ formatTimestamp(node.occurredAt) }}</span>
+                </summary>
+                <div class="history-run__body">
+                  @if (node.members.length === 0) {
+                    <div class="details-empty">Файлы отсутствуют.</div>
+                  } @else {
+                    <div class="history-members">
+                      @for (member of node.members; track member.memberName) {
+                        <details class="history-member">
+                          <summary class="history-member__summary">
+                            <span>{{ member.memberName }}</span>
+                            <span>{{ member.files.length }} файл(ов)</span>
+                          </summary>
+                          <div class="history-member__body">
+                            @for (file of member.files; track file.key) {
+                              <label class="history-member-file">
+                                <p-checkbox
+                                  binary="true"
+                                  [ngModel]="isHistoryFileSelected(file.key)"
+                                  (onChange)="toggleHistoryFile(file, $event.checked)"
+                                />
+                                <a
+                                  class="history-file-link"
+                                  [href]="buildDownloadUrl()(file.filePath)"
+                                  [attr.download]="file.fileName"
+                                  (click)="onDownloadClick()"
+                                >{{ file.fileName }}</a>
+                              </label>
+                            }
+                          </div>
+                        </details>
+                      }
+                    </div>
+                  }
+                </div>
+              </details>
             }
           </div>
         }
-      </div>
-    </div>
-  }
 
-  <p-button
-    label="Выгрузить выбранное"
-    icon="app-icon app-icon--play"
-    [fluid]="true"
-    [disabled]="!canStartRun()"
-    (onClick)="startSelected.emit()"
-  />
-</div>
+        <p-button
+          label="Отправить выбранные в MQ"
+          icon="app-icon app-icon--play"
+          [fluid]="true"
+          [loading]="requeueRunning()"
+          [disabled]="!canRequeue() || requeueRunning()"
+          (onClick)="confirmRequeue()"
+        />
+
+        @if (requeueResult(); as result) {
+          <div class="details-item__message">
+            MQ: принято {{ result.acceptedBatches }}, ошибок {{ result.failedBatches }} (requestId:
+            {{ result.requestId }})
+          </div>
+          @for (item of result.results; track item.correlationId) {
+            @for (batch of item.batches; track batch.batchId) {
+              <div class="details-item__row">
+                <span class="details-item__label">{{ item.taskCode }} · {{ item.correlationId }}</span>
+                <span class="details-item__value">
+                  {{ batch.memberName }}: {{ resolveSenderStatusLabel(batch.status) }}
+                  @if (batch.message) { · {{ batch.message }} }
+                </span>
+              </div>
+            }
+          }
+        }
+      </div>
+    </p-tabpanel>
+
+    <p-tabpanel value="upload">
+      <div class="details-section">
+        <div class="details-section__title">Загрузка файлов в MQ</div>
+
+        <input
+          #uploadFileInput
+          type="file"
+          multiple
+          hidden
+          (change)="onFileInputChange($event, uploadFileInput)"
+        />
+        <p-button
+          label="Выбрать файлы и отправить в MQ"
+          icon="app-icon app-icon--play"
+          [fluid]="true"
+          [loading]="uploadRunning()"
+          [disabled]="uploadRunning()"
+          (onClick)="uploadFileInput.click()"
+        />
+
+        @if (uploadResult(); as result) {
+          <div class="details-item__message">
+            Загружено: {{ result.acceptedFiles }}, ошибок {{ result.failedFiles }} (batchId:
+            {{ result.batchId }})
+          </div>
+          @for (file of result.files; track file.fileName) {
+            <div class="details-item__row">
+              <span class="details-item__label">{{ file.fileName }}</span>
+              <span class="details-item__value">
+                {{ file.status }} ({{ file.sizeBytes }} bytes)@if (file.message) { · {{ file.message }} }
+              </span>
+            </div>
+          }
+        }
+      </div>
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>
+
+<p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }"></p-confirmdialog>
 
 <div class="details-section">
   <div class="details-section__title">Активная выгрузка</div>
@@ -88,24 +229,6 @@
         </div>
         @if (run.message) {
           <div class="details-item__message">{{ run.message }}</div>
-        }
-
-        @if (run.workerStatuses; as workerStatuses) {
-          @if ((workerStatuses | keyvalue); as workers) {
-            @if (workers.length > 0) {
-              <div class="active-subtitle">Потоки</div>
-              <div class="details-worker-list">
-                @for (worker of workers; track worker.key) {
-                  <div class="details-worker-item">
-                    Worker #{{ worker.value.workerId }}: {{ worker.value.state }}
-                    @if (worker.value.scriptCode) {
-                      ({{ worker.value.scriptCode }})
-                    }
-                  </div>
-                }
-              </div>
-            }
-          }
         }
 
         @if (activeMemberNames(run).length === 0) {
@@ -207,97 +330,5 @@
     }
   } @else {
     <div class="details-empty">Активной выгрузки сейчас нет.</div>
-  }
-</div>
-
-<div class="details-section">
-  <div class="details-section__title">История выгрузок за сегодня</div>
-  @if (todayRuns().length === 0) {
-    <div class="details-empty">Сегодня запусков пока не было.</div>
-  } @else {
-    @for (run of todayRuns(); track run.correlationId) {
-      <details class="history-run">
-        <summary class="history-run__summary">
-          <span>{{ run.correlationId }}</span>
-          <span>{{ formatTimestamp(run.updatedAt) }}</span>
-        </summary>
-
-        <div class="history-run__body">
-          <div class="details-item__row">
-            <span class="details-item__label">Статус</span>
-            <span class="details-item__value">{{ resolveRunStatusLabel(run.status) }}</span>
-          </div>
-          <div class="details-item__row">
-            <span class="details-item__label">Начало</span>
-            <span class="details-item__value">{{ formatTimestamp(run.createdAt) }}</span>
-          </div>
-          <div class="details-item__row">
-            <span class="details-item__label">Окончание</span>
-            <span class="details-item__value">{{ formatTimestamp(run.updatedAt) }}</span>
-          </div>
-
-          @if (globalRunArtifacts(run).length > 0) {
-            <div class="history-files">
-              <div class="history-files__title">Файлы результата</div>
-              @for (file of globalRunArtifacts(run); track file.filePath) {
-                <a
-                  class="history-file-link"
-                  [href]="buildDownloadUrl()(file.filePath)"
-                  [attr.download]="file.fileName"
-                  (click)="onDownloadClick()"
-                >
-                  {{ file.fileName }}
-                </a>
-              }
-            </div>
-          }
-          @if (run.outputPath) {
-            <a
-              class="history-file-link history-file-link--archive"
-              [href]="buildArchiveUrl()(run.outputPath!)"
-              [attr.download]="'result-' + run.correlationId + '.zip'"
-              (click)="onDownloadClick()"
-            >
-              Скачать архив результата (.zip)
-            </a>
-          }
-
-          <div class="history-members">
-            @for (member of runMembers(run); track member.memberName) {
-              <details class="history-member">
-                <summary class="history-member__summary">
-                  <span>{{ member.memberName }}</span>
-                  <span>
-                    {{ resolveMemberEffectiveStatusLabel(run, member) }}
-                    @if (senderStatusLabelForMember(run, member.memberName); as senderStatus) {
-                      · MQ: {{ senderStatus }}
-                    }
-                  </span>
-                </summary>
-                <div class="history-member__body">
-                  @if (memberArtifacts(run, member.memberName).length === 0) {
-                    <div class="details-empty">Файлы для мембера не найдены.</div>
-                  } @else {
-                    @for (artifact of memberArtifacts(run, member.memberName); track artifact.filePath) {
-                      <div class="history-member-file">
-                        <span>{{ formatTimestamp(artifact.occurredAt) }}</span>
-                        <a
-                          class="history-file-link"
-                          [href]="buildDownloadUrl()(artifact.filePath)"
-                          [attr.download]="artifact.fileName"
-                          (click)="onDownloadClick()"
-                        >
-                          {{ artifact.fileName }}
-                        </a>
-                      </div>
-                    }
-                  }
-                </div>
-              </details>
-            }
-          </div>
-        </div>
-      </details>
-    }
   }
 </div>

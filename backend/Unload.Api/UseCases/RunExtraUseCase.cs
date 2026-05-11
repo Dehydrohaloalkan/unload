@@ -16,7 +16,7 @@ public class RunExtraUseCase(
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ILogger<RunExtraUseCase> _logger = logger;
 
-    public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken)
+    public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, bool publishToMq, CancellationToken cancellationToken)
     {
         var startedAt = DateTimeOffset.UtcNow;
         try
@@ -24,7 +24,7 @@ public class RunExtraUseCase(
             _logger.LogInformation("Extra task launch requested.");
             var result = await _dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
                 WorkflowTaskCodes.Extra,
-                new EmptyWorkflowTaskRequest(adminOverride),
+                new EmptyWorkflowTaskRequest(adminOverride, publishToMq),
                 cancellationToken);
             _taskExecutionHistoryStore.Add(
                 WorkflowTaskCodes.Extra,

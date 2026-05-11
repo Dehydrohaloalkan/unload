@@ -46,6 +46,7 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<IStartRunUseCase, StartRunUseCase>();
 builder.Services.AddScoped<IRunPresetUseCase, RunPresetUseCase>();
 builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
+builder.Services.AddScoped<IRequeueToMqUseCase, RequeueToMqUseCase>();
 builder.Services.AddScoped<IGetServerTimeUseCase, GetServerTimeUseCase>();
 builder.Services.AddScoped<IOutputFilesService, OutputFilesService>();
 builder.Services.AddSingleton<ITaskExecutionHistoryStore, TaskExecutionHistoryStore>();

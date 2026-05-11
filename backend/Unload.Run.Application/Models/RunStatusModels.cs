@@ -112,4 +112,5 @@ public record RunStatusInfo(
     IReadOnlyDictionary<string, MemberRunStatusInfo>? MemberStatuses = null,
     IReadOnlyCollection<RunOutputArtifactInfo>? OutputArtifacts = null,
     IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null,
-    IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null);
+    IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null,
+    bool PublishToMq = true);

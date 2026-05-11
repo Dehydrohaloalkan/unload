@@ -10,4 +10,5 @@ namespace Unload.Core;
 public record RunRequest(
     IReadOnlyCollection<string> TargetCodes,
     string CorrelationId,
-    string OutputDirectory);
+    string OutputDirectory,
+    bool PublishToMq = true);

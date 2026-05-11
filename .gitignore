@@ -14,7 +14,6 @@ backend/_build_tmp_api*/
 
 # IDE
 .vs/
-.vscode/
 *.user
 *.suo
 *.userprefs

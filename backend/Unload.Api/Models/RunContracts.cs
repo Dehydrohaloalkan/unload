@@ -9,7 +9,8 @@ namespace Unload.Api.Models;
 /// <param name="MemberCodes">Список кодов мемберов, выбранных клиентом.</param>
 public record RunStartRequest(
     IReadOnlyCollection<string> MemberCodes,
-    bool AdminOverride = false);
+    bool AdminOverride = false,
+    bool PublishToMq = true);
 
 /// <summary>
 /// Контракт ответа на успешный запуск выгрузки.
@@ -50,4 +51,4 @@ public record MemberCatalogItem(
 /// Контракт запроса запуска задачи с опциональным admin override.
 /// </summary>
 /// <param name="AdminOverride">Признак обхода стандартных gate/dependency проверок.</param>
-public record AdminTaskRequest(bool AdminOverride = false);
+public record AdminTaskRequest(bool AdminOverride = false, bool PublishToMq = true);

@@ -57,6 +57,7 @@ export enum SenderBatchStatus {
   InProgress = 1,
   Completed = 2,
   Failed = 3,
+  SkippedByRequest = 4,
 }
 
 export interface SenderFileDispatchStateInfo {
@@ -77,6 +78,7 @@ export interface RunStatusInfo {
   correlationId: string;
   taskCode: string;
   status: RunLifecycleStatus;
+  publishToMq: boolean;
   targetCodes: string[];
   createdAt: string;
   updatedAt: string;
@@ -182,6 +184,58 @@ export interface TaskRecord {
   scriptsExecuted: number | null;
   filesWritten: number | null;
   outputPath: string | null;
+}
+
+export interface RequeueItem {
+  taskCode: string;
+  correlationId: string;
+  memberNames?: string[] | null;
+  filePaths?: string[] | null;
+}
+
+export interface RequeueToMqRequest {
+  idempotencyKey?: string | null;
+  items: RequeueItem[];
+  dryRun?: boolean;
+}
+
+export interface RequeueBatchResult {
+  memberName: string;
+  batchId: string;
+  status: SenderBatchStatus;
+  message?: string | null;
+}
+
+export interface RequeueItemResult {
+  taskCode: string;
+  correlationId: string;
+  acceptedBatches: number;
+  failedBatches: number;
+  batches: RequeueBatchResult[];
+}
+
+export interface RequeueToMqResponse {
+  requestId: string;
+  acceptedBatches: number;
+  failedBatches: number;
+  results: RequeueItemResult[];
+}
+
+export interface MqUploadFileResult {
+  fileName: string;
+  sizeBytes: number;
+  status: string;
+  message?: string | null;
+}
+
+export interface MqUploadResponse {
+  requestId: string;
+  correlationId: string;
+  memberName: string;
+  batchId: string;
+  acceptedFiles: number;
+  failedFiles: number;
+  files: MqUploadFileResult[];
 }
 
 export interface OutputFileInfo {

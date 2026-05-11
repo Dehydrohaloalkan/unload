@@ -18,12 +18,16 @@ public class SystemController(
     IGetServerTimeUseCase getServerTimeUseCase,
     UnloadRuntimePaths runtimePaths,
     IOutputFilesService outputFilesService,
-    IMqSenderFeedbackConsumer mqSenderFeedbackConsumer) : ControllerBase
+    IMqSenderFeedbackConsumer mqSenderFeedbackConsumer,
+    IMqPublisher mqPublisher,
+    ILogger<SystemController> logger) : ControllerBase
 {
     private readonly IGetServerTimeUseCase _getServerTimeUseCase = getServerTimeUseCase;
     private readonly UnloadRuntimePaths _runtimePaths = runtimePaths;
     private readonly IOutputFilesService _outputFilesService = outputFilesService;
     private readonly IMqSenderFeedbackConsumer _mqSenderFeedbackConsumer = mqSenderFeedbackConsumer;
+    private readonly IMqPublisher _mqPublisher = mqPublisher;
+    private readonly ILogger<SystemController> _logger = logger;
 
     /// <summary>
     /// Возвращает текущее локальное и UTC-время сервера.
@@ -77,6 +81,143 @@ public class SystemController(
             cancellationToken);
 
         return Accepted();
+    }
+
+    /// <summary>
+    /// Загружает один или несколько файлов и публикует их как batch-ready событие в MQ.
+    /// </summary>
+    [HttpPost("mq-upload")]
+    [RequestSizeLimit(200 * 1024 * 1024)]
+    public async Task<IActionResult> UploadFilesToMq(
+        [FromForm(Name = "files")] List<IFormFile> files,
+        [FromForm(Name = "memberName")] string? memberName,
+        CancellationToken cancellationToken)
+    {
+        if (files is null || files.Count == 0)
+        {
+            throw new ApiProblemException(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "At least one file is required.",
+                "VALIDATION_ERROR");
+        }
+
+        if (files.Count > 20)
+        {
+            throw new ApiProblemException(
+                StatusCodes.Status400BadRequest,
+                "Validation error",
+                "Too many files (max 20).",
+                "VALIDATION_ERROR");
+        }
+
+        var safeMemberName = string.IsNullOrWhiteSpace(memberName) ? "manual" : memberName.Trim();
+        var requestId = $"upload-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..43];
+        var correlationId = requestId;
+        var batchId = $"batch-{Guid.NewGuid():N}"[..24];
+
+        var uploadRoot = Path.Combine(_runtimePaths.OutputDirectory, "_uploads", requestId);
+        Directory.CreateDirectory(uploadRoot);
+
+        var results = new List<MqUploadFileResult>(files.Count);
+        var descriptors = new List<SenderFileDescriptor>(files.Count);
+        var accepted = 0;
+        var failed = 0;
+
+        foreach (var formFile in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (formFile is null || formFile.Length <= 0)
+            {
+                failed++;
+                results.Add(new MqUploadFileResult(
+                    FileName: formFile?.FileName ?? "unknown",
+                    SizeBytes: formFile?.Length ?? 0,
+                    Status: "failed",
+                    Message: "Empty file."));
+                continue;
+            }
+
+            if (formFile.Length > 100 * 1024 * 1024)
+            {
+                failed++;
+                results.Add(new MqUploadFileResult(
+                    FileName: formFile.FileName,
+                    SizeBytes: formFile.Length,
+                    Status: "failed",
+                    Message: "File too large (max 100MB)."));
+                continue;
+            }
+
+            var safeName = Path.GetFileName(formFile.FileName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                failed++;
+                results.Add(new MqUploadFileResult(
+                    FileName: formFile.FileName ?? "unknown",
+                    SizeBytes: formFile.Length,
+                    Status: "failed",
+                    Message: "Invalid file name."));
+                continue;
+            }
+
+            var targetPath = Path.Combine(uploadRoot, safeName);
+            try
+            {
+                await using (var stream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await formFile.CopyToAsync(stream, cancellationToken);
+                }
+
+                var info = new FileInfo(targetPath);
+                descriptors.Add(new SenderFileDescriptor(
+                    FilePath: info.FullName,
+                    FileName: info.Name,
+                    SizeBytes: info.Length));
+                accepted++;
+                results.Add(new MqUploadFileResult(
+                    FileName: info.Name,
+                    SizeBytes: info.Length,
+                    Status: "accepted"));
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                results.Add(new MqUploadFileResult(
+                    FileName: safeName,
+                    SizeBytes: formFile.Length,
+                    Status: "failed",
+                    Message: ex.Message));
+            }
+        }
+
+        if (descriptors.Count > 0)
+        {
+            var evt = new SenderFileBatchReadyEvent(
+                OccurredAt: DateTimeOffset.UtcNow,
+                CorrelationId: correlationId,
+                MemberName: safeMemberName,
+                BatchId: batchId,
+                Version: 1,
+                Files: descriptors);
+
+            await _mqPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
+            _logger.LogInformation(
+                "MQ upload published. RequestId: {RequestId}, Files: {Files}, BatchId: {BatchId}",
+                requestId,
+                descriptors.Count,
+                batchId);
+        }
+
+        return Ok(new MqUploadResponse(
+            RequestId: requestId,
+            CorrelationId: correlationId,
+            MemberName: safeMemberName,
+            BatchId: batchId,
+            AcceptedFiles: accepted,
+            FailedFiles: failed,
+            Files: results));
     }
 
     /// <summary>

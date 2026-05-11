@@ -309,6 +309,11 @@
   color: #334155;
 }
 
+.history-runs {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .history-run {
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 0.75rem;
@@ -319,12 +324,21 @@
 .history-run__summary {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 0.75rem;
   padding: 0.6rem 0.75rem;
   cursor: pointer;
   font-size: 0.82rem;
   color: #0f172a;
   font-weight: 600;
+}
+
+.history-run__meta {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-weight: 400;
+  font-size: 0.78rem;
+  text-align: right;
 }
 
 .history-run__body {
@@ -391,8 +405,10 @@
 
 .history-member-file {
   display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0.45rem;
   font-size: 0.78rem;
   color: #334155;
+  cursor: pointer;
+  padding: 0.1rem 0;
 }

@@ -18,6 +18,8 @@ public interface ITaskExecutionHistoryStore
 
     IReadOnlyList<TaskRecord> ListRange(DateOnly fromInclusive, DateOnly toInclusive);
 
+    TaskRecord? TryGetByCorrelationId(string correlationId);
+
     bool HasRunToday(string taskCode, DateOnly day);
 
     int Prune(DateOnly oldestDayToKeepInclusive);

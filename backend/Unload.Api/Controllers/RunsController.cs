@@ -20,6 +20,7 @@ public class RunsController(
     IStartRunUseCase startRunUseCase,
     IRunPresetUseCase runPresetUseCase,
     IRunExtraUseCase runExtraUseCase,
+    IRequeueToMqUseCase requeueToMqUseCase,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
     IRunStateStore runStateStore,
     IPresetGateService presetGateService,
@@ -31,6 +32,7 @@ public class RunsController(
     private readonly IStartRunUseCase _startRunUseCase = startRunUseCase;
     private readonly IRunPresetUseCase _runPresetUseCase = runPresetUseCase;
     private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
+    private readonly IRequeueToMqUseCase _requeueToMqUseCase = requeueToMqUseCase;
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly IPresetGateService _presetGateService = presetGateService;
@@ -86,7 +88,20 @@ public class RunsController(
     [HttpPost("extra")]
     public async Task<IActionResult> RunExtraAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _runExtraUseCase.ExecuteAsync(request?.AdminOverride == true, cancellationToken);
+        var result = await _runExtraUseCase.ExecuteAsync(
+            request?.AdminOverride == true,
+            request?.PublishToMq != false,
+            cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Повторно публикует результаты прошлых запусков в MQ (массово).
+    /// </summary>
+    [HttpPost("requeue")]
+    public async Task<IActionResult> RequeueToMqAsync([FromBody] RequeueToMqRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _requeueToMqUseCase.ExecuteAsync(request, cancellationToken);
         return Ok(result);
     }
 

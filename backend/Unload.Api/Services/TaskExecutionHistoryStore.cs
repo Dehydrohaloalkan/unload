@@ -82,6 +82,24 @@ public class TaskExecutionHistoryStore : ITaskExecutionHistoryStore
         }
     }
 
+    public TaskRecord? TryGetByCorrelationId(string correlationId)
+    {
+        if (string.IsNullOrWhiteSpace(correlationId))
+        {
+            return null;
+        }
+
+        var normalized = correlationId.Trim();
+        lock (_sync)
+        {
+            return _records
+                .Where(record => !string.IsNullOrWhiteSpace(record.CorrelationId) &&
+                                 string.Equals(record.CorrelationId.Trim(), normalized, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(static record => record.CompletedAt)
+                .FirstOrDefault();
+        }
+    }
+
     public bool HasRunToday(string taskCode, DateOnly day)
     {
         var normalizedTaskCode = string.IsNullOrWhiteSpace(taskCode) ? "unknown" : taskCode.Trim().ToLowerInvariant();

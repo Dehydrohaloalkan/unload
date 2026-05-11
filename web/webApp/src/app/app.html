@@ -60,7 +60,7 @@
         [hasRunToday]="store.hasRunToday()"
         [lastCompletedAt]="store.runLastCompletedAt()"
         [buildDownloadUrl]="store.buildSystemDownloadUrl"
-        (startRun)="store.startRunAsync()"
+        (startRun)="startRunFromMainCard()"
         (stopRun)="store.stopRunAsync()"
         (openDetails)="openDetails('run')"
         (selectAll)="store.selectAllMembers()"
@@ -74,7 +74,7 @@
         [canRun]="store.canRunExtra()"
         [hasRunToday]="store.hasExtraToday()"
         [lastCompletedAt]="store.extraLastCompletedAt()"
-        (start)="store.runExtraAsync()"
+        (start)="startExtraFromMainCard()"
         (openDetails)="openDetails('extra')"
       />
       </div>
@@ -100,7 +100,7 @@
       />
     </div>
 
-    @if (detailsPanelStage === 'run') {
+    @if (detailsPanelOpen && detailsPanelStage === 'run') {
       <div class="details-drawer__body">
         <app-details-run-panel
           [presetTask]="store.presetTask()"
@@ -110,6 +110,13 @@
           [activeRun]="store.activeRun()"
           [runBusy]="store.isRunBusy()"
           [todayRuns]="store.todayRuns()"
+          [todayHistory]="store.todayHistory()"
+          [filesByOutputPath]="store.outputFilesByPath()"
+          [publishToMq]="store.publishRunToMq()"
+          [requeueRunning]="store.requeueRunning()"
+          [requeueResult]="store.requeueResult()"
+          [uploadRunning]="store.uploadRunning()"
+          [uploadResult]="store.uploadResult()"
           [buildDownloadUrl]="store.buildSystemDownloadUrl"
           [buildArchiveUrl]="store.buildSystemArchiveUrl"
           (toggleAll)="setAllMembersSelection($event)"
@@ -118,9 +125,12 @@
           (selectMember)="selectDrawerMember($event)"
           (startSelected)="startSelectedRunFromDrawer()"
           (stopRun)="store.stopRunAsync()"
+          (publishToMqChange)="store.setPublishRunToMq($event)"
+          (requeueToMq)="store.requeueToMqAsync($event)"
+          (uploadToMq)="store.uploadFilesToMqAsync($event.files, $event.memberName)"
         />
       </div>
-    } @else if (detailsPanelStage === 'preset') {
+    } @else if (detailsPanelOpen && detailsPanelStage === 'preset') {
       <div class="details-drawer__body">
         <app-details-preset-panel
           [presetTask]="store.presetTask()"
@@ -130,7 +140,7 @@
           [buildArchiveUrl]="store.buildSystemArchiveUrl"
         />
       </div>
-    } @else {
+    } @else if (detailsPanelOpen) {
       <div class="details-drawer__body">
         <app-details-extra-panel
           [extraTask]="store.extraTask()"

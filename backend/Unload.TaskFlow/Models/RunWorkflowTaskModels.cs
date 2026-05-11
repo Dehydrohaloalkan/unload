@@ -17,7 +17,8 @@ public enum RunSelectionMode
 public  record StartRunTaskRequest(
     IReadOnlyCollection<string> Codes,
     RunSelectionMode SelectionMode,
-    bool AdminOverride = false);
+    bool AdminOverride = false,
+    bool PublishToMq = true);
 
 /// <summary>
 /// Результат принятого запуска выгрузки.
@@ -28,4 +29,4 @@ public  record StartRunTaskResult(string CorrelationId);
 /// <summary>
 /// Пустой запрос для задач без payload.
 /// </summary>
-public  record EmptyWorkflowTaskRequest(bool AdminOverride = false);
+public  record EmptyWorkflowTaskRequest(bool AdminOverride = false, bool PublishToMq = true);
