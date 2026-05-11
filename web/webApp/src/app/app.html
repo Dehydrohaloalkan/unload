@@ -116,8 +116,6 @@
           [publishToMq]="store.publishRunToMq()"
           [requeueRunning]="store.requeueRunning()"
           [requeueResult]="store.requeueResult()"
-          [uploadRunning]="store.uploadRunning()"
-          [uploadResult]="store.uploadResult()"
           [buildDownloadUrl]="store.buildSystemDownloadUrl"
           [buildArchiveUrl]="store.buildSystemArchiveUrl"
           (toggleAll)="setAllMembersSelection($event)"
@@ -128,7 +126,6 @@
           (stopRun)="store.stopRunAsync()"
           (publishToMqChange)="store.setPublishRunToMq($event)"
           (requeueToMq)="store.requeueToMqAsync($event)"
-          (uploadToMq)="store.uploadFilesToMqAsync($event.files, $event.memberName)"
         />
       </div>
     } @else if (detailsPanelOpen && detailsPanelStage === 'preset') {

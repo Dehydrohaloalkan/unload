@@ -29,7 +29,6 @@ import {
   TaskRecord,
   RequeueItem,
   RequeueToMqResponse,
-  MqUploadResponse,
   WorkflowDashboardSnapshotResponse,
   TaskUiState,
 } from './app.models';
@@ -90,8 +89,6 @@ export class WorkflowStore {
   readonly adminMode = signal(false);
   readonly requeueRunning = signal(false);
   readonly requeueResult = signal<RequeueToMqResponse | null>(null);
-  readonly uploadRunning = signal(false);
-  readonly uploadResult = signal<MqUploadResponse | null>(null);
 
   readonly phase = computed<'gate' | 'tasks'>(() =>
     this.presetState()?.presetCompleted ? 'tasks' : 'gate',
@@ -396,34 +393,6 @@ export class WorkflowStore {
       this.errorMessage.set(this.toErrorMessage(error, 'Не удалось отправить выбранное в MQ.'));
     } finally {
       this.requeueRunning.set(false);
-    }
-  }
-
-  async uploadFilesToMqAsync(files: File[], memberName: string | null = null): Promise<void> {
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    this.errorMessage.set(null);
-    this.uploadRunning.set(true);
-    this.uploadResult.set(null);
-    try {
-      const form = new FormData();
-      for (const file of files) {
-        form.append('files', file, file.name);
-      }
-      if (memberName && memberName.trim()) {
-        form.append('memberName', memberName.trim());
-      }
-
-      const response = await firstValueFrom(
-        this.http.post<MqUploadResponse>(this.apiUrl('/api/system/mq-upload'), form),
-      );
-      this.uploadResult.set(response ?? null);
-    } catch (error) {
-      this.errorMessage.set(this.toErrorMessage(error, 'Не удалось загрузить файлы и отправить в MQ.'));
-    } finally {
-      this.uploadRunning.set(false);
     }
   }
 
@@ -811,9 +780,7 @@ export class WorkflowStore {
     if (tracked) {
       return tracked === correlationId;
     }
-    // Ignore side-effect "runs" created by MQ uploads — they are never terminal
-    // and would lock the active-run section indefinitely.
-    return !correlationId.trim().toLowerCase().startsWith('upload-');
+    return true;
   }
 
   private apiUrl(path: string): string {
@@ -1010,6 +977,7 @@ function buildMemberGroups(
           return {
             key: buildMemberKey(group.id, primaryTarget.memberCode, memberName),
             memberCode: primaryTarget.memberCode,
+            memberFileExtension: primaryTarget.memberFileExtension?.trim() || null,
             name: memberName,
             targetCodes,
             selected: targetCodes.every((code) => selected.has(code)),

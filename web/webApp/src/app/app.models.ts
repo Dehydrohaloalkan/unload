@@ -221,23 +221,6 @@ export interface RequeueToMqResponse {
   results: RequeueItemResult[];
 }
 
-export interface MqUploadFileResult {
-  fileName: string;
-  sizeBytes: number;
-  status: string;
-  message?: string | null;
-}
-
-export interface MqUploadResponse {
-  requestId: string;
-  correlationId: string;
-  memberName: string;
-  batchId: string;
-  acceptedFiles: number;
-  failedFiles: number;
-  files: MqUploadFileResult[];
-}
-
 export interface OutputFileInfo {
   fileName: string;
   filePath: string;
@@ -290,6 +273,7 @@ export interface MemberLogLine {
 export interface MemberViewModel {
   key: string;
   memberCode: string;
+  memberFileExtension: string | null;
   name: string;
   targetCodes: string[];
   selected: boolean;

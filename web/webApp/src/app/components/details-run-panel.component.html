@@ -2,7 +2,6 @@
   <p-tablist>
     <p-tab value="run">Запуск</p-tab>
     <p-tab value="history">История</p-tab>
-    <p-tab value="upload">Загрузка в MQ</p-tab>
   </p-tablist>
 
   <p-tabpanels>
@@ -43,7 +42,11 @@
 
             <div class="details-members">
               @for (member of group.members; track member.key) {
-                <div class="member-card" [class.member-card--active]="selectedMember()?.key === member.key">
+                <div
+                  class="member-card"
+                  [class.member-card--active]="selectedMemberKey() === member.key"
+                  [ngClass]="memberCardBorderClass(member)"
+                >
                   <label class="details-check-row member-card__check">
                     <p-checkbox
                       binary="true"
@@ -59,16 +62,22 @@
                     {{ member.name }}
                   </button>
 
-                  @if (selectedMember()?.key === member.key) {
+                  @if (selectedMemberKey() === member.key) {
                     <div class="member-card__details">
                       <div class="member-card__meta">
                         <span class="member-card__meta-label">Код</span>
                         <span class="member-card__meta-value">{{ member.memberCode }}</span>
                       </div>
                       <div class="member-card__meta">
-                        <span class="member-card__meta-label">Статус</span>
-                        <span class="member-card__meta-value">{{ resolveMemberStatusLabel(member.status) }}</span>
+                        <span class="member-card__meta-label">Расширение</span>
+                        <span class="member-card__meta-value">{{ member.memberFileExtension || '—' }}</span>
                       </div>
+                      @if (memberLastUploadToday(member); as lastUpload) {
+                        <div class="member-card__meta">
+                          <span class="member-card__meta-label">Последняя выгрузка сегодня</span>
+                          <span class="member-card__meta-value">{{ formatTimestamp(lastUpload) }}</span>
+                        </div>
+                      }
                       <div class="member-card__targets">
                         @for (targetCode of member.targetCodes; track targetCode) {
                           <span class="member-card__chip">{{ targetCode }}</span>
@@ -220,48 +229,55 @@
         } @else {
           <div class="history-runs">
             @for (node of historyNodes(); track node.key) {
-              <details class="history-run">
+              <details class="history-run" (toggle)="onHistoryRunToggle($event, node.key)">
                 <summary class="history-run__summary">
                   <span>{{ node.taskCode === 'run' ? 'Выгрузка' : 'Доп. выгрузка' }} · {{ node.correlationId }}</span>
-                  <span class="history-run__meta">{{ node.status }} · {{ formatTimestamp(node.occurredAt) }}</span>
+                  <span class="history-run__meta">
+                    <span>{{ node.status }}</span>
+                    <span>Начало: {{ formatTimestamp(node.startedAt) }}</span>
+                    <span>Окончание: {{ formatTimestamp(node.completedAt) }}</span>
+                  </span>
                 </summary>
-                <div class="history-run__body">
-                  @if (node.members.length === 0) {
-                    <div class="details-empty">Файлы отсутствуют.</div>
-                  } @else {
+                @if (isHistoryRunOpen(node.key)) {
+                  <div class="history-run__body">
                     <div class="history-members">
-                      @for (member of node.members; track member.memberName) {
-                        <details class="history-member">
+                      @for (member of historyMembers(node); track member.key) {
+                        <details
+                          class="history-member"
+                          (toggle)="onHistoryMemberToggle($event, member.key)"
+                        >
                           <summary class="history-member__summary">
                             <span>{{ member.memberName }}</span>
                             <span>{{ formatFileCount(member.files.length) }}</span>
                           </summary>
-                          <div class="history-member__body">
-                            @if (member.files.length === 0) {
-                              <div class="details-empty">0 файлов.</div>
-                            } @else {
-                              @for (file of member.files; track file.key) {
-                                <label class="history-member-file">
-                                  <p-checkbox
-                                    binary="true"
-                                    [ngModel]="isHistoryFileSelected(file.key)"
-                                    (onChange)="toggleHistoryFile(file, $event.checked)"
-                                  />
-                                  <a
-                                    class="history-file-link"
-                                    [href]="buildDownloadUrl()(file.filePath)"
-                                    [attr.download]="file.fileName"
-                                    (click)="onDownloadClick()"
-                                  >{{ file.fileName }}</a>
-                                </label>
+                          @if (isHistoryMemberOpen(member.key)) {
+                            <div class="history-member__body">
+                              @if (member.files.length === 0) {
+                                <div class="details-empty">0 файлов.</div>
+                              } @else {
+                                @for (file of member.files; track file.key) {
+                                  <label class="history-member-file">
+                                    <p-checkbox
+                                      binary="true"
+                                      [ngModel]="isHistoryFileSelected(file.key)"
+                                      (onChange)="toggleHistoryFile(file, $event.checked)"
+                                    />
+                                    <a
+                                      class="history-file-link"
+                                      [href]="buildDownloadUrl()(file.filePath)"
+                                      [attr.download]="file.fileName"
+                                      (click)="onDownloadClick()"
+                                    >{{ file.fileName }}</a>
+                                  </label>
+                                }
                               }
-                            }
-                          </div>
+                            </div>
+                          }
                         </details>
                       }
                     </div>
-                  }
-                </div>
+                  </div>
+                }
               </details>
             }
           </div>
@@ -278,8 +294,10 @@
 
         @if (requeueResult(); as result) {
           <div class="details-item__message">
-            MQ: принято {{ result.acceptedBatches }}, ошибок {{ result.failedBatches }} (requestId:
-            {{ result.requestId }})
+            @if (requeueFileSummary(result); as summary) {
+              MQ: отправлено файлов {{ summary.sent }} из {{ summary.total }},
+              не отправлено {{ summary.notSent }} (requestId: {{ result.requestId }})
+            }
           </div>
           @for (item of result.results; track item.correlationId) {
             @for (batch of item.batches; track batch.batchId) {
@@ -296,42 +314,6 @@
       </div>
     </p-tabpanel>
 
-    <p-tabpanel value="upload">
-      <div class="details-section">
-        <div class="details-section__title">Загрузка файлов в MQ</div>
-
-        <input
-          #uploadFileInput
-          type="file"
-          multiple
-          hidden
-          (change)="onFileInputChange($event, uploadFileInput)"
-        />
-        <p-button
-          label="Выбрать файлы и отправить в MQ"
-          icon="app-icon app-icon--play"
-          [fluid]="true"
-          [loading]="uploadRunning()"
-          [disabled]="uploadRunning()"
-          (onClick)="uploadFileInput.click()"
-        />
-
-        @if (uploadResult(); as result) {
-          <div class="details-item__message">
-            Загружено: {{ result.acceptedFiles }}, ошибок {{ result.failedFiles }} (batchId:
-            {{ result.batchId }})
-          </div>
-          @for (file of result.files; track file.fileName) {
-            <div class="details-item__row">
-              <span class="details-item__label">{{ file.fileName }}</span>
-              <span class="details-item__value">
-                {{ file.status }} ({{ file.sizeBytes }} bytes)@if (file.message) { · {{ file.message }} }
-              </span>
-            </div>
-          }
-        }
-      </div>
-    </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
 

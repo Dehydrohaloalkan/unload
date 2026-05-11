@@ -8,6 +8,7 @@ import { ConfirmDialog } from 'primeng/confirmdialog';
 import { ConfirmationService } from 'primeng/api';
 import {
   MemberGroupViewModel,
+  MemberViewModel,
   MemberRunStatusInfo,
   RunOutputArtifactInfo,
   RunLifecycleStatus,
@@ -22,7 +23,6 @@ import {
   TaskRecord,
   RequeueItem,
   RequeueToMqResponse,
-  MqUploadResponse,
   OutputFileInfo,
 } from '../app.models';
 import { DownloadHintStore } from '../download-hint.store';
@@ -42,8 +42,23 @@ type HistoryRunNode = {
   taskCode: 'run' | 'extra';
   correlationId: string;
   status: string;
+  startedAt: string;
+  completedAt: string;
   occurredAt: string;
-  members: { memberName: string; files: HistoryFileRow[] }[];
+  memberNames: string[];
+  memberFiles: Record<string, HistoryFileRow[]>;
+};
+
+type HistoryMemberEntry = {
+  key: string;
+  memberName: string;
+  files: HistoryFileRow[];
+};
+
+type RequeueFileSummary = {
+  total: number;
+  sent: number;
+  notSent: number;
 };
 
 @Component({
@@ -78,8 +93,6 @@ export class DetailsRunPanelComponent {
   readonly publishToMq = input(true);
   readonly requeueRunning = input(false);
   readonly requeueResult = input<RequeueToMqResponse | null>(null);
-  readonly uploadRunning = input(false);
-  readonly uploadResult = input<MqUploadResponse | null>(null);
   readonly buildDownloadUrl = input.required<(path: string) => string>();
   readonly buildArchiveUrl = input.required<(path: string) => string>();
 
@@ -91,10 +104,25 @@ export class DetailsRunPanelComponent {
   readonly stopRun = output<void>();
   readonly publishToMqChange = output<boolean>();
   readonly requeueToMq = output<RequeueItem[]>();
-  readonly uploadToMq = output<{ files: File[]; memberName: string | null }>();
 
   selectedHistoryFiles: HistoryFileRow[] = [];
   readonly historyNodes = computed(() => this.buildHistoryNodes());
+  readonly memberSelectionStats = computed(() => {
+    let total = 0;
+    let selected = 0;
+    for (const group of this.memberGroups()) {
+      total += group.members.length;
+      for (const member of group.members) {
+        if (member.selected) {
+          selected++;
+        }
+      }
+    }
+
+    return { total, selected };
+  });
+  private readonly openHistoryRuns = new Set<string>();
+  private readonly openHistoryMembers = new Set<string>();
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();
@@ -102,6 +130,60 @@ export class DetailsRunPanelComponent {
 
   canRequeue(): boolean {
     return this.selectedHistoryFiles.length > 0;
+  }
+
+  requeueFileSummary(result: RequeueToMqResponse): RequeueFileSummary {
+    const total = this.selectedHistoryFiles.length;
+    if (!result || !result.results || total === 0) {
+      return { total, sent: 0, notSent: total };
+    }
+
+    const selectedByItemKey = new Map<string, HistoryFileRow[]>();
+    for (const row of this.selectedHistoryFiles) {
+      const key = `${row.taskCode}|${row.correlationId}`;
+      const current = selectedByItemKey.get(key);
+      if (current) {
+        current.push(row);
+      } else {
+        selectedByItemKey.set(key, [row]);
+      }
+    }
+
+    let sent = 0;
+    for (const [itemKey, selectedRows] of selectedByItemKey.entries()) {
+      const [taskCode, correlationId] = itemKey.split('|', 2) as ['run' | 'extra', string];
+      const itemResult =
+        result.results.find(
+          (r) =>
+            (r.taskCode ?? '').trim().toLowerCase() === taskCode &&
+            (r.correlationId ?? '').trim() === correlationId,
+        ) ?? null;
+
+      if (!itemResult) {
+        continue;
+      }
+
+      const failed = (itemResult.failedBatches ?? 0) > 0 || itemResult.batches.some((b) => b.status === SenderBatchStatus.Failed);
+      if (failed) {
+        continue;
+      }
+
+      const acceptedMembers = new Set(
+        (itemResult.batches ?? [])
+          .filter((b) => b.status !== SenderBatchStatus.Failed)
+          .map((b) => (b.memberName ?? '').trim().toLowerCase())
+          .filter((name) => name.length > 0),
+      );
+
+      for (const row of selectedRows) {
+        if (acceptedMembers.has((row.memberName ?? '').trim().toLowerCase())) {
+          sent++;
+        }
+      }
+    }
+
+    const notSent = Math.max(0, total - sent);
+    return { total, sent, notSent };
   }
 
   emitRequeue(): void {
@@ -146,27 +228,6 @@ export class DetailsRunPanelComponent {
     });
   }
 
-  onFileInputChange(event: Event, inputEl: HTMLInputElement): void {
-    const files = Array.from((event.target as HTMLInputElement).files ?? []);
-    if (files.length === 0) {
-      return;
-    }
-
-    this.confirmationService.confirm({
-      header: 'Подтверждение',
-      message: `Отправить в MQ выбранные файлы (${files.length})?`,
-      acceptLabel: 'Отправить',
-      rejectLabel: 'Отмена',
-      accept: () => {
-        this.uploadToMq.emit({ files, memberName: null });
-        inputEl.value = '';
-      },
-      reject: () => {
-        inputEl.value = '';
-      },
-    });
-  }
-
   isHistoryFileSelected(key: string): boolean {
     return this.selectedHistoryFiles.some((f) => f.key === key);
   }
@@ -192,9 +253,6 @@ export class DetailsRunPanelComponent {
       }
 
       const memberMap = new Map<string, HistoryFileRow[]>();
-      for (const memberName of this.runMemberNames(run, knownMemberNames)) {
-        memberMap.set(memberName, []);
-      }
 
       for (const artifact of run.outputArtifacts ?? []) {
         if (!artifact.filePath || !artifact.fileName) {
@@ -215,13 +273,17 @@ export class DetailsRunPanelComponent {
         });
       }
 
+      const memberFiles = Object.fromEntries(memberMap.entries());
       nodeMap.set(`run|${correlationId}`, {
         key: `run|${correlationId}`,
         taskCode: 'run',
         correlationId,
         status: this.resolveRunStatusLabel(run.status),
+        startedAt: run.createdAt,
+        completedAt: run.updatedAt,
         occurredAt: run.updatedAt,
-        members: Array.from(memberMap.entries()).map(([memberName, files]) => ({ memberName, files })),
+        memberNames: this.runMemberNames(run, knownMemberNames),
+        memberFiles,
       });
     }
 
@@ -232,9 +294,6 @@ export class DetailsRunPanelComponent {
 
       const correlationId = record.correlationId;
       const memberMap = new Map<string, HistoryFileRow[]>();
-      for (const memberName of knownMemberNames) {
-        memberMap.set(memberName, []);
-      }
       const files = this.filesByOutputPath()?.[record.outputPath] ?? [];
 
       for (const file of files) {
@@ -253,13 +312,22 @@ export class DetailsRunPanelComponent {
         });
       }
 
+      const memberFiles = Object.fromEntries(memberMap.entries());
+      const memberNames = sortNames([
+        ...knownMemberNames,
+        ...Object.keys(memberFiles),
+      ]);
+
       nodeMap.set(`extra|${correlationId}`, {
         key: `extra|${correlationId}`,
         taskCode: 'extra',
         correlationId,
         status: 'Completed',
+        startedAt: record.startedAt,
+        completedAt: record.completedAt,
         occurredAt: record.completedAt,
-        members: Array.from(memberMap.entries()).map(([memberName, files]) => ({ memberName, files })),
+        memberNames,
+        memberFiles,
       });
     }
 
@@ -293,7 +361,48 @@ export class DetailsRunPanelComponent {
       }
     }
 
-    return [...names].sort((left, right) => left.localeCompare(right));
+    return sortNames(names);
+  }
+
+  historyMembers(node: HistoryRunNode): HistoryMemberEntry[] {
+    return node.memberNames.map((memberName) => ({
+      key: `${node.key}|${memberName.toLowerCase()}`,
+      memberName,
+      files: node.memberFiles[memberName] ?? [],
+    }));
+  }
+
+  onHistoryRunToggle(event: Event, runKey: string): void {
+    const opened = (event.target as HTMLDetailsElement).open;
+    if (opened) {
+      this.openHistoryRuns.add(runKey);
+      return;
+    }
+
+    this.openHistoryRuns.delete(runKey);
+    for (const memberKey of Array.from(this.openHistoryMembers)) {
+      if (memberKey.startsWith(`${runKey}|`)) {
+        this.openHistoryMembers.delete(memberKey);
+      }
+    }
+  }
+
+  isHistoryRunOpen(runKey: string): boolean {
+    return this.openHistoryRuns.has(runKey);
+  }
+
+  onHistoryMemberToggle(event: Event, memberKey: string): void {
+    const opened = (event.target as HTMLDetailsElement).open;
+    if (opened) {
+      this.openHistoryMembers.add(memberKey);
+      return;
+    }
+
+    this.openHistoryMembers.delete(memberKey);
+  }
+
+  isHistoryMemberOpen(memberKey: string): boolean {
+    return this.openHistoryMembers.has(memberKey);
   }
 
   private memberNameFromFile(fileName: string): string {
@@ -321,22 +430,12 @@ export class DetailsRunPanelComponent {
   }
 
   allMembersSelected(): boolean {
-    const groups = this.memberGroups();
-    const total = groups.reduce((sum, group) => sum + group.members.length, 0);
-    const selected = groups.reduce(
-      (sum, group) => sum + group.members.filter((member) => member.selected).length,
-      0,
-    );
+    const { total, selected } = this.memberSelectionStats();
     return total > 0 && selected === total;
   }
 
   allMembersPartial(): boolean {
-    const groups = this.memberGroups();
-    const total = groups.reduce((sum, group) => sum + group.members.length, 0);
-    const selected = groups.reduce(
-      (sum, group) => sum + group.members.filter((member) => member.selected).length,
-      0,
-    );
+    const { total, selected } = this.memberSelectionStats();
     return total > 0 && selected > 0 && selected < total;
   }
 
@@ -349,25 +448,37 @@ export class DetailsRunPanelComponent {
     return selectedCount > 0 && selectedCount < group.members.length;
   }
 
-  selectedMember() {
-    const memberKey = this.selectedMemberKey();
-    if (!memberKey) {
-      return null;
-    }
-
-    for (const group of this.memberGroups()) {
-      const member = group.members.find((item) => item.key === memberKey);
-      if (member) {
-        return member;
-      }
-    }
-
-    return null;
-  }
-
   formatTimestamp(value: string): string {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ru-RU');
+  }
+
+  memberLastUploadToday(member: MemberViewModel): string | null {
+    const todayArtifacts = member.outputArtifacts
+      .filter((artifact) => this.isTodayDate(artifact.occurredAt))
+      .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+    return todayArtifacts[0]?.occurredAt ?? null;
+  }
+
+  memberCardBorderClass(member: MemberViewModel): string {
+    if (member.outputArtifacts.length === 0) {
+      return 'member-card--border-yellow';
+    }
+
+    const sentToMq = this.memberSentToMq(member);
+    if (sentToMq) {
+      return 'member-card--border-green';
+    }
+
+    if (member.status === MemberRunLifecycleStatus.Cancelled) {
+      return 'member-card--border-red';
+    }
+
+    if (!this.memberLastUploadToday(member)) {
+      return 'member-card--border-blue';
+    }
+
+    return '';
   }
 
   runMembers(run: RunStatusInfo): MemberRunStatusInfo[] {
@@ -552,4 +663,46 @@ export class DetailsRunPanelComponent {
         return 'Unknown';
     }
   }
+
+  private memberSentToMq(member: MemberViewModel): boolean {
+    const run = this.activeRun();
+    if (!run) {
+      return false;
+    }
+
+    const batch = this.senderBatchForMember(run, member.name);
+    if (!batch) {
+      return false;
+    }
+
+    return batch.status === SenderBatchStatus.Completed || (batch.sentFiles?.length ?? 0) > 0;
+  }
+
+  private isTodayDate(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return false;
+    }
+
+    const now = new Date();
+    return (
+      parsed.getFullYear() === now.getFullYear() &&
+      parsed.getMonth() === now.getMonth() &&
+      parsed.getDate() === now.getDate()
+    );
+  }
+}
+
+function sortNames(names: Iterable<string>): string[] {
+  return Array.from(
+    new Set(
+      Array.from(names)
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
 }
