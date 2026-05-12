@@ -1,6 +1,6 @@
 <div class="details-section">
   <div class="details-section__title">Скрипты и статусы</div>
-  @if (presetTask().running) {
+  @if (task().running) {
     <div class="details-item">
       <div class="details-item__row">
         <span class="details-item__label">Статус</span>
@@ -8,11 +8,14 @@
       </div>
       <div class="details-item__row">
         <span class="details-item__label">Старт</span>
-        <span class="details-item__value">{{ formatTimestamp(presetTask().startedAt!) }}</span>
+        <span class="details-item__value">{{ formatTimestamp(task().startedAt!) }}</span>
       </div>
-      <div class="details-item__message">Идет выполнение preset-скриптов.</div>
+      <div class="details-item__message">
+        Идет выполнение
+        {{ kind() === 'preset' ? 'preset' : 'extra' }}-скриптов.
+      </div>
     </div>
-  } @else if (presetTask().result; as result) {
+  } @else if (task().result; as result) {
     <div class="details-item">
       <div class="details-item__row">
         <span class="details-item__label">Статус</span>
@@ -31,19 +34,21 @@
       }
     </div>
   } @else {
-    <div class="details-empty">Скрипты этапа 2 пока не запускались.</div>
+    <div class="details-empty">{{ copy().emptyHistory }}</div>
   }
 </div>
 
 <div class="details-section">
-  <div class="details-section__title">История пресета за сегодня</div>
+  <div class="details-section__title">
+    История {{ kind() === 'preset' ? 'пресета' : 'extra' }} за сегодня
+  </div>
   @if (records().length === 0) {
-    <div class="details-empty">Сегодня запусков пока не было.</div>
+    <div class="details-empty">{{ copy().noRunsToday }}</div>
   } @else {
     @for (record of records(); track record.completedAt + '-' + (record.correlationId ?? '')) {
       <details class="history-run">
         <summary class="history-run__summary">
-          <span>{{ record.correlationId ?? 'preset-run' }}</span>
+          <span>{{ record.correlationId ?? copy().fallbackCorrelationId }}</span>
           <span>{{ formatTimestamp(record.completedAt) }}</span>
         </summary>
         <div class="history-run__body">
@@ -70,12 +75,12 @@
           <div class="history-files">
             <div class="history-files__title">Файлы результата</div>
             @if (recordFiles(record).length === 0) {
-              <div class="details-empty">Файлы для этого запуска не найдены.</div>
+              <div class="details-empty">{{ copy().emptyRecentRun }}</div>
             } @else {
               @for (file of recordFiles(record); track file.filePath) {
                 <a
                   class="history-file-link"
-                  [href]="buildDownloadUrl()(file.filePath)"
+                  [href]="buildDownloadUrl(file.filePath)"
                   [attr.download]="file.fileName"
                   (click)="onDownloadClick()"
                 >
@@ -87,8 +92,8 @@
           @if (record.outputPath) {
             <a
               class="history-file-link history-file-link--archive"
-              [href]="buildArchiveUrl()(record.outputPath!)"
-              [attr.download]="'preset-result-' + (record.correlationId ?? 'run') + '.zip'"
+              [href]="buildArchiveUrl(record.outputPath!)"
+              [attr.download]="archiveDownloadName(record)"
               (click)="onDownloadClick()"
             >
               Скачать архив результата (.zip)

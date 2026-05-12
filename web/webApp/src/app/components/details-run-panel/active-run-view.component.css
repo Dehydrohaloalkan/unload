@@ -1,0 +1,111 @@
+:host {
+  display: block;
+}
+
+.details-worker-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+
+.details-worker-item {
+  font-size: 0.8rem;
+  color: #334155;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.active-run {
+  gap: 0.55rem;
+}
+
+.active-members {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.active-member {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.75rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.active-member__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.active-member__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-member__status {
+  flex: 0 0 auto;
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.active-member__body {
+  padding: 0.55rem 0.65rem 0.65rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.active-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.active-files {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.active-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.active-file__badge {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.9);
+  color: #334155;
+}
+
+.active-file__badge--sent {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(220, 252, 231, 0.8);
+  color: #065f46;
+}
+
+.active-file__badge--pending {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(241, 245, 249, 0.85);
+  color: #334155;
+}

@@ -1,6 +1,7 @@
-<main class="app-shell" [class.app-shell--drawer-open]="detailsPanelOpen">
-  <app-download-hint-toast></app-download-hint-toast>
-  <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen">
+<main class="app-shell" [class.app-shell--drawer-open]="detailsPanelOpen()">
+  <app-download-hint-toast />
+
+  <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen()">
     <div class="app-header">
       <div>
         <h1 class="app-title">Панель выгрузки</h1>
@@ -37,7 +38,7 @@
         <app-live-clock
           [now]="store.currentTime()"
           [connected]="store.connectionReady()"
-          [probeCompleted]="(store.presetState()?.readyForPreset ?? false) || (store.presetState()?.presetCompleted ?? false)"
+          [probeCompleted]="probeCompleted()"
           [completedAt]="stage1CompletedAt()"
           [dayWindowSummary]="dayWindowSummary()"
         />
@@ -51,45 +52,40 @@
           (openDetails)="openDetails('preset')"
         />
 
-      <app-run-card
-        [groups]="store.memberGroups()"
-        [run]="store.activeRun()"
-        [selectedCount]="store.selectedCount()"
-        [canStartRun]="store.canStartRun()"
-        [runBusy]="store.isRunBusy()"
-        [hasRunToday]="store.hasRunToday()"
-        [lastCompletedAt]="store.runLastCompletedAt()"
-        [buildDownloadUrl]="store.buildSystemDownloadUrl"
-        (startRun)="startRunFromMainCard()"
-        (stopRun)="store.stopRunAsync()"
-        (openDetails)="openDetails('run')"
-        (selectAll)="store.selectAllMembers()"
-        (clear)="store.clearMemberSelection()"
-        (toggleMember)="store.toggleMember($event.targetCodes, $event.selected)"
-      />
+        <app-run-card
+          [canStartRun]="store.canStartRun()"
+          [runBusy]="store.isRunBusy()"
+          [hasRunToday]="store.hasRunToday()"
+          [lastCompletedAt]="store.runLastCompletedAt()"
+          (startRun)="startRunFromMainCard()"
+          (openDetails)="openDetails('run')"
+        />
 
-      <app-extra-card
-        [task]="store.extraTask()"
-        [now]="store.currentTime()"
-        [canRun]="store.canRunExtra()"
-        [hasRunToday]="store.hasExtraToday()"
-        [lastCompletedAt]="store.extraLastCompletedAt()"
-        (start)="startExtraFromMainCard()"
-        (openDetails)="openDetails('extra')"
-      />
+        <app-extra-card
+          [task]="store.extraTask()"
+          [canRun]="store.canRunExtra()"
+          [hasRunToday]="store.hasExtraToday()"
+          [lastCompletedAt]="store.extraLastCompletedAt()"
+          (start)="startExtraFromMainCard()"
+          (openDetails)="openDetails('extra')"
+        />
       </div>
     }
   </section>
 
-  <aside class="details-drawer" [class.details-drawer--open]="detailsPanelOpen">
+  <aside class="details-drawer" [class.details-drawer--open]="detailsPanelOpen()">
     <div class="details-drawer__head">
       <div class="details-drawer__title">
-        @if (detailsPanelStage === 'run') {
-          Детали этапа 3 (выгрузка)
-        } @else if (detailsPanelStage === 'preset') {
-          Детали этапа 2 (пресет)
-        } @else {
-          Детали этапа 4 (extra)
+        @switch (detailsPanelStage()) {
+          @case ('run') {
+            Детали этапа 3 (выгрузка)
+          }
+          @case ('preset') {
+            Детали этапа 2 (пресет)
+          }
+          @default {
+            Детали этапа 4 (extra)
+          }
         }
       </div>
       <p-button
@@ -100,53 +96,19 @@
       />
     </div>
 
-    @if (detailsPanelOpen && detailsPanelStage === 'run') {
+    @if (detailsPanelOpen()) {
       <div class="details-drawer__body">
-        <app-details-run-panel
-          [presetTask]="store.presetTask()"
-          [memberGroups]="store.memberGroups()"
-          [selectedMemberKey]="drawerMemberKey()"
-          [canStartRun]="store.canStartRun()"
-          [activeRun]="store.activeRun()"
-          [runBusy]="store.isRunBusy()"
-          [todayRuns]="store.todayRuns()"
-          [todayHistory]="store.todayHistory()"
-          [filesByOutputPath]="store.outputFilesByPath()"
-          [historyMemberNames]="store.historyMemberNames()"
-          [publishToMq]="store.publishRunToMq()"
-          [requeueRunning]="store.requeueRunning()"
-          [requeueResult]="store.requeueResult()"
-          [buildDownloadUrl]="store.buildSystemDownloadUrl"
-          [buildArchiveUrl]="store.buildSystemArchiveUrl"
-          (toggleAll)="setAllMembersSelection($event)"
-          (toggleGroup)="onToggleGroupFromDetails($event.groupId, $event.selected)"
-          (toggleMember)="store.toggleMember($event.targetCodes, $event.selected)"
-          (selectMember)="selectDrawerMember($event)"
-          (startSelected)="startSelectedRunFromDrawer()"
-          (stopRun)="store.stopRunAsync()"
-          (publishToMqChange)="store.setPublishRunToMq($event)"
-          (requeueToMq)="store.requeueToMqAsync($event)"
-        />
-      </div>
-    } @else if (detailsPanelOpen && detailsPanelStage === 'preset') {
-      <div class="details-drawer__body">
-        <app-details-preset-panel
-          [presetTask]="store.presetTask()"
-          [records]="presetHistoryRecords()"
-          [filesByOutputPath]="store.outputFilesByPath()"
-          [buildDownloadUrl]="store.buildSystemDownloadUrl"
-          [buildArchiveUrl]="store.buildSystemArchiveUrl"
-        />
-      </div>
-    } @else if (detailsPanelOpen) {
-      <div class="details-drawer__body">
-        <app-details-extra-panel
-          [extraTask]="store.extraTask()"
-          [records]="extraHistoryRecords()"
-          [filesByOutputPath]="store.outputFilesByPath()"
-          [buildDownloadUrl]="store.buildSystemDownloadUrl"
-          [buildArchiveUrl]="store.buildSystemArchiveUrl"
-        />
+        @switch (detailsPanelStage()) {
+          @case ('run') {
+            <app-details-run-panel />
+          }
+          @case ('preset') {
+            <app-details-task-panel kind="preset" />
+          }
+          @default {
+            <app-details-task-panel kind="extra" />
+          }
+        }
       </div>
     }
   </aside>

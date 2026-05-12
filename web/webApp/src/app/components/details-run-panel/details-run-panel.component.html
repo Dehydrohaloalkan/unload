@@ -1,0 +1,17 @@
+<p-tabs value="run">
+  <p-tablist>
+    <p-tab value="run">Запуск</p-tab>
+    <p-tab value="history">История</p-tab>
+  </p-tablist>
+
+  <p-tabpanels>
+    <p-tabpanel value="run">
+      <app-member-selection-list />
+      <app-active-run-view />
+    </p-tabpanel>
+
+    <p-tabpanel value="history">
+      <app-run-history-list />
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>

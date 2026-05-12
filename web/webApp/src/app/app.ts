@@ -1,22 +1,22 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Button } from 'primeng/button';
 import { Dialog } from 'primeng/dialog';
 import { InputText } from 'primeng/inputtext';
 import { Message } from 'primeng/message';
 import { ProgressSpinner } from 'primeng/progressspinner';
+import { AppErrorStore } from './app.error-store';
+import { WorkflowStore } from './app.store';
+import { DetailsRunPanelComponent } from './components/details-run-panel/details-run-panel.component';
+import { DetailsTaskPanelComponent } from './components/details-task-panel.component';
+import { DownloadHintToastComponent } from './components/download-hint-toast.component';
 import { ExtraCardComponent } from './components/extra-card.component';
-import { DetailsExtraPanelComponent } from './components/details-extra-panel.component';
-import { DetailsPresetPanelComponent } from './components/details-preset-panel.component';
-import { DetailsRunPanelComponent } from './components/details-run-panel.component';
 import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
-import { DownloadHintToastComponent } from './components/download-hint-toast.component';
-import { AppErrorStore } from './app.error-store';
-import { MemberGroupViewModel, MemberViewModel, TaskRecord } from './app.models';
-import { WorkflowStore } from './app.store';
+
+type DrawerStage = 'run' | 'preset' | 'extra';
 
 @Component({
   selector: 'app-root',
@@ -30,13 +30,12 @@ import { WorkflowStore } from './app.store';
     Message,
     ProgressSpinner,
     DetailsRunPanelComponent,
-    DetailsPresetPanelComponent,
-    DetailsExtraPanelComponent,
+    DetailsTaskPanelComponent,
+    DownloadHintToastComponent,
     ExtraCardComponent,
     LiveClockComponent,
     PresetStageComponent,
     RunCardComponent,
-    DownloadHintToastComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -44,12 +43,51 @@ import { WorkflowStore } from './app.store';
 export class App {
   readonly store = inject(WorkflowStore);
   readonly appErrorStore = inject(AppErrorStore);
+
+  readonly detailsPanelOpen = signal(false);
+  readonly detailsPanelStage = signal<DrawerStage>('run');
+
   adminDialogVisible = false;
   adminPassword = '';
   adminError: string | null = null;
-  detailsPanelOpen = false;
-  detailsPanelStage: 'run' | 'preset' | 'extra' = 'run';
-  drawerMemberKey = signal<string | null>(null);
+
+  readonly probeCompleted = computed(() => {
+    const preset = this.store.presetState();
+    return (preset?.readyForPreset ?? false) || (preset?.presetCompleted ?? false);
+  });
+
+  readonly stage1CompletedAt = computed(() => {
+    const task = this.store.presetTask();
+    return task.result && task.completedAt ? task.completedAt : null;
+  });
+
+  readonly stage2CompletedAt = computed(() => {
+    const sorted = this.store
+      .todayHistory()
+      .filter((record) => record.taskCode === 'preset')
+      .sort(
+        (left, right) =>
+          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
+      );
+    return sorted[0]?.completedAt ?? null;
+  });
+
+  readonly dayWindowSummary = computed(() => {
+    const preset = this.store.presetState();
+    if (!preset) {
+      return 'Ожидание данных дневного окна.';
+    }
+    if (preset.presetCompleted) {
+      return 'Дневное окно активно: preset выполнен, этапы 2-4 доступны.';
+    }
+    if (preset.readyForPreset) {
+      return 'Проба успешна: можно запускать preset.';
+    }
+    if (preset.pollingStarted) {
+      return 'Идет проверка проб.';
+    }
+    return 'Ожидается начало дневного окна.';
+  });
 
   constructor() {
     this.store.init();
@@ -71,10 +109,7 @@ export class App {
 
   confirmAdminMode(): void {
     const now = new Date();
-    const expected = `${now.getHours().toString().padStart(2, '0')}${now
-      .getMinutes()
-      .toString()
-      .padStart(2, '0')}`;
+    const expected = `${pad2(now.getHours())}${pad2(now.getMinutes())}`;
     if (this.adminPassword !== expected) {
       this.adminError = 'Неверный пароль.';
       return;
@@ -86,144 +121,13 @@ export class App {
     this.adminError = null;
   }
 
-  openDetails(stage: 'run' | 'preset' | 'extra'): void {
-    this.detailsPanelStage = stage;
-    this.detailsPanelOpen = true;
-    this.drawerMemberKey.set(null);
+  openDetails(stage: DrawerStage): void {
+    this.detailsPanelStage.set(stage);
+    this.detailsPanelOpen.set(true);
   }
 
   closeDetails(): void {
-    this.detailsPanelOpen = false;
-  }
-
-  detailRecords(taskCode: 'run' | 'preset' | 'extra'): TaskRecord[] {
-    return this.store
-      .todayHistory()
-      .filter((record) => record.taskCode === taskCode)
-      .sort(
-        (left, right) =>
-          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
-      );
-  }
-
-  formatTimestamp(value: string): string {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ru-RU');
-  }
-
-  dayWindowSummary(): string {
-    const preset = this.store.presetState();
-    if (!preset) {
-      return 'Ожидание данных дневного окна.';
-    }
-
-    if (preset.presetCompleted) {
-      return 'Дневное окно активно: preset выполнен, этапы 2-4 доступны.';
-    }
-
-    if (preset.readyForPreset) {
-      return 'Проба успешна: можно запускать preset.';
-    }
-
-    if (preset.pollingStarted) {
-      return 'Идет проверка проб.';
-    }
-
-    return 'Ожидается начало дневного окна.';
-  }
-
-  stage1CompletedAt(): string | null {
-    const task = this.store.presetTask();
-    if (task.result && task.completedAt) {
-      return task.completedAt;
-    }
-
-    return null;
-  }
-
-  stage1StatusClass(): string {
-    return this.store.presetState()?.presetCompleted ? 'stage1-status--ok' : 'stage1-status--fail';
-  }
-
-  stage2CompletedAt(): string | null {
-    const last = this.store
-      .todayHistory()
-      .filter((record) => record.taskCode === 'preset')
-      .sort(
-        (left, right) =>
-          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
-      )[0];
-    return last?.completedAt ?? null;
-  }
-
-  allMembersSelected(): boolean {
-    const groups = this.store.memberGroups();
-    const total = groups.reduce((sum, group) => sum + group.members.length, 0);
-    return total > 0 && this.store.selectedCount() === total;
-  }
-
-  allMembersPartial(): boolean {
-    const groups = this.store.memberGroups();
-    const total = groups.reduce((sum, group) => sum + group.members.length, 0);
-    const selected = this.store.selectedCount();
-    return total > 0 && selected > 0 && selected < total;
-  }
-
-  setAllMembersSelection(selected: boolean): void {
-    if (selected) {
-      this.store.selectAllMembers();
-      return;
-    }
-
-    this.store.clearMemberSelection();
-  }
-
-  groupAllSelected(group: MemberGroupViewModel): boolean {
-    return group.members.length > 0 && group.members.every((member) => member.selected);
-  }
-
-  groupPartial(group: MemberGroupViewModel): boolean {
-    const selectedCount = group.members.filter((member) => member.selected).length;
-    return selectedCount > 0 && selectedCount < group.members.length;
-  }
-
-  setGroupSelection(group: MemberGroupViewModel, selected: boolean): void {
-    for (const member of group.members) {
-      this.store.toggleMember(member.targetCodes, selected);
-    }
-  }
-
-  onToggleGroupFromDetails(groupId: number, selected: boolean): void {
-    const group = this.store.memberGroups().find((item) => item.id === groupId);
-    if (!group) {
-      return;
-    }
-
-    this.setGroupSelection(group, selected);
-  }
-
-  selectDrawerMember(memberKey: string): void {
-    this.drawerMemberKey.set(this.drawerMemberKey() === memberKey ? null : memberKey);
-  }
-
-  selectedDrawerMember(): MemberViewModel | null {
-    const memberKey = this.drawerMemberKey();
-    if (!memberKey) {
-      return null;
-    }
-
-    for (const group of this.store.memberGroups()) {
-      const member = group.members.find((item) => item.key === memberKey);
-      if (member) {
-        return member;
-      }
-    }
-
-    return null;
-  }
-
-  startSelectedRunFromDrawer(): void {
-    void this.store.startRunAsync();
+    this.detailsPanelOpen.set(false);
   }
 
   startRunFromMainCard(): void {
@@ -236,12 +140,8 @@ export class App {
     this.store.setPublishExtraToMq(true);
     void this.store.runExtraAsync();
   }
+}
 
-  extraHistoryRecords(): TaskRecord[] {
-    return this.detailRecords('extra');
-  }
-
-  presetHistoryRecords(): TaskRecord[] {
-    return this.detailRecords('preset');
-  }
+function pad2(value: number): string {
+  return value.toString().padStart(2, '0');
 }

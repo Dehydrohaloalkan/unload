@@ -1,0 +1,121 @@
+:host {
+  display: block;
+}
+
+.details-group {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.75rem;
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.details-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.45rem;
+  padding-left: 0.1rem;
+}
+
+.member-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 0.55rem;
+  padding: 0.3rem 0.35rem;
+  background: #fff;
+}
+
+.member-card--active {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.member-card--border-blue {
+  border-color: rgba(59, 130, 246, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.member-card--border-red {
+  border-color: rgba(239, 68, 68, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.15);
+}
+
+.member-card--border-green {
+  border-color: rgba(34, 197, 94, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.15);
+}
+
+.member-card--border-yellow {
+  border-color: rgba(234, 179, 8, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.15);
+}
+
+.member-card__check {
+  margin: 0;
+}
+
+.member-card__button {
+  width: 100%;
+  padding: 0.2rem 0.3rem;
+}
+
+.member-card__details {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  margin-top: 0.15rem;
+  padding: 0.45rem 0.2rem 0.1rem;
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-size: 0.8rem;
+}
+
+.member-card__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.member-card__meta-label {
+  color: #64748b;
+}
+
+.member-card__meta-value {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
+
+.member-card__targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.member-card__chip {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  background: #fff;
+  color: #1e3a8a;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+}
+
+.member-link {
+  border: none;
+  background: transparent;
+  text-align: left;
+  color: #334155;
+  font-size: 0.82rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.member-link:hover {
+  background: rgba(226, 232, 240, 0.6);
+}

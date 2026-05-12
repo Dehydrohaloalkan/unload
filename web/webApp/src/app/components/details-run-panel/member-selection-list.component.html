@@ -1,0 +1,95 @@
+<div class="details-section">
+  <div class="details-section__title">Мемберы для выгрузки</div>
+
+  <label class="details-check-row">
+    <p-checkbox
+      binary="true"
+      [ngModel]="store.publishRunToMq()"
+      (onChange)="setPublishToMq($event.checked)"
+    />
+    <span>Отправлять в очередь (MQ)</span>
+  </label>
+
+  <label class="details-check-row">
+    <p-checkbox
+      binary="true"
+      [ngModel]="allMembersSelected()"
+      [indeterminate]="allMembersPartial()"
+      (onChange)="toggleAll($event.checked)"
+    />
+    <span>Выбрать все</span>
+  </label>
+
+  @for (group of store.memberGroups(); track group.id) {
+    <div class="details-group">
+      <label class="details-check-row details-check-row--group">
+        <p-checkbox
+          binary="true"
+          [ngModel]="groupAllSelected(group)"
+          [indeterminate]="groupPartial(group)"
+          (onChange)="toggleGroup(group, $event.checked)"
+        />
+        <span>{{ group.name }}</span>
+      </label>
+
+      <div class="details-members">
+        @for (member of group.members; track member.key) {
+          <div
+            class="member-card"
+            [class.member-card--active]="selectedMemberKey() === member.key"
+            [ngClass]="memberCardBorderClass(member)"
+          >
+            <label class="details-check-row member-card__check">
+              <p-checkbox
+                binary="true"
+                [ngModel]="member.selected"
+                (onChange)="toggleMember(member, $event.checked)"
+              />
+            </label>
+            <button
+              type="button"
+              class="member-link member-card__button"
+              (click)="selectMember(member.key)"
+            >
+              {{ member.name }}
+            </button>
+
+            @if (selectedMemberKey() === member.key) {
+              <div class="member-card__details">
+                <div class="member-card__meta">
+                  <span class="member-card__meta-label">Код</span>
+                  <span class="member-card__meta-value">{{ member.memberCode }}</span>
+                </div>
+                <div class="member-card__meta">
+                  <span class="member-card__meta-label">Расширение</span>
+                  <span class="member-card__meta-value">{{
+                    member.memberFileExtension || '—'
+                  }}</span>
+                </div>
+                @if (memberLastUploadToday(member); as lastUpload) {
+                  <div class="member-card__meta">
+                    <span class="member-card__meta-label">Последняя выгрузка сегодня</span>
+                    <span class="member-card__meta-value">{{ formatTimestamp(lastUpload) }}</span>
+                  </div>
+                }
+                <div class="member-card__targets">
+                  @for (targetCode of member.targetCodes; track targetCode) {
+                    <span class="member-card__chip">{{ targetCode }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <p-button
+    label="Выгрузить выбранное"
+    icon="app-icon app-icon--play"
+    [fluid]="true"
+    [disabled]="!store.canStartRun()"
+    (onClick)="startSelected()"
+  />
+</div>

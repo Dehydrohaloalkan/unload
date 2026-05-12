@@ -1,0 +1,106 @@
+<div class="details-section">
+  <div class="details-section__title">Повторная отправка в MQ</div>
+
+  @if (historyNodes().length === 0) {
+    <div class="details-empty">История выгрузок пуста.</div>
+  } @else {
+    <div class="history-runs">
+      @for (node of historyNodes(); track node.key) {
+        <details class="history-run" (toggle)="onHistoryRunToggle($event, node.key)">
+          <summary class="history-run__summary">
+            <span class="history-run__title">
+              {{ node.taskCode === 'run' ? 'Выгрузка' : 'Доп. выгрузка' }} ·
+              {{ node.correlationId }}
+              <span
+                class="history-run__mq-badge"
+                [class.history-run__mq-badge--on]="node.publishToMq"
+                [class.history-run__mq-badge--off]="!node.publishToMq"
+                >{{ node.publishToMq ? 'MQ' : 'без MQ' }}</span
+              >
+            </span>
+            <span class="history-run__meta">
+              <span>{{ node.status }}</span>
+              <span>Начало: {{ formatTimestamp(node.startedAt) }}</span>
+              <span>Окончание: {{ formatTimestamp(node.completedAt) }}</span>
+            </span>
+          </summary>
+
+          @if (isHistoryRunOpen(node.key)) {
+            <div class="history-run__body">
+              <div class="history-members">
+                @for (member of historyMembers(node); track member.key) {
+                  <details
+                    class="history-member"
+                    (toggle)="onHistoryMemberToggle($event, member.key)"
+                  >
+                    <summary class="history-member__summary">
+                      <span>{{ member.memberName }}</span>
+                      <span>{{ formatFileCount(member.files.length) }}</span>
+                    </summary>
+                    @if (isHistoryMemberOpen(member.key)) {
+                      <div class="history-member__body">
+                        @if (member.files.length === 0) {
+                          <div class="details-empty">0 файлов.</div>
+                        } @else {
+                          @for (file of member.files; track file.key) {
+                            <label class="history-member-file">
+                              <p-checkbox
+                                binary="true"
+                                [ngModel]="isHistoryFileSelected(file.key)"
+                                (onChange)="toggleHistoryFile(file, $event.checked)"
+                              />
+                              <a
+                                class="history-file-link"
+                                [href]="buildDownloadUrl(file.filePath)"
+                                [attr.download]="file.fileName"
+                                (click)="onDownloadClick()"
+                                >{{ file.fileName }}</a
+                              >
+                            </label>
+                          }
+                        }
+                      </div>
+                    }
+                  </details>
+                }
+              </div>
+            </div>
+          }
+        </details>
+      }
+    </div>
+  }
+
+  <p-button
+    label="Отправить выбранные в MQ"
+    icon="app-icon app-icon--play"
+    [fluid]="true"
+    [loading]="store.requeueRunning()"
+    [disabled]="!canRequeue() || store.requeueRunning()"
+    (onClick)="confirmRequeue()"
+  />
+
+  @if (store.requeueResult(); as result) {
+    <div class="details-item__message">
+      @if (requeueFileSummary(result); as summary) {
+        MQ: отправлено файлов {{ summary.sent }} из {{ summary.total }}, не отправлено
+        {{ summary.notSent }} (requestId: {{ result.requestId }})
+      }
+    </div>
+    @for (item of result.results; track item.correlationId) {
+      @for (batch of item.batches; track batch.batchId) {
+        <div class="details-item__row">
+          <span class="details-item__label">{{ item.taskCode }} · {{ item.correlationId }}</span>
+          <span class="details-item__value">
+            {{ batch.memberName }}: {{ resolveSenderStatusLabel(batch.status) }}
+            @if (batch.message) {
+              · {{ batch.message }}
+            }
+          </span>
+        </div>
+      }
+    }
+  }
+</div>
+
+<p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }" />
