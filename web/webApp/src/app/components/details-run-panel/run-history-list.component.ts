@@ -10,6 +10,7 @@ import {
   RequeueToMqResponse,
   RunStatusInfo,
   SenderBatchStatus,
+  SenderFileDispatchStateInfo,
 } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
@@ -31,6 +32,7 @@ type HistoryFileRow = {
   fileName: string;
   filePath: string;
   occurredAt: string;
+  sentToMq: boolean;
 };
 
 type HistoryRunNode = {
@@ -278,6 +280,9 @@ export class RunHistoryListComponent {
       const correlationId = record.correlationId;
       const memberMap = new Map<string, HistoryFileRow[]>();
       const files = this.store.outputFilesByPath()?.[record.outputPath] ?? [];
+      const extraRun = this.store.allTodayRuns().find(
+        (r) => (r.correlationId ?? '').trim() === correlationId,
+      );
 
       for (const file of files) {
         const memberName = memberNameFromFile(file.fileName);
@@ -290,6 +295,7 @@ export class RunHistoryListComponent {
           fileName: file.fileName,
           filePath: file.filePath,
           occurredAt: file.modifiedAt || record.completedAt,
+          sentToMq: this.resolveFileSentToMq(file.filePath, memberName, extraRun?.senderBatches ?? null),
         });
         memberMap.set(memberName, bucket);
       }
@@ -330,10 +336,32 @@ export class RunHistoryListComponent {
         fileName: artifact.fileName,
         filePath: artifact.filePath,
         occurredAt: artifact.occurredAt || run.updatedAt,
+        sentToMq: this.resolveFileSentToMq(artifact.filePath, memberName, run.senderBatches),
       });
       memberMap.set(memberName, bucket);
     }
     return memberMap;
+  }
+
+  private resolveFileSentToMq(
+    filePath: string,
+    memberName: string,
+    senderBatches: RunStatusInfo['senderBatches'],
+  ): boolean {
+    const key = memberName.toLowerCase();
+    const batch = Object.values(senderBatches ?? {}).find(
+      (b) => b.memberName.toLowerCase() === key,
+    );
+    if (!batch) {
+      return false;
+    }
+    return this.isFileSentToMqPath(filePath, batch.sentFiles);
+  }
+
+  private isFileSentToMqPath(filePath: string, sentFiles: SenderFileDispatchStateInfo[]): boolean {
+    const normalize = (v: string) => v.trim().toLowerCase().replaceAll('\\', '/');
+    const target = normalize(filePath);
+    return sentFiles.some((f) => normalize(f.filePath) === target);
   }
 
   private runMemberNames(run: RunStatusInfo, knownMemberNames: string[]): string[] {

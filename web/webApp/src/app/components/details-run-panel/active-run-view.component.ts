@@ -111,8 +111,7 @@ export class ActiveRunViewComponent {
   resolveMemberEffectiveStatusLabel(run: RunStatusInfo, member: MemberRunStatusInfo): string {
     const batch = this.senderBatchForMember(run, member.memberName);
     if (!batch) {
-      const runTerminal = isTerminalRunStatus(run.status);
-      if (runTerminal && member.status === MemberRunLifecycleStatus.Running) {
+      if (member.status === MemberRunLifecycleStatus.Running && member.lastStep != null) {
         return resolveRunnerStepLabel(member.lastStep);
       }
       return resolveMemberStatusLabel(member.status);

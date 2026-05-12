@@ -85,6 +85,7 @@ export class WorkflowStore {
   readonly extraLastCompletedAt = this.dashboardStore.extraLastCompletedAt;
   readonly todayHistory = this.dashboardStore.todayHistory;
   readonly todayRuns = this.dashboardStore.todayRuns;
+  readonly allTodayRuns = this.dashboardStore.allTodayRuns;
 
   readonly buildSystemDownloadUrl = this.api.buildDownloadUrl;
   readonly buildSystemArchiveUrl = this.api.buildArchiveUrl;

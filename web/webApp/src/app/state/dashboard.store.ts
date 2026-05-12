@@ -22,6 +22,8 @@ export class DashboardStore {
   readonly extraLastCompletedAt = signal<string | null>(null);
   readonly todayHistory = signal<TaskRecord[]>([]);
   readonly todayRuns = signal<RunStatusInfo[]>([]);
+  /** All runs returned by the API today, unfiltered (includes extra runs). */
+  readonly allTodayRuns = signal<RunStatusInfo[]>([]);
 
   applySnapshot(snapshot: WorkflowDashboardSnapshotResponse): void {
     this.hasRunToday.set(Boolean(snapshot.hasRunToday));
@@ -35,6 +37,7 @@ export class DashboardStore {
   }
 
   applyTodayRuns(runs: RunStatusInfo[]): void {
+    this.allTodayRuns.set(runs ?? []);
     const filtered = runs.filter(isMainRunHistoryEntry);
     this.todayRuns.set(filtered);
     this.recalculateFromRuns(filtered);

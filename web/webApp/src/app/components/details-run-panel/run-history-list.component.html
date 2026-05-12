@@ -56,6 +56,14 @@
                                 (click)="onDownloadClick()"
                                 >{{ file.fileName }}</a
                               >
+                              @if (file.occurredAt) {
+                                <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
+                              }
+                              @if (file.sentToMq) {
+                                <span class="history-file__mq history-file__mq--sent" title="Отправлено в MQ">MQ ✓</span>
+                              } @else {
+                                <span class="history-file__mq history-file__mq--pending" title="Не отправлено в MQ">MQ —</span>
+                              }
                             </label>
                           }
                         }
