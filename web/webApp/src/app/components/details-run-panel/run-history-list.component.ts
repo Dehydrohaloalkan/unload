@@ -77,6 +77,9 @@ export class RunHistoryListComponent {
   readonly historyNodes = computed(() => this.buildHistoryNodes());
   readonly canRequeue = computed(() => this.selectedHistoryFiles().length > 0);
 
+  /** Snapshot of selected files captured at the moment requeue was initiated. */
+  private readonly requeueSnapshot = signal<HistoryFileRow[] | null>(null);
+
   private readonly openHistoryRuns = signal(new Set<string>());
   private readonly openHistoryMembers = signal(new Set<string>());
 
@@ -217,6 +220,8 @@ export class RunHistoryListComponent {
   }
 
   private emitRequeue(): void {
+    this.requeueSnapshot.set([...this.selectedHistoryFiles()]);
+
     const grouped = new Map<
       string,
       { taskCode: HistoryTaskCode; correlationId: string; filePaths: Set<string> }
@@ -248,6 +253,11 @@ export class RunHistoryListComponent {
   }
 
   private buildHistoryNodes(): HistoryRunNode[] {
+    const confirmedSentPaths = this.buildConfirmedSentPaths(
+      this.store.requeueResult(),
+      this.requeueSnapshot(),
+    );
+
     const nodeMap = new Map<string, HistoryRunNode>();
     const knownMemberNames = this.store.historyMemberNames();
 
@@ -257,7 +267,7 @@ export class RunHistoryListComponent {
         continue;
       }
 
-      const memberMap = this.buildRunMemberFiles(run, correlationId);
+      const memberMap = this.buildRunMemberFiles(run, correlationId, confirmedSentPaths);
       nodeMap.set(`run|${correlationId}`, {
         key: `run|${correlationId}`,
         taskCode: 'run',
@@ -295,7 +305,9 @@ export class RunHistoryListComponent {
           fileName: file.fileName,
           filePath: file.filePath,
           occurredAt: file.modifiedAt || record.completedAt,
-          sentToMq: this.resolveFileSentToMq(file.filePath, memberName, extraRun?.senderBatches ?? null),
+          sentToMq:
+            confirmedSentPaths.has(file.filePath) ||
+            this.resolveFileSentToMq(file.filePath, memberName, extraRun?.senderBatches ?? null),
         });
         memberMap.set(memberName, bucket);
       }
@@ -320,7 +332,11 @@ export class RunHistoryListComponent {
     );
   }
 
-  private buildRunMemberFiles(run: RunStatusInfo, correlationId: string) {
+  private buildRunMemberFiles(
+    run: RunStatusInfo,
+    correlationId: string,
+    confirmedSentPaths: Set<string>,
+  ) {
     const memberMap = new Map<string, HistoryFileRow[]>();
     for (const artifact of run.outputArtifacts ?? []) {
       if (!artifact.filePath || !artifact.fileName) {
@@ -336,11 +352,56 @@ export class RunHistoryListComponent {
         fileName: artifact.fileName,
         filePath: artifact.filePath,
         occurredAt: artifact.occurredAt || run.updatedAt,
-        sentToMq: this.resolveFileSentToMq(artifact.filePath, memberName, run.senderBatches),
+        sentToMq:
+          confirmedSentPaths.has(artifact.filePath) ||
+          this.resolveFileSentToMq(artifact.filePath, memberName, run.senderBatches),
       });
       memberMap.set(memberName, bucket);
     }
     return memberMap;
+  }
+
+  /**
+   * Builds the set of file paths confirmed as sent based on the requeue API response
+   * and the files that were selected at the time of requeue.
+   * A file is considered sent if its member's batch was accepted (not Failed).
+   */
+  private buildConfirmedSentPaths(
+    result: RequeueToMqResponse | null,
+    snapshot: HistoryFileRow[] | null,
+  ): Set<string> {
+    if (!result?.results?.length || !snapshot?.length) {
+      return new Set();
+    }
+
+    const sentPaths = new Set<string>();
+
+    for (const itemResult of result.results) {
+      const acceptedMembers = new Set(
+        (itemResult.batches ?? [])
+          .filter((b) => b.status !== SenderBatchStatus.Failed)
+          .map((b) => (b.memberName ?? '').trim().toLowerCase())
+          .filter((n) => n.length > 0),
+      );
+      if (acceptedMembers.size === 0) {
+        continue;
+      }
+
+      const corrId = (itemResult.correlationId ?? '').trim();
+      const code = (itemResult.taskCode ?? '').trim().toLowerCase() as HistoryTaskCode;
+
+      for (const row of snapshot) {
+        if (
+          row.correlationId === corrId &&
+          row.taskCode === code &&
+          acceptedMembers.has((row.memberName ?? '').trim().toLowerCase())
+        ) {
+          sentPaths.add(row.filePath);
+        }
+      }
+    }
+
+    return sentPaths;
   }
 
   private resolveFileSentToMq(
