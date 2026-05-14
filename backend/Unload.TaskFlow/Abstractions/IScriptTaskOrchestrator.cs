@@ -18,5 +18,5 @@ public interface IScriptTaskOrchestrator
     /// </summary>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Результат запуска доп-выгрузки скриптов.</returns>
-    Task<ScriptTaskRunResult> RunExtraAsync(bool publishToMq, CancellationToken cancellationToken);
+    Task<ScriptTaskRunResult> RunExtraAsync(bool publishToGateway, CancellationToken cancellationToken);
 }

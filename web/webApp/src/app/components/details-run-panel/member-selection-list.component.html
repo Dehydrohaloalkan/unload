@@ -4,10 +4,10 @@
   <label class="details-check-row">
     <p-checkbox
       binary="true"
-      [ngModel]="store.publishRunToMq()"
-      (onChange)="setPublishToMq($event.checked)"
+      [ngModel]="store.publishRunToGateway()"
+      (onChange)="setPublishToGateway($event.checked)"
     />
-    <span>Отправлять в очередь (MQ)</span>
+    <span>Отправлять в шлюз</span>
   </label>
 
   <label class="details-check-row">

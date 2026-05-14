@@ -1,9 +1,9 @@
 namespace Unload.Core;
 
 /// <summary>
-/// Контракт публикации сообщений в транспорт MQ.
+/// Контракт публикации сообщений в шлюз отправки.
 /// </summary>
-public interface IMqPublisher
+public interface IGatewayPublisher
 {
     Task PublishFileBatchReadyAsync(SenderFileBatchReadyEvent @event, CancellationToken cancellationToken);
 

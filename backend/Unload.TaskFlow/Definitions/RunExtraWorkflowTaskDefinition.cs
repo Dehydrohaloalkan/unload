@@ -35,7 +35,7 @@ public class RunExtraWorkflowTaskDefinition(
         {
             var result = await _taskAccessService.ExecuteExclusiveAsync(
                 WorkflowTaskCodes.Extra,
-                () => _scriptTaskOrchestrator.RunExtraAsync(request.PublishToMq, cancellationToken),
+                () => _scriptTaskOrchestrator.RunExtraAsync(request.PublishToGateway, cancellationToken),
                 markCompletedOnSuccess: true,
                 request.AdminOverride,
                 cancellationToken);

@@ -18,15 +18,15 @@ public class SystemController(
     IGetServerTimeUseCase getServerTimeUseCase,
     UnloadRuntimePaths runtimePaths,
     IOutputFilesService outputFilesService,
-    IMqSenderFeedbackConsumer mqSenderFeedbackConsumer,
-    IMqPublisher mqPublisher,
+    IGatewaySenderFeedbackConsumer gatewaySenderFeedbackConsumer,
+    IGatewayPublisher gatewayPublisher,
     ILogger<SystemController> logger) : ControllerBase
 {
     private readonly IGetServerTimeUseCase _getServerTimeUseCase = getServerTimeUseCase;
     private readonly UnloadRuntimePaths _runtimePaths = runtimePaths;
     private readonly IOutputFilesService _outputFilesService = outputFilesService;
-    private readonly IMqSenderFeedbackConsumer _mqSenderFeedbackConsumer = mqSenderFeedbackConsumer;
-    private readonly IMqPublisher _mqPublisher = mqPublisher;
+    private readonly IGatewaySenderFeedbackConsumer _gatewaySenderFeedbackConsumer = gatewaySenderFeedbackConsumer;
+    private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
     private readonly ILogger<SystemController> _logger = logger;
 
     /// <summary>
@@ -69,7 +69,7 @@ public class SystemController(
                 "VALIDATION_ERROR")
         };
 
-        await _mqSenderFeedbackConsumer.ConsumeAsync(
+        await _gatewaySenderFeedbackConsumer.ConsumeAsync(
             new SenderFileDispatchFeedback(
                 OccurredAt: DateTimeOffset.UtcNow,
                 CorrelationId: request.CorrelationId.Trim(),
@@ -86,9 +86,9 @@ public class SystemController(
     /// <summary>
     /// Загружает один или несколько файлов и публикует их как batch-ready событие в MQ.
     /// </summary>
-    [HttpPost("mq-upload")]
+    [HttpPost("gateway-upload")]
     [RequestSizeLimit(200 * 1024 * 1024)]
-    public async Task<IActionResult> UploadFilesToMq(
+    public async Task<IActionResult> UploadFilesToGateway(
         [FromForm(Name = "files")] List<IFormFile> files,
         [FromForm(Name = "memberName")] string? memberName,
         CancellationToken cancellationToken)
@@ -119,7 +119,7 @@ public class SystemController(
         var uploadRoot = Path.Combine(_runtimePaths.OutputDirectory, "_uploads", requestId);
         Directory.CreateDirectory(uploadRoot);
 
-        var results = new List<MqUploadFileResult>(files.Count);
+        var results = new List<GatewayUploadFileResult>(files.Count);
         var descriptors = new List<SenderFileDescriptor>(files.Count);
         var accepted = 0;
         var failed = 0;
@@ -131,7 +131,7 @@ public class SystemController(
             if (formFile is null || formFile.Length <= 0)
             {
                 failed++;
-                results.Add(new MqUploadFileResult(
+                results.Add(new GatewayUploadFileResult(
                     FileName: formFile?.FileName ?? "unknown",
                     SizeBytes: formFile?.Length ?? 0,
                     Status: "failed",
@@ -142,7 +142,7 @@ public class SystemController(
             if (formFile.Length > 100 * 1024 * 1024)
             {
                 failed++;
-                results.Add(new MqUploadFileResult(
+                results.Add(new GatewayUploadFileResult(
                     FileName: formFile.FileName,
                     SizeBytes: formFile.Length,
                     Status: "failed",
@@ -154,7 +154,7 @@ public class SystemController(
             if (string.IsNullOrWhiteSpace(safeName))
             {
                 failed++;
-                results.Add(new MqUploadFileResult(
+                results.Add(new GatewayUploadFileResult(
                     FileName: formFile.FileName ?? "unknown",
                     SizeBytes: formFile.Length,
                     Status: "failed",
@@ -176,7 +176,7 @@ public class SystemController(
                     FileName: info.Name,
                     SizeBytes: info.Length));
                 accepted++;
-                results.Add(new MqUploadFileResult(
+                results.Add(new GatewayUploadFileResult(
                     FileName: info.Name,
                     SizeBytes: info.Length,
                     Status: "accepted"));
@@ -184,7 +184,7 @@ public class SystemController(
             catch (Exception ex)
             {
                 failed++;
-                results.Add(new MqUploadFileResult(
+                results.Add(new GatewayUploadFileResult(
                     FileName: safeName,
                     SizeBytes: formFile.Length,
                     Status: "failed",
@@ -202,15 +202,15 @@ public class SystemController(
                 Version: 1,
                 Files: descriptors);
 
-            await _mqPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
+            await _gatewayPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
             _logger.LogInformation(
-                "MQ upload published. RequestId: {RequestId}, Files: {Files}, BatchId: {BatchId}",
+                "Gateway upload published. RequestId: {RequestId}, Files: {Files}, BatchId: {BatchId}",
                 requestId,
                 descriptors.Count,
                 batchId);
         }
 
-        return Ok(new MqUploadResponse(
+        return Ok(new GatewayUploadResponse(
             RequestId: requestId,
             CorrelationId: correlationId,
             MemberName: safeMemberName,

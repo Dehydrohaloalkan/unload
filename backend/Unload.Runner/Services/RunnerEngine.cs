@@ -16,21 +16,21 @@ public class RunnerEngine : IRunner
     private readonly ICatalogService _catalogService;
     private readonly IDatabaseClientFactory _databaseClientFactory;
     private readonly IFileChunkWriter _fileChunkWriter;
-    private readonly IMqPublisher _mqPublisher;
+    private readonly IGatewayPublisher _gatewayPublisher;
     private readonly RunnerOptions _options;
 
     public RunnerEngine(
         ICatalogService catalogService,
         IDatabaseClientFactory databaseClientFactory,
         IFileChunkWriter fileChunkWriter,
-        IMqPublisher mqPublisher,
+        IGatewayPublisher gatewayPublisher,
         RunnerOptions options)
     {
         RunnerEngineGuard.ValidateOptions(options);
         _catalogService = catalogService;
         _databaseClientFactory = databaseClientFactory;
         _fileChunkWriter = fileChunkWriter;
-        _mqPublisher = mqPublisher;
+        _gatewayPublisher = gatewayPublisher;
         _options = options;
     }
 
@@ -133,7 +133,7 @@ public class RunnerEngine : IRunner
                         reportRows,
                         memberChunkCounters,
                         remainingScriptsByMember,
-                        request.PublishToMq,
+                        request.PublishToGateway,
                         request.CorrelationId,
                         cancellationToken),
                     cancellationToken));
@@ -152,17 +152,17 @@ public class RunnerEngine : IRunner
                 $"Run completed successfully. Output: {runOutputDirectory}",
                 filePath: runOutputDirectory);
 
-            if (!request.PublishToMq)
+            if (!request.PublishToGateway)
             {
                 await eventEmitter.EmitAsync(
-                    RunnerStep.PublishedToMq,
-                    "MQ publish skipped by request (PublishToMq=false).");
+                    RunnerStep.PublishedToGateway,
+                    "Gateway publish skipped by request (PublishToGateway=false).");
                 return;
             }
 
             foreach (var batchEvent in senderBatchBuilder.BuildBatchEvents(request.CorrelationId))
             {
-                await _mqPublisher.PublishFileBatchReadyAsync(batchEvent, cancellationToken);
+                await _gatewayPublisher.PublishFileBatchReadyAsync(batchEvent, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -191,9 +191,9 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentDictionary<string, int> remainingScriptsByMember,
-        bool publishToMq,
-        string correlationId,
-        CancellationToken cancellationToken)
+                bool publishToGateway,
+                string correlationId,
+                CancellationToken cancellationToken)
     {
         var client = _databaseClientFactory.CreateClient();
         try
@@ -214,7 +214,7 @@ public class RunnerEngine : IRunner
                     reportRows,
                     memberChunkCounters,
                     remainingScriptsByMember,
-                    publishToMq,
+                    publishToGateway,
                     correlationId,
                     cancellationToken);
             }
@@ -238,7 +238,7 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentDictionary<string, int> remainingScriptsByMember,
-        bool publishToMq,
+        bool publishToGateway,
         string correlationId,
         CancellationToken cancellationToken)
     {
@@ -328,9 +328,9 @@ public class RunnerEngine : IRunner
             if (remaining == 0 &&
                 senderBatchBuilder.TryBuildMemberBatchEvent(correlationId, memberName, out var memberBatch))
             {
-                if (publishToMq)
+                if (publishToGateway)
                 {
-                    await _mqPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                    await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
                 }
             }
             else if (remaining == 0)

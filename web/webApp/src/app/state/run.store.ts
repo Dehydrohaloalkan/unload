@@ -12,7 +12,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ProblemDetailsResponse,
   RequeueItem,
-  RequeueToMqResponse,
+  RequeueToGatewayResponse,
   RunStatusInfo,
   RunnerEvent,
 } from '../app.models';
@@ -48,9 +48,9 @@ export class RunStore {
   readonly activeRun = signal<RunStatusInfo | null>(null);
   readonly trackedCorrelationId = signal<string | null>(null);
   readonly runEvents = signal<RunnerEvent[]>([]);
-  readonly publishRunToMq = signal(true);
+  readonly publishRunToGateway = signal(true);
   readonly requeueRunning = signal(false);
-  readonly requeueResult = signal<RequeueToMqResponse | null>(null);
+  readonly requeueResult = signal<RequeueToGatewayResponse | null>(null);
 
   readonly isRunBusy = computed(() => {
     const run = this.activeRun();
@@ -75,8 +75,8 @@ export class RunStore {
     this.destroyRef.onDestroy(() => this.stopPolling());
   }
 
-  setPublishRunToMq(enabled: boolean): void {
-    this.publishRunToMq.set(Boolean(enabled));
+  setPublishRunToGateway(enabled: boolean): void {
+    this.publishRunToGateway.set(Boolean(enabled));
   }
 
   applyInitialActiveRun(
@@ -117,7 +117,7 @@ export class RunStore {
         targetCodes: this.selection.selectedTargetCodes(),
         memberCodes: this.selection.resolveSelectedMemberCodes(this.catalog.catalog()),
         adminOverride: this.admin.adminMode(),
-        publishToMq: this.publishRunToMq(),
+        publishToGateway: this.publishRunToGateway(),
       });
 
       await this.adoptCorrelationId(response.correlationId);
@@ -146,7 +146,7 @@ export class RunStore {
     }
   }
 
-  async requeueToMqAsync(items: RequeueItem[]): Promise<void> {
+  async requeueToGatewayAsync(items: RequeueItem[]): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }
@@ -155,11 +155,11 @@ export class RunStore {
     this.requeueRunning.set(true);
     this.requeueResult.set(null);
     try {
-      const response = await this.api.requeueToMq(items);
+      const response = await this.api.requeueToGateway(items);
       this.requeueResult.set(response ?? null);
       await this.dashboard.refreshDashboardAsync();
     } catch (error) {
-      this.errorStore.setError(toErrorMessage(error, 'Не удалось отправить выбранное в MQ.'));
+      this.errorStore.setError(toErrorMessage(error, 'Не удалось отправить выбранное в шлюз.'));
     } finally {
       this.requeueRunning.set(false);
     }

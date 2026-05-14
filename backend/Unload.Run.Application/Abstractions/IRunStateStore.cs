@@ -14,7 +14,7 @@ public interface IRunStateStore
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды, связанные с запуском.</param>
     /// <param name="memberNames">Имена мемберов, выбранные для запуска.</param>
-    void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToMq = true);
+    void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToGateway = true);
 
     /// <summary>
     /// Помечает запуск как выполняющийся.

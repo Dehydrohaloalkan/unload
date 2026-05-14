@@ -7,7 +7,7 @@
     <Project Path="backend/Unload.Cryptography/Unload.Cryptography.csproj" />
     <Project Path="backend/Unload.DataBase/Unload.DataBase.csproj" />
     <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
-    <Project Path="backend/Unload.MQ/Unload.MQ.csproj" />
+    <Project Path="backend/Unload.Gateway/Unload.Gateway.csproj" />
     <Project Path="backend/Unload.Run.Application/Unload.Run.Application.csproj" />
     <Project Path="backend/Unload.Run.Runtime/Unload.Run.Runtime.csproj" />
     <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
@@ -18,6 +18,8 @@
   </Folder>
   <Folder Name="/console/">
     <Project Path="console/Unload.Console/Unload.Console.csproj" />
+    <Project Path="console/Unload.FtpServer/Unload.FtpServer.csproj" />
+    <Project Path="console/Unload.GatewayHandler/Unload.GatewayHandler.csproj" />
     <Project Path="console/Unload.WebConsole/Unload.WebConsole.csproj" />
   </Folder>
 </Solution>

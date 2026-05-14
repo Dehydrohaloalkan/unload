@@ -4,7 +4,8 @@ using Unload.Core;
 using Unload.Cryptography;
 using Unload.DataBase;
 using Unload.FileWriter;
-using Unload.MQ;
+using Microsoft.Extensions.Configuration;
+using Unload.Gateway;
 using Unload.Run.Application.DependencyInjection;
 using Unload.Run.Runtime.DependencyInjection;
 using Unload.Runner;
@@ -32,6 +33,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         UnloadRuntimePaths paths,
         DatabaseRuntimeSettings databaseSettings,
+        IConfiguration configuration,
         RunnerOptions? runnerOptions = null,
         PresetGateOptions? presetGateOptions = null)
     {
@@ -51,11 +53,12 @@ public static class ServiceCollectionExtensions
             databaseSettings.TimeoutSeconds,
             databaseSettings.ConnectionString));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
-        services.AddSingleton<InMemoryMqPublisher>();
-        services.AddSingleton<IMqPublisher>(static x => x.GetRequiredService<InMemoryMqPublisher>());
-        services.AddSingleton<IMqFileBatchSource>(static x => x.GetRequiredService<InMemoryMqPublisher>());
-        services.AddSingleton<IMqSenderFeedbackSource>(static x => x.GetRequiredService<InMemoryMqPublisher>());
-        services.AddHostedService<SenderStubMqBackgroundService>();
+        services.Configure<GatewayOptions>(configuration.GetSection(GatewayOptions.SectionName));
+        services.AddSingleton<FtpGatewayPublisher>();
+        services.AddSingleton<IGatewayPublisher>(static x => x.GetRequiredService<FtpGatewayPublisher>());
+        services.AddSingleton<IGatewayBatchSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
+        services.AddSingleton<IGatewaySenderFeedbackSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
+        services.AddHostedService<FtpGatewayBackgroundService>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
         services.AddSingleton<IWorkflowTaskDispatcher, WorkflowTaskDispatcher>();
         services.AddSingleton<IWorkflowTaskRegistry, WorkflowTaskRegistry>();

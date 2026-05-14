@@ -38,7 +38,7 @@ const RUNNER_STEP_LABELS: Record<RunnerStep, string> = {
   [RunnerStep.ChunkCreated]: 'Chunk created',
   [RunnerStep.FileWritten]: 'File written',
   [RunnerStep.ScriptCompleted]: 'Script completed',
-  [RunnerStep.PublishedToMq]: 'Published to MQ',
+  [RunnerStep.PublishedToGateway]: 'Опубликован в шлюз',
   [RunnerStep.Completed]: 'Completed',
   [RunnerStep.Failed]: 'Failed',
 };

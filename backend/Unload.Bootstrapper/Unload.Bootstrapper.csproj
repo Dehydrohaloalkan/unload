@@ -6,7 +6,7 @@
     <ProjectReference Include="..\Unload.Cryptography\Unload.Cryptography.csproj" />
     <ProjectReference Include="..\Unload.DataBase\Unload.DataBase.csproj" />
     <ProjectReference Include="..\Unload.FileWriter\Unload.FileWriter.csproj" />
-    <ProjectReference Include="..\Unload.MQ\Unload.MQ.csproj" />
+    <ProjectReference Include="..\Unload.Gateway\Unload.Gateway.csproj" />
     <ProjectReference Include="..\Unload.Run.Application\Unload.Run.Application.csproj" />
     <ProjectReference Include="..\Unload.Run.Runtime\Unload.Run.Runtime.csproj" />
     <ProjectReference Include="..\Unload.Runner\Unload.Runner.csproj" />

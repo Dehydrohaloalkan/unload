@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public interface IMqFileBatchSource
+public interface IGatewayBatchSource
 {
     IAsyncEnumerable<SenderFileBatchReadyEvent> ReadBatchReadyEventsAsync(CancellationToken cancellationToken);
 }

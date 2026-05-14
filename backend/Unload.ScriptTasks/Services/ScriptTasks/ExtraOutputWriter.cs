@@ -13,7 +13,7 @@ public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtr
         string baseOutputDirectory,
         string correlationId,
         ConcurrentDictionary<string, ConcurrentQueue<string>> aggregatedLines,
-        bool publishToMq,
+        bool publishToGateway,
         CancellationToken cancellationToken)
     {
         var runDirectory = CreateRunDirectory(baseOutputDirectory);
@@ -40,7 +40,7 @@ public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtr
             ];
         }
 
-        if (publishToMq)
+        if (publishToGateway)
         {
             foreach (var memberBatch in filesByMember)
             {

@@ -38,7 +38,7 @@ public class StartRunUseCase(
 
             var result = await _dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
                 WorkflowTaskCodes.Run,
-                new StartRunTaskRequest(selectedCodes, selectionMode, request.AdminOverride, request.PublishToMq),
+                new StartRunTaskRequest(selectedCodes, selectionMode, request.AdminOverride, request.PublishToGateway),
                 cancellationToken);
 
             _logger.LogInformation("Run accepted. CorrelationId: {CorrelationId}", result.CorrelationId);

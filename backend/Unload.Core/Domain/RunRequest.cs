@@ -11,4 +11,4 @@ public record RunRequest(
     IReadOnlyCollection<string> TargetCodes,
     string CorrelationId,
     string OutputDirectory,
-    bool PublishToMq = true);
+    bool PublishToGateway = true);

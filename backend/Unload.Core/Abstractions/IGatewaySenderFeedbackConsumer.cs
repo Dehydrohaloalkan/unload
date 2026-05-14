@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public interface IMqSenderFeedbackConsumer
+public interface IGatewaySenderFeedbackConsumer
 {
     Task ConsumeAsync(SenderFileDispatchFeedback feedback, CancellationToken cancellationToken);
 }

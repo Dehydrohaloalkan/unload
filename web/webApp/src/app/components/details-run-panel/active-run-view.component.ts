@@ -102,7 +102,7 @@ export class ActiveRunViewComponent {
     );
   }
 
-  isFileSentToMq(artifactPath: string, sentFiles: SenderFileDispatchStateInfo[]): boolean {
+  isFileSentToGateway(artifactPath: string, sentFiles: SenderFileDispatchStateInfo[]): boolean {
     const normalize = (value: string) => value.trim().toLowerCase().replaceAll('\\', '/');
     const target = normalize(artifactPath);
     return sentFiles.some((file) => normalize(file.filePath) === target);
@@ -129,7 +129,7 @@ export class ActiveRunViewComponent {
       return member.status === MemberRunLifecycleStatus.Failed ||
         member.status === MemberRunLifecycleStatus.Cancelled
         ? resolveMemberStatusLabel(member.status)
-        : 'Publishing to MQ';
+        : 'Публикация в шлюз';
     }
 
     return resolveMemberStatusLabel(member.status);

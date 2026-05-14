@@ -132,12 +132,12 @@ export class App {
 
   startRunFromMainCard(): void {
     this.store.selectAllMembers();
-    this.store.setPublishRunToMq(true);
+    this.store.setPublishRunToGateway(true);
     void this.store.startRunAsync();
   }
 
   startExtraFromMainCard(): void {
-    this.store.setPublishExtraToMq(true);
+    this.store.setPublishExtraToGateway(true);
     void this.store.runExtraAsync();
   }
 }

@@ -14,13 +14,13 @@ public class RunRequestFactory : IRunRequestFactory
     /// <param name="targetCodes">Target-коды для выполнения.</param>
     /// <param name="outputDirectory">Базовая директория вывода.</param>
     /// <returns>Новый объект запроса запуска.</returns>
-    public RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory, bool publishToMq = true)
+    public RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory, bool publishToGateway = true)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         return new RunRequest(
             targetCodes,
             CorrelationId: $"req-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{suffix}",
             OutputDirectory: outputDirectory,
-            PublishToMq: publishToMq);
+            PublishToGateway: publishToGateway);
     }
 }

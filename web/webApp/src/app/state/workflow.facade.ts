@@ -69,12 +69,12 @@ export class WorkflowStore {
   readonly presetState = this.presetStore.presetState;
   readonly presetTask = this.presetStore.presetTask;
   readonly extraTask = this.extraStore.extraTask;
-  readonly publishExtraToMq = this.extraStore.publishExtraToMq;
+  readonly publishExtraToGateway = this.extraStore.publishExtraToGateway;
 
   readonly activeRun = this.runStore.activeRun;
   readonly trackedCorrelationId = this.runStore.trackedCorrelationId;
   readonly runEvents = this.runStore.runEvents;
-  readonly publishRunToMq = this.runStore.publishRunToMq;
+  readonly publishRunToGateway = this.runStore.publishRunToGateway;
   readonly requeueRunning = this.runStore.requeueRunning;
   readonly requeueResult = this.runStore.requeueResult;
   readonly isRunBusy = this.runStore.isRunBusy;
@@ -161,12 +161,12 @@ export class WorkflowStore {
     this.selectionStore.clearAll();
   }
 
-  setPublishRunToMq(enabled: boolean): void {
-    this.runStore.setPublishRunToMq(enabled);
+  setPublishRunToGateway(enabled: boolean): void {
+    this.runStore.setPublishRunToGateway(enabled);
   }
 
-  setPublishExtraToMq(enabled: boolean): void {
-    this.extraStore.setPublishExtraToMq(enabled);
+  setPublishExtraToGateway(enabled: boolean): void {
+    this.extraStore.setPublishExtraToGateway(enabled);
   }
 
   setAdminMode(enabled: boolean): void {
@@ -195,8 +195,8 @@ export class WorkflowStore {
     return this.runStore.stopRunAsync();
   }
 
-  requeueToMqAsync(items: RequeueItem[]): Promise<void> {
-    return this.runStore.requeueToMqAsync(items);
+  requeueToGatewayAsync(items: RequeueItem[]): Promise<void> {
+    return this.runStore.requeueToGatewayAsync(items);
   }
 
   private async bootstrapAsync(): Promise<void> {

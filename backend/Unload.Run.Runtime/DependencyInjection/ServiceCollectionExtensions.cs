@@ -20,7 +20,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
         services.AddSingleton<IRunStateStore>(_ => new InMemoryRunStateStore(workerCount, stateFilePath));
-        services.AddSingleton<IMqSenderFeedbackConsumer, MqSenderFeedbackConsumer>();
+        services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
         return services;
     }
 }

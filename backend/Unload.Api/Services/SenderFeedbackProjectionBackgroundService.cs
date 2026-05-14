@@ -8,14 +8,14 @@ namespace Unload.Api.Services;
 /// Проецирует feedback sender-а в состояние run и уведомления SignalR.
 /// </summary>
 public class SenderFeedbackProjectionBackgroundService(
-    IMqSenderFeedbackSource feedbackSource,
-    IMqSenderFeedbackConsumer feedbackConsumer,
+    IGatewaySenderFeedbackSource feedbackSource,
+    IGatewaySenderFeedbackConsumer feedbackConsumer,
     IRunStateStore runStateStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<SenderFeedbackProjectionBackgroundService> logger) : BackgroundService
 {
-    private readonly IMqSenderFeedbackSource _feedbackSource = feedbackSource;
-    private readonly IMqSenderFeedbackConsumer _feedbackConsumer = feedbackConsumer;
+    private readonly IGatewaySenderFeedbackSource _feedbackSource = feedbackSource;
+    private readonly IGatewaySenderFeedbackConsumer _feedbackConsumer = feedbackConsumer;
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<SenderFeedbackProjectionBackgroundService> _logger = logger;

@@ -31,7 +31,7 @@
                       —
                     }
                     @if (senderBatchForMember(activeRun, memberName); as batch) {
-                      · MQ: {{ resolveSenderStatusLabel(batch.status) }}
+                      · Шлюз: {{ resolveSenderStatusLabel(batch.status) }}
                     }
                   </span>
                 </summary>
@@ -82,18 +82,18 @@
                             {{ artifact.fileName }}
                           </a>
                           @if (senderBatchForMember(activeRun, memberName); as batch) {
-                            @if (isFileSentToMq(artifact.filePath, batch.sentFiles)) {
+                            @if (isFileSentToGateway(artifact.filePath, batch.sentFiles)) {
                               <span class="active-file__badge active-file__badge--sent"
-                                >MQ: sent</span
+                                >Шлюз: отправлено</span
                               >
                             } @else {
                               <span class="active-file__badge active-file__badge--pending"
-                                >MQ: not sent</span
+                                >Шлюз: не отправлено</span
                               >
                             }
                           } @else {
                             <span class="active-file__badge active-file__badge--pending"
-                              >MQ: n/a</span
+                              >Шлюз: н/д</span
                             >
                           }
                         </div>

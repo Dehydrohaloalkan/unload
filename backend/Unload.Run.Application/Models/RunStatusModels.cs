@@ -113,4 +113,4 @@ public record RunStatusInfo(
     IReadOnlyCollection<RunOutputArtifactInfo>? OutputArtifacts = null,
     IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null,
     IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null,
-    bool PublishToMq = true);
+    bool PublishToGateway = true);

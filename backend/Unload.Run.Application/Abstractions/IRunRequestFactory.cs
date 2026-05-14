@@ -14,5 +14,5 @@ public interface IRunRequestFactory
     /// <param name="targetCodes">Нормализованные target-коды для запуска.</param>
     /// <param name="outputDirectory">Базовая директория, где нужно сохранять результаты.</param>
     /// <returns>Готовый запрос выполнения раннера.</returns>
-    RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory, bool publishToMq = true);
+    RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory, bool publishToGateway = true);
 }

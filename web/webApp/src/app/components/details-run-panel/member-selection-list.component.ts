@@ -101,8 +101,8 @@ export class MemberSelectionListComponent {
     this.selectedMemberKey.update((current) => (current === key ? null : key));
   }
 
-  setPublishToMq(checked: boolean): void {
-    this.store.setPublishRunToMq(checked);
+  setPublishToGateway(checked: boolean): void {
+    this.store.setPublishRunToGateway(checked);
   }
 
   startSelected(): void {

@@ -7,28 +7,28 @@ using Unload.Run.Application;
 
 namespace Unload.Api.UseCases;
 
-public class RequeueToMqUseCase(
+public class RequeueToGatewayUseCase(
     IRunStateStore runStateStore,
     ITaskExecutionHistoryStore taskExecutionHistoryStore,
-    IMqPublisher mqPublisher,
-    ILogger<RequeueToMqUseCase> logger) : IRequeueToMqUseCase
+    IGatewayPublisher gatewayPublisher,
+    ILogger<RequeueToGatewayUseCase> logger) : IRequeueToGatewayUseCase
 {
     private readonly IRunStateStore _runStateStore = runStateStore;
     private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
-    private readonly IMqPublisher _mqPublisher = mqPublisher;
-    private readonly ILogger<RequeueToMqUseCase> _logger = logger;
+    private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
+    private readonly ILogger<RequeueToGatewayUseCase> _logger = logger;
 
-    private static readonly ConcurrentDictionary<string, (DateTimeOffset SavedAt, RequeueToMqResponse Response)> IdempotencyCache =
+    private static readonly ConcurrentDictionary<string, (DateTimeOffset SavedAt, RequeueToGatewayResponse Response)> IdempotencyCache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public async Task<RequeueToMqResponse> ExecuteAsync(RequeueToMqRequest request, CancellationToken cancellationToken)
+    public async Task<RequeueToGatewayResponse> ExecuteAsync(RequeueToGatewayRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var items = request.Items ?? Array.Empty<RequeueItem>();
         if (items.Count == 0)
         {
-            return new RequeueToMqResponse(
+            return new RequeueToGatewayResponse(
                 RequestId: "empty",
                 AcceptedBatches: 0,
                 FailedBatches: 0,
@@ -61,7 +61,7 @@ public class RequeueToMqUseCase(
             totalFailed += itemResult.FailedBatches;
         }
 
-        var response = new RequeueToMqResponse(
+        var response = new RequeueToGatewayResponse(
             RequestId: requestId,
             AcceptedBatches: totalAccepted,
             FailedBatches: totalFailed,
@@ -153,7 +153,7 @@ public class RequeueToMqUseCase(
 
                 if (!dryRun)
                 {
-                    await _mqPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
+                    await _gatewayPublisher.PublishFileBatchReadyAsync(evt, cancellationToken);
                 }
 
                 accepted++;
@@ -161,7 +161,7 @@ public class RequeueToMqUseCase(
                     MemberName: memberName,
                     BatchId: batchId,
                     Status: SenderBatchStatus.Ready,
-                    Message: dryRun ? "Dry run: not published." : "Published to MQ."));
+                    Message: dryRun ? "Dry run: not published." : "Published to gateway."));
             }
 
             return new RequeueItemResult(
@@ -316,4 +316,3 @@ public class RequeueToMqUseCase(
         }
     }
 }
-

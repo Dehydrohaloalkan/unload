@@ -3,9 +3,9 @@ using Unload.ScriptTasks.Abstractions;
 
 namespace Unload.ScriptTasks;
 
-public class ScriptTaskEventPublisher(IMqPublisher mqPublisher) : IScriptTaskEventPublisher
+public class ScriptTaskEventPublisher(IGatewayPublisher gatewayPublisher) : IScriptTaskEventPublisher
 {
-    private readonly IMqPublisher _mqPublisher = mqPublisher;
+    private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
 
     public async Task PublishAsync(
         string correlationId,
@@ -33,6 +33,6 @@ public class ScriptTaskEventPublisher(IMqPublisher mqPublisher) : IScriptTaskEve
             BatchId: $"{correlationId}:{memberName}",
             Version: 1,
             Files: files);
-        return _mqPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
+        return _gatewayPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
     }
 }

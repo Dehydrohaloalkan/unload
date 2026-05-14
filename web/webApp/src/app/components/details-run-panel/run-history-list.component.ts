@@ -7,7 +7,7 @@ import { Checkbox } from 'primeng/checkbox';
 import { ConfirmDialog } from 'primeng/confirmdialog';
 import {
   RequeueItem,
-  RequeueToMqResponse,
+  RequeueToGatewayResponse,
   RunStatusInfo,
   SenderBatchStatus,
   SenderFileDispatchStateInfo,
@@ -32,7 +32,7 @@ type HistoryFileRow = {
   fileName: string;
   filePath: string;
   occurredAt: string;
-  sentToMq: boolean;
+  sentToGateway: boolean;
 };
 
 type HistoryRunNode = {
@@ -43,7 +43,7 @@ type HistoryRunNode = {
   startedAt: string;
   completedAt: string;
   occurredAt: string;
-  publishToMq: boolean;
+  publishToGateway: boolean;
   memberNames: string[];
   memberFiles: Record<string, HistoryFileRow[]>;
 };
@@ -158,14 +158,14 @@ export class RunHistoryListComponent {
 
     this.confirmationService.confirm({
       header: 'Подтверждение',
-      message: 'Отправить выбранные результаты в MQ?',
+      message: 'Отправить выбранные результаты в шлюз?',
       acceptLabel: 'Отправить',
       rejectLabel: 'Отмена',
       accept: () => this.emitRequeue(),
     });
   }
 
-  requeueFileSummary(result: RequeueToMqResponse): RequeueFileSummary {
+  requeueFileSummary(result: RequeueToGatewayResponse): RequeueFileSummary {
     const selected = this.selectedHistoryFiles();
     const total = selected.length;
     if (!result?.results || total === 0) {
@@ -248,7 +248,7 @@ export class RunHistoryListComponent {
     }));
 
     if (items.length > 0) {
-      void this.store.requeueToMqAsync(items);
+      void this.store.requeueToGatewayAsync(items);
     }
   }
 
@@ -276,7 +276,7 @@ export class RunHistoryListComponent {
         startedAt: run.createdAt,
         completedAt: run.updatedAt,
         occurredAt: run.updatedAt,
-        publishToMq: run.publishToMq ?? true,
+        publishToGateway: run.publishToGateway ?? true,
         memberNames: this.runMemberNames(run, knownMemberNames),
         memberFiles: Object.fromEntries(memberMap.entries()),
       });
@@ -305,9 +305,9 @@ export class RunHistoryListComponent {
           fileName: file.fileName,
           filePath: file.filePath,
           occurredAt: file.modifiedAt || record.completedAt,
-          sentToMq:
-            confirmedSentPaths.has(file.filePath) ||
-            this.resolveFileSentToMq(file.filePath, memberName, extraRun?.senderBatches ?? null),
+        sentToGateway:
+          confirmedSentPaths.has(file.filePath) ||
+          this.resolveFileSentToGateway(file.filePath, memberName, extraRun?.senderBatches ?? null),
         });
         memberMap.set(memberName, bucket);
       }
@@ -321,7 +321,7 @@ export class RunHistoryListComponent {
         startedAt: record.startedAt,
         completedAt: record.completedAt,
         occurredAt: record.completedAt,
-        publishToMq: false,
+        publishToGateway: false,
         memberNames: sortNames([...knownMemberNames, ...Object.keys(memberFiles)]),
         memberFiles,
       });
@@ -352,9 +352,9 @@ export class RunHistoryListComponent {
         fileName: artifact.fileName,
         filePath: artifact.filePath,
         occurredAt: artifact.occurredAt || run.updatedAt,
-        sentToMq:
+        sentToGateway:
           confirmedSentPaths.has(artifact.filePath) ||
-          this.resolveFileSentToMq(artifact.filePath, memberName, run.senderBatches),
+          this.resolveFileSentToGateway(artifact.filePath, memberName, run.senderBatches),
       });
       memberMap.set(memberName, bucket);
     }
@@ -367,7 +367,7 @@ export class RunHistoryListComponent {
    * A file is considered sent if its member's batch was accepted (not Failed).
    */
   private buildConfirmedSentPaths(
-    result: RequeueToMqResponse | null,
+    result: RequeueToGatewayResponse | null,
     snapshot: HistoryFileRow[] | null,
   ): Set<string> {
     if (!result?.results?.length || !snapshot?.length) {
@@ -404,7 +404,7 @@ export class RunHistoryListComponent {
     return sentPaths;
   }
 
-  private resolveFileSentToMq(
+  private resolveFileSentToGateway(
     filePath: string,
     memberName: string,
     senderBatches: RunStatusInfo['senderBatches'],
@@ -416,10 +416,10 @@ export class RunHistoryListComponent {
     if (!batch) {
       return false;
     }
-    return this.isFileSentToMqPath(filePath, batch.sentFiles);
+    return this.isFileSentToGatewayPath(filePath, batch.sentFiles);
   }
 
-  private isFileSentToMqPath(filePath: string, sentFiles: SenderFileDispatchStateInfo[]): boolean {
+  private isFileSentToGatewayPath(filePath: string, sentFiles: SenderFileDispatchStateInfo[]): boolean {
     const normalize = (v: string) => v.trim().toLowerCase().replaceAll('\\', '/');
     const target = normalize(filePath);
     return sentFiles.some((f) => normalize(f.filePath) === target);

@@ -23,15 +23,15 @@ export class ExtraStore {
   private readonly storage = browserStorage(this.browser);
 
   readonly extraTask = signal<TaskUiState>(createIdleTaskState());
-  readonly publishExtraToMq = signal(true);
+  readonly publishExtraToGateway = signal(true);
 
   restore(): void {
     const payload = readJson<Partial<TaskUiState>>(this.storage, EXTRA_TASK_STORAGE_KEY);
     this.extraTask.set(normalizeRestoredTaskState(payload));
   }
 
-  setPublishExtraToMq(enabled: boolean): void {
-    this.publishExtraToMq.set(Boolean(enabled));
+  setPublishExtraToGateway(enabled: boolean): void {
+    this.publishExtraToGateway.set(Boolean(enabled));
   }
 
   async runExtraAsync(): Promise<void> {
@@ -47,7 +47,7 @@ export class ExtraStore {
     });
 
     try {
-      const result = await this.api.runExtra(this.admin.adminMode(), this.publishExtraToMq());
+      const result = await this.api.runExtra(this.admin.adminMode(), this.publishExtraToGateway());
       this.updateTask({
         running: false,
         startedAt,

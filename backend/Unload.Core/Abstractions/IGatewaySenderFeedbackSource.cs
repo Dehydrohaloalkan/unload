@@ -1,6 +1,6 @@
 namespace Unload.Core;
 
-public interface IMqSenderFeedbackSource
+public interface IGatewaySenderFeedbackSource
 {
     IAsyncEnumerable<SenderFileDispatchFeedback> ReadSenderFeedbackAsync(CancellationToken cancellationToken);
 }

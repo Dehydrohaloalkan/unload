@@ -28,21 +28,21 @@ export function resolveMemberCardBorderClass(
   }
 
   const batch = findSenderBatchForMember(latestRun, member.name);
-  const sentToMq =
+  const sentToGateway =
     batch?.status === SenderBatchStatus.Completed || (batch?.sentFiles?.length ?? 0) > 0;
-  const mqFailed = batch?.status === SenderBatchStatus.Failed;
+  const gatewayFailed = batch?.status === SenderBatchStatus.Failed;
   const memberFailed = memberStatus?.status === MemberRunLifecycleStatus.Failed;
   const memberCancelled = memberStatus?.status === MemberRunLifecycleStatus.Cancelled;
 
-  if (memberCancelled && sentToMq) {
+  if (memberCancelled && sentToGateway) {
     return 'member-card--border-green';
   }
 
-  if (sentToMq && !memberFailed) {
+  if (sentToGateway && !memberFailed) {
     return 'member-card--border-green';
   }
 
-  if (memberFailed || mqFailed || memberCancelled) {
+  if (memberFailed || gatewayFailed || memberCancelled) {
     return 'member-card--border-red';
   }
 

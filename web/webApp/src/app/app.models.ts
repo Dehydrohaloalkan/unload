@@ -23,7 +23,7 @@ export enum RunnerStep {
   ChunkCreated = 5,
   FileWritten = 6,
   ScriptCompleted = 7,
-  PublishedToMq = 8,
+  PublishedToGateway = 8,
   Completed = 9,
   Failed = 10
 }
@@ -78,7 +78,7 @@ export interface RunStatusInfo {
   correlationId: string;
   taskCode: string;
   status: RunLifecycleStatus;
-  publishToMq: boolean;
+  publishToGateway: boolean;
   targetCodes: string[];
   createdAt: string;
   updatedAt: string;
@@ -193,7 +193,7 @@ export interface RequeueItem {
   filePaths?: string[] | null;
 }
 
-export interface RequeueToMqRequest {
+export interface RequeueToGatewayRequest {
   idempotencyKey?: string | null;
   items: RequeueItem[];
   dryRun?: boolean;
@@ -214,7 +214,7 @@ export interface RequeueItemResult {
   batches: RequeueBatchResult[];
 }
 
-export interface RequeueToMqResponse {
+export interface RequeueToGatewayResponse {
   requestId: string;
   acceptedBatches: number;
   failedBatches: number;

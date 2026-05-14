@@ -1,5 +1,5 @@
 <div class="details-section">
-  <div class="details-section__title">Повторная отправка в MQ</div>
+  <div class="details-section__title">Повторная отправка в шлюз</div>
 
   @if (historyNodes().length === 0) {
     <div class="details-empty">История выгрузок пуста.</div>
@@ -12,10 +12,10 @@
               {{ node.taskCode === 'run' ? 'Выгрузка' : 'Доп. выгрузка' }} ·
               {{ node.correlationId }}
               <span
-                class="history-run__mq-badge"
-                [class.history-run__mq-badge--on]="node.publishToMq"
-                [class.history-run__mq-badge--off]="!node.publishToMq"
-                >{{ node.publishToMq ? 'MQ' : 'без MQ' }}</span
+                class="history-run__gateway-badge"
+                [class.history-run__gateway-badge--on]="node.publishToGateway"
+                [class.history-run__gateway-badge--off]="!node.publishToGateway"
+                >{{ node.publishToGateway ? 'Шлюз' : 'без шлюза' }}</span
               >
             </span>
             <span class="history-run__meta">
@@ -59,10 +59,10 @@
                               @if (file.occurredAt) {
                                 <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
                               }
-                              @if (file.sentToMq) {
-                                <span class="history-file__mq history-file__mq--sent" title="Отправлено в MQ">MQ ✓</span>
+                              @if (file.sentToGateway) {
+                                <span class="history-file__gateway history-file__gateway--sent" title="Отправлено в шлюз">Шлюз ✓</span>
                               } @else {
-                                <span class="history-file__mq history-file__mq--pending" title="Не отправлено в MQ">MQ —</span>
+                                <span class="history-file__gateway history-file__gateway--pending" title="Не отправлено в шлюз">Шлюз —</span>
                               }
                             </label>
                           }
@@ -80,7 +80,7 @@
   }
 
   <p-button
-    label="Отправить выбранные в MQ"
+    label="Отправить выбранные в шлюз"
     icon="app-icon app-icon--play"
     [fluid]="true"
     [loading]="store.requeueRunning()"
@@ -91,7 +91,7 @@
   @if (store.requeueResult(); as result) {
     <div class="details-item__message">
       @if (requeueFileSummary(result); as summary) {
-        MQ: отправлено файлов {{ summary.sent }} из {{ summary.total }}, не отправлено
+        Шлюз: отправлено файлов {{ summary.sent }} из {{ summary.total }}, не отправлено
         {{ summary.notSent }} (requestId: {{ result.requestId }})
       }
     </div>

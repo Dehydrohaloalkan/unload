@@ -11,7 +11,7 @@ public record RunStartRequest(
     IReadOnlyCollection<string> MemberCodes,
     IReadOnlyCollection<string>? TargetCodes = null,
     bool AdminOverride = false,
-    bool PublishToMq = true);
+    bool PublishToGateway = true);
 
 /// <summary>
 /// Контракт ответа на успешный запуск выгрузки.
@@ -52,4 +52,4 @@ public record MemberCatalogItem(
 /// Контракт запроса запуска задачи с опциональным admin override.
 /// </summary>
 /// <param name="AdminOverride">Признак обхода стандартных gate/dependency проверок.</param>
-public record AdminTaskRequest(bool AdminOverride = false, bool PublishToMq = true);
+public record AdminTaskRequest(bool AdminOverride = false, bool PublishToGateway = true);

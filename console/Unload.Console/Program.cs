@@ -40,7 +40,7 @@ services.AddLogging();
 services.AddUnloadRuntime(new UnloadRuntimePaths(
     CatalogPath: catalogPath,
     ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory), databaseSettings, runnerOptions, presetGateOptions);
+    OutputDirectory: outputDirectory), databaseSettings, configuration, runnerOptions, presetGateOptions);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();

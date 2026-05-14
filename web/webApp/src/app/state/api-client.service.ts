@@ -7,7 +7,7 @@ import {
   OutputFileInfo,
   PresetGateState,
   RequeueItem,
-  RequeueToMqResponse,
+  RequeueToGatewayResponse,
   RunAcceptedResponse,
   RunStatusInfo,
   ScriptTaskRunResult,
@@ -112,7 +112,7 @@ export class ApiClientService {
     targetCodes: string[];
     memberCodes: string[];
     adminOverride: boolean;
-    publishToMq: boolean;
+    publishToGateway: boolean;
   }): Promise<RunAcceptedResponse> {
     return firstValueFrom(this.http.post<RunAcceptedResponse>(this.url('/api/runs'), payload));
   }
@@ -129,18 +129,18 @@ export class ApiClientService {
     );
   }
 
-  runExtra(adminOverride: boolean, publishToMq: boolean): Promise<ScriptTaskRunResult> {
+  runExtra(adminOverride: boolean, publishToGateway: boolean): Promise<ScriptTaskRunResult> {
     return firstValueFrom(
       this.http.post<ScriptTaskRunResult>(this.url('/api/runs/extra'), {
         adminOverride,
-        publishToMq,
+        publishToGateway,
       }),
     );
   }
 
-  requeueToMq(items: RequeueItem[]): Promise<RequeueToMqResponse> {
+  requeueToGateway(items: RequeueItem[]): Promise<RequeueToGatewayResponse> {
     return firstValueFrom(
-      this.http.post<RequeueToMqResponse>(this.url('/api/runs/requeue'), {
+      this.http.post<RequeueToGatewayResponse>(this.url('/api/runs/requeue'), {
         idempotencyKey: crypto.randomUUID(),
         items,
         dryRun: false,

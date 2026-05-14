@@ -14,7 +14,7 @@ public enum RunnerStep
     ChunkCreated,
     FileWritten,
     ScriptCompleted,
-    PublishedToMq,
+    PublishedToGateway,
     Completed,
     Failed
 }

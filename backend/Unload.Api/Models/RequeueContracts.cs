@@ -2,7 +2,7 @@ using Unload.Core;
 
 namespace Unload.Api.Models;
 
-public record RequeueToMqRequest(
+public record RequeueToGatewayRequest(
     string? IdempotencyKey,
     IReadOnlyCollection<RequeueItem> Items,
     bool DryRun = false);
@@ -13,7 +13,7 @@ public record RequeueItem(
     IReadOnlyCollection<string>? MemberNames = null,
     IReadOnlyCollection<string>? FilePaths = null);
 
-public record RequeueToMqResponse(
+public record RequeueToGatewayResponse(
     string RequestId,
     int AcceptedBatches,
     int FailedBatches,

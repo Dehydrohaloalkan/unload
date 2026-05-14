@@ -1,17 +1,16 @@
 namespace Unload.Api.Models;
 
-public record MqUploadResponse(
+public record GatewayUploadResponse(
     string RequestId,
     string CorrelationId,
     string MemberName,
     string BatchId,
     int AcceptedFiles,
     int FailedFiles,
-    IReadOnlyCollection<MqUploadFileResult> Files);
+    IReadOnlyCollection<GatewayUploadFileResult> Files);
 
-public record MqUploadFileResult(
+public record GatewayUploadFileResult(
     string FileName,
     long SizeBytes,
     string Status,
     string? Message = null);
-

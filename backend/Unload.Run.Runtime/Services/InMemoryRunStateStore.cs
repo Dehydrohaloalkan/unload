@@ -41,7 +41,7 @@ public class InMemoryRunStateStore : IRunStateStore
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
     /// <param name="memberNames">Мемберы, выбранные для выгрузки.</param>
-    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToMq = true)
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToGateway = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentNullException.ThrowIfNull(targetCodes);
@@ -71,7 +71,7 @@ public class InMemoryRunStateStore : IRunStateStore
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
             WorkerStatuses: _projector.CreateInitialWorkerStatuses(now),
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            PublishToMq: publishToMq);
+            PublishToGateway: publishToGateway);
 
         _runs[correlationId] = snapshot;
         PersistSnapshot();
@@ -91,7 +91,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 CorrelationId: correlationId,
                 TaskCode: TaskCodeRun,
                 Status: RunLifecycleStatus.Running,
-                PublishToMq: true,
+                PublishToGateway: true,
                 TargetCodes: Array.Empty<string>(),
                 CreatedAt: now,
                 UpdatedAt: now,
@@ -434,7 +434,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 CorrelationId: @event.CorrelationId,
                 TaskCode: TaskCodeRun,
                 Status: MapStatus(@event.Step),
-                PublishToMq: true,
+                PublishToGateway: true,
                 TargetCodes: Array.Empty<string>(),
                 CreatedAt: now,
                 UpdatedAt: now,
@@ -484,7 +484,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 CorrelationId: feedback.CorrelationId,
                 TaskCode: InMemoryRunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
                 Status: RunLifecycleStatus.Running,
-                PublishToMq: true,
+                PublishToGateway: true,
                 TargetCodes: Array.Empty<string>(),
                 CreatedAt: now,
                 UpdatedAt: now,
@@ -612,7 +612,7 @@ public class InMemoryRunStateStore : IRunStateStore
                 return current;
             }
 
-            if (!current.PublishToMq)
+            if (!current.PublishToGateway)
             {
                 var batchMap = new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase);
                 var memberNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -648,7 +648,7 @@ public class InMemoryRunStateStore : IRunStateStore
                         Status: SenderBatchStatus.SkippedByRequest,
                         UpdatedAt: now,
                         SentFiles: Array.Empty<SenderFileDispatchStateInfo>(),
-                        Message: "MQ publish skipped by request.");
+                        Message: "Gateway publish skipped by request.");
                 }
 
                 return current with

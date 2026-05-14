@@ -9,7 +9,7 @@ public interface IExtraOutputWriter
         string baseOutputDirectory,
         string correlationId,
         ConcurrentDictionary<string, ConcurrentQueue<string>> aggregatedLines,
-        bool publishToMq,
+        bool publishToGateway,
         CancellationToken cancellationToken);
 }
 
