@@ -1,6 +1,6 @@
 using Unload.Core;
 
-namespace Unload.Run.Application;
+namespace Unload.Store;
 
 /// <summary>
 /// Перечисляет агрегированные состояния запуска на уровне application слоя.

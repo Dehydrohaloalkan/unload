@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\backend\Unload.Api\Unload.Api.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Run.Application\Unload.Run.Application.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\..\backend\Unload.TaskFlow\Unload.TaskFlow.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.3" />
     <PackageReference Include="Spectre.Console" Version="0.54.0" />

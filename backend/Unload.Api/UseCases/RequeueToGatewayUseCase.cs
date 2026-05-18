@@ -1,20 +1,19 @@
 using System.Collections.Concurrent;
-using Unload.Api.Abstractions;
 using Unload.Api.Models;
 using Unload.Api.UseCases.Abstractions;
 using Unload.Core;
-using Unload.Run.Application;
+using Unload.Store;
 
 namespace Unload.Api.UseCases;
 
 public class RequeueToGatewayUseCase(
-    IRunStateStore runStateStore,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    RunStateStore runStateStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     IGatewayPublisher gatewayPublisher,
     ILogger<RequeueToGatewayUseCase> logger) : IRequeueToGatewayUseCase
 {
-    private readonly IRunStateStore _runStateStore = runStateStore;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
     private readonly ILogger<RequeueToGatewayUseCase> _logger = logger;
 

@@ -1,4 +1,5 @@
 using Unload.Api.Abstractions;
+using Unload.Store;
 using Unload.TaskFlow;
 
 namespace Unload.Api.Services;
@@ -7,13 +8,13 @@ public sealed class WorkflowInMemoryStateRestorer(
     IWorkflowTaskAccessService workflowTaskAccessService,
     IWorkflowStageStateStore workflowStageStateStore,
     IPresetGateService presetGateService,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     ILogger<WorkflowInMemoryStateRestorer> logger) : IWorkflowInMemoryStateRestorer
 {
     private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
     private readonly IWorkflowStageStateStore _workflowStageStateStore = workflowStageStateStore;
     private readonly IPresetGateService _presetGateService = presetGateService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ILogger<WorkflowInMemoryStateRestorer> _logger = logger;
 
     public void RestoreForToday()

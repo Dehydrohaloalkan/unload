@@ -4,6 +4,7 @@ using Unload.Api.Models;
 using Unload.Api.UseCases.Abstractions;
 using Unload.Core;
 using Unload.Run.Application;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
@@ -12,12 +13,12 @@ namespace Unload.Api.UseCases;
 
 public class StartRunUseCase(
     IWorkflowTaskDispatcher dispatcher,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<StartRunUseCase> logger) : IStartRunUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<StartRunUseCase> _logger = logger;
 

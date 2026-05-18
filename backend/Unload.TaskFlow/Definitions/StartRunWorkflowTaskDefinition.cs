@@ -1,5 +1,6 @@
 using Unload.Core;
 using Unload.Run.Application;
+using Unload.Store;
 using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
 using System.Text.RegularExpressions;
@@ -13,7 +14,7 @@ public class StartRunWorkflowTaskDefinition(
     ICatalogService catalogService,
     IRunRequestFactory requestFactory,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     RunApplicationOptions runOptions,
     IPresetGateService presetGateService,
     IWorkflowTaskAccessService taskAccessService) : WorkflowTaskDefinition<StartRunTaskRequest, StartRunTaskResult>
@@ -23,7 +24,7 @@ public class StartRunWorkflowTaskDefinition(
     private readonly ICatalogService _catalogService = catalogService;
     private readonly IRunRequestFactory _requestFactory = requestFactory;
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
     private readonly RunApplicationOptions _runOptions = runOptions;
     private readonly IPresetGateService _presetGateService = presetGateService;
     private readonly IWorkflowTaskAccessService _taskAccessService = taskAccessService;

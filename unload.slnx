@@ -9,8 +9,8 @@
     <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
     <Project Path="backend/Unload.Gateway/Unload.Gateway.csproj" />
     <Project Path="backend/Unload.Run.Application/Unload.Run.Application.csproj" />
-    <Project Path="backend/Unload.Run.Runtime/Unload.Run.Runtime.csproj" />
     <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
+    <Project Path="backend/Unload.Store/Unload.Store.csproj" />
     <Project Path="backend/Unload.ScriptTasks/Unload.ScriptTasks.csproj" />
     <Project Path="backend/Unload.TaskFlow/Unload.TaskFlow.csproj" />
     <Project Path="backend/Unload.TaskFlow.Runtime/Unload.TaskFlow.Runtime.csproj" />

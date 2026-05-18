@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Unload.Api.Abstractions;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Models;
 using Unload.Core;
 using Unload.Api.UseCases.Abstractions;
-using Unload.Run.Application;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.Workflow;
 
@@ -22,9 +21,9 @@ public class RunsController(
     IRunExtraUseCase runExtraUseCase,
     IRequeueToGatewayUseCase requeueToGatewayUseCase,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     IPresetGateService presetGateService,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     HistoryRetentionOptions historyRetentionOptions,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunsController> logger) : ControllerBase
@@ -34,9 +33,9 @@ public class RunsController(
     private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
     private readonly IRequeueToGatewayUseCase _requeueToGatewayUseCase = requeueToGatewayUseCase;
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
     private readonly IPresetGateService _presetGateService = presetGateService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly HistoryRetentionOptions _historyRetentionOptions = historyRetentionOptions;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunsController> _logger = logger;

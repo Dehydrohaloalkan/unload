@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
-using Unload.Api.Abstractions;
 using Unload.Core;
-using Unload.Run.Application;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.Workflow;
 
@@ -21,8 +20,8 @@ namespace Unload.Api.Services;
 /// <param name="logger">Логгер фонового сервиса.</param>
 public class RunProcessingBackgroundService(
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    RunStateStore runStateStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     IWorkflowTaskAccessService workflowTaskAccessService,
     IWorkflowTaskTransitionService transitionService,
     IRunner runner,
@@ -30,8 +29,8 @@ public class RunProcessingBackgroundService(
     ILogger<RunProcessingBackgroundService> logger) : BackgroundService
 {
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
-    private readonly IRunStateStore _runStateStore = runStateStore;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
     private readonly IWorkflowTaskTransitionService _transitionService = transitionService;
     private readonly IRunner _runner = runner;

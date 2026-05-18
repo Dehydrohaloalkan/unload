@@ -49,7 +49,6 @@ builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
 builder.Services.AddScoped<IRequeueToGatewayUseCase, RequeueToGatewayUseCase>();
 builder.Services.AddScoped<IGetServerTimeUseCase, GetServerTimeUseCase>();
 builder.Services.AddScoped<IOutputFilesService, OutputFilesService>();
-builder.Services.AddSingleton<ITaskExecutionHistoryStore, TaskExecutionHistoryStore>();
 builder.Services.AddSingleton<IWorkflowInMemoryStateRestorer, WorkflowInMemoryStateRestorer>();
 builder.Services.AddSingleton(historyRetentionOptions);
 builder.Services.AddSingleton(runtimePaths);

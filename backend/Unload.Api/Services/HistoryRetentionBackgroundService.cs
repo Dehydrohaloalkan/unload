@@ -1,18 +1,17 @@
-using Unload.Api.Abstractions;
 using Unload.Api.Models;
-using Unload.Run.Application;
+using Unload.Store;
 
 namespace Unload.Api.Services;
 
 public sealed class HistoryRetentionBackgroundService(
     HistoryRetentionOptions options,
-    IRunStateStore runStateStore,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    RunStateStore runStateStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     ILogger<HistoryRetentionBackgroundService> logger) : BackgroundService
 {
     private readonly HistoryRetentionOptions _options = options;
-    private readonly IRunStateStore _runStateStore = runStateStore;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ILogger<HistoryRetentionBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

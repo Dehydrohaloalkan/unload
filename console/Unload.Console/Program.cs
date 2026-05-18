@@ -7,6 +7,7 @@ using Unload.Bootstrapper.DependencyInjection;
 using Unload.Core;
 using Unload.Run.Application;
 using Unload.Runner;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
@@ -46,7 +47,7 @@ await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
 var dispatcher = provider.ServiceProvider.GetRequiredService<IWorkflowTaskDispatcher>();
 var runWorkflow = provider.ServiceProvider.GetRequiredService<ISingleActiveWorkflow<RunRequest>>();
-var runStateStore = provider.ServiceProvider.GetRequiredService<IRunStateStore>();
+var runStateStore = provider.ServiceProvider.GetRequiredService<RunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
 var presetGateService = provider.ServiceProvider.GetRequiredService<IPresetGateService>();
 var workflowStageStateStore = provider.ServiceProvider.GetRequiredService<IWorkflowStageStateStore>();
@@ -154,7 +155,7 @@ static async Task RunInteractiveSessionAsync(
     ICatalogService catalogService,
     IWorkflowTaskDispatcher dispatcher,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     IRunner runner,
     RunnerOptions runnerOptions,
     IPresetGateService presetGateService,
@@ -262,7 +263,7 @@ static async Task RunInteractiveSessionAsync(
 static async Task ExecuteRunAsync(
     IWorkflowTaskDispatcher dispatcher,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     IRunner runner,
     RunnerOptions runnerOptions,
     IReadOnlyCollection<string> targetCodes,

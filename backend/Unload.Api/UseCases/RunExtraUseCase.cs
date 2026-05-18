@@ -1,6 +1,6 @@
 using Unload.Api.ErrorHandling;
-using Unload.Api.Abstractions;
 using Unload.Api.UseCases.Abstractions;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
@@ -9,11 +9,11 @@ namespace Unload.Api.UseCases;
 
 public class RunExtraUseCase(
     IWorkflowTaskDispatcher dispatcher,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     ILogger<RunExtraUseCase> logger) : IRunExtraUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ILogger<RunExtraUseCase> _logger = logger;
 
     public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, bool publishToGateway, CancellationToken cancellationToken)

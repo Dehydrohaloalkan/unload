@@ -1,16 +1,16 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Unload.Core;
-using Unload.Run.Application;
 
-namespace Unload.Run.Runtime;
+namespace Unload.Store;
 
 /// <summary>
 /// Потокобезопасное in-memory хранилище статусов запусков.
 /// Используется API и background worker для синхронизации жизненного цикла run.
 /// </summary>
-public class InMemoryRunStateStore : IRunStateStore
+public class RunStateStore
 {
     private const string PersistenceVersion = "1";
     private static readonly Regex WorkerIdRegex = new(@"Worker\s*#(?<id>\d+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -22,16 +22,17 @@ public class InMemoryRunStateStore : IRunStateStore
     private const string TaskCodePreset = "preset";
     private const string TaskCodeExtra = "extra";
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly RunStatePersistence _persistence;
+    private readonly JsonFileStore<RunStatePersistenceSnapshot> _store;
     private readonly RunStateProjector _projector;
 
-    public InMemoryRunStateStore(
+    public RunStateStore(
         int workerCount,
-        string stateFilePath)
+        string stateFilePath,
+        ILogger<RunStateStore>? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
         _projector = new RunStateProjector(workerCount);
-        _persistence = new RunStatePersistence(stateFilePath, JsonOptions, PersistenceVersion);
+        _store = new JsonFileStore<RunStatePersistenceSnapshot>(stateFilePath, JsonOptions, logger);
         LoadFromDisk();
     }
 
@@ -229,7 +230,7 @@ public class InMemoryRunStateStore : IRunStateStore
         return removed;
     }
 
-    private static string ResolveTaskCodeByCorrelationId(string correlationId)
+    internal static string ResolveTaskCodeByCorrelationId(string correlationId)
     {
         var normalized = correlationId?.Trim() ?? string.Empty;
         if (normalized.StartsWith("extra-", StringComparison.OrdinalIgnoreCase))
@@ -301,7 +302,13 @@ public class InMemoryRunStateStore : IRunStateStore
     private void LoadFromDisk()
     {
         var recoveredAt = DateTimeOffset.UtcNow;
-        foreach (var run in _persistence.Load())
+        var snapshot = _store.Load();
+        if (snapshot?.Runs is null)
+        {
+            return;
+        }
+
+        foreach (var run in snapshot.Runs)
         {
             var normalizedRun = NormalizeRecoveredRun(run, recoveredAt);
             _runs[normalizedRun.CorrelationId] = normalizedRun;
@@ -310,7 +317,11 @@ public class InMemoryRunStateStore : IRunStateStore
 
     private void PersistSnapshot()
     {
-        _persistence.Persist(_runs.Values);
+        var snapshot = new RunStatePersistenceSnapshot(
+            PersistenceVersion,
+            DateTimeOffset.UtcNow,
+            _runs.Values.OrderByDescending(static run => run.UpdatedAt).ToArray());
+        _store.Save(snapshot);
     }
 
     private static RunStatusInfo NormalizeRecoveredRun(RunStatusInfo run, DateTimeOffset recoveredAt)
@@ -330,81 +341,10 @@ public class InMemoryRunStateStore : IRunStateStore
         };
     }
 
-    private sealed class RunStatePersistence
-    {
-        private readonly string _stateFilePath;
-        private readonly JsonSerializerOptions _jsonOptions;
-        private readonly string _persistenceVersion;
-        private readonly object _sync = new();
-
-        public RunStatePersistence(string stateFilePath, JsonSerializerOptions jsonOptions, string persistenceVersion)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
-            ArgumentNullException.ThrowIfNull(jsonOptions);
-            ArgumentException.ThrowIfNullOrWhiteSpace(persistenceVersion);
-
-            _stateFilePath = stateFilePath;
-            _jsonOptions = jsonOptions;
-            _persistenceVersion = persistenceVersion;
-        }
-
-        public IReadOnlyCollection<RunStatusInfo> Load()
-        {
-            try
-            {
-                if (!File.Exists(_stateFilePath))
-                {
-                    return Array.Empty<RunStatusInfo>();
-                }
-
-                var json = File.ReadAllText(_stateFilePath);
-                var snapshot = JsonSerializer.Deserialize<RunStatePersistenceSnapshot>(json, _jsonOptions);
-                return snapshot?.Runs?.Count > 0
-                    ? snapshot.Runs.ToArray()
-                    : Array.Empty<RunStatusInfo>();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Failed to load run state from '{_stateFilePath}': {ex.Message}");
-                return Array.Empty<RunStatusInfo>();
-            }
-        }
-
-        public void Persist(IEnumerable<RunStatusInfo> runs)
-        {
-            ArgumentNullException.ThrowIfNull(runs);
-
-            try
-            {
-                lock (_sync)
-                {
-                    var directory = Path.GetDirectoryName(_stateFilePath);
-                    if (!string.IsNullOrWhiteSpace(directory))
-                    {
-                        Directory.CreateDirectory(directory);
-                    }
-
-                    var snapshot = new RunStatePersistenceSnapshot(
-                        _persistenceVersion,
-                        DateTimeOffset.UtcNow,
-                        runs.OrderByDescending(static run => run.UpdatedAt).ToArray());
-                    var json = JsonSerializer.Serialize(snapshot, _jsonOptions);
-                    var tempPath = $"{_stateFilePath}.tmp";
-                    File.WriteAllText(tempPath, json);
-                    File.Move(tempPath, _stateFilePath, true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Failed to persist run state to '{_stateFilePath}': {ex.Message}");
-            }
-        }
-
-        private record RunStatePersistenceSnapshot(
-            string Version,
-            DateTimeOffset SavedAt,
-            IReadOnlyCollection<RunStatusInfo> Runs);
-    }
+    private record RunStatePersistenceSnapshot(
+        string Version,
+        DateTimeOffset SavedAt,
+        IReadOnlyCollection<RunStatusInfo> Runs);
 
     private sealed class RunStateProjector
     {
@@ -482,7 +422,7 @@ public class InMemoryRunStateStore : IRunStateStore
         {
             return new RunStatusInfo(
                 CorrelationId: feedback.CorrelationId,
-                TaskCode: InMemoryRunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
+                TaskCode: RunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
                 Status: RunLifecycleStatus.Running,
                 PublishToGateway: true,
                 TargetCodes: Array.Empty<string>(),

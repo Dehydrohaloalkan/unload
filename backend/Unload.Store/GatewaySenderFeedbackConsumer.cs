@@ -1,11 +1,10 @@
 using Unload.Core;
-using Unload.Run.Application;
 
-namespace Unload.Run.Runtime;
+namespace Unload.Store;
 
-public class GatewaySenderFeedbackConsumer(IRunStateStore runStateStore) : IGatewaySenderFeedbackConsumer
+public class GatewaySenderFeedbackConsumer(RunStateStore runStateStore) : IGatewaySenderFeedbackConsumer
 {
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
 
     public Task ConsumeAsync(SenderFileDispatchFeedback feedback, CancellationToken cancellationToken)
     {

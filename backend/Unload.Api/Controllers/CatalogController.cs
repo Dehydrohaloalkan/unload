@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Unload.Api.Models;
 using Unload.Core;
-using Unload.Run.Application;
+using Unload.Store;
 using Unload.Workflow;
 
 namespace Unload.Api.Controllers;
@@ -20,11 +20,11 @@ namespace Unload.Api.Controllers;
 public class CatalogController(
     ICatalogService catalogService,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
-    IRunStateStore runStateStore) : ControllerBase
+    RunStateStore runStateStore) : ControllerBase
 {
     private readonly ICatalogService _catalogService = catalogService;
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
 
     /// <summary>
     /// Возвращает полный каталог групп, мемберов и target-ов.

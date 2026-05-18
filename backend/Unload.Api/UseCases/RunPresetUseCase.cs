@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
-using Unload.Api.Abstractions;
 using Unload.Api.UseCases.Abstractions;
+using Unload.Store;
 using Unload.TaskFlow;
 using Unload.TaskFlow.Exceptions;
 using Unload.Workflow;
@@ -11,13 +11,13 @@ namespace Unload.Api.UseCases;
 public class RunPresetUseCase(
     IWorkflowTaskDispatcher dispatcher,
     IPresetGateService presetGateService,
-    ITaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunPresetUseCase> logger) : IRunPresetUseCase
 {
     private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
     private readonly IPresetGateService _presetGateService = presetGateService;
-    private readonly ITaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunPresetUseCase> _logger = logger;
 

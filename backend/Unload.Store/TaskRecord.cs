@@ -1,4 +1,4 @@
-namespace Unload.Api.Models;
+namespace Unload.Store;
 
 public record TaskRecord(
     string TaskCode,
@@ -9,4 +9,3 @@ public record TaskRecord(
     int? ScriptsExecuted,
     int? FilesWritten,
     string? OutputPath);
-

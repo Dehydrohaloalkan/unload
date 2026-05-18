@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
-using Unload.Run.Application;
+using Unload.Store;
 
 namespace Unload.Api.Services;
 
@@ -10,13 +10,13 @@ namespace Unload.Api.Services;
 public class SenderFeedbackProjectionBackgroundService(
     IGatewaySenderFeedbackSource feedbackSource,
     IGatewaySenderFeedbackConsumer feedbackConsumer,
-    IRunStateStore runStateStore,
+    RunStateStore runStateStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<SenderFeedbackProjectionBackgroundService> logger) : BackgroundService
 {
     private readonly IGatewaySenderFeedbackSource _feedbackSource = feedbackSource;
     private readonly IGatewaySenderFeedbackConsumer _feedbackConsumer = feedbackConsumer;
-    private readonly IRunStateStore _runStateStore = runStateStore;
+    private readonly RunStateStore _runStateStore = runStateStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<SenderFeedbackProjectionBackgroundService> _logger = logger;
 
