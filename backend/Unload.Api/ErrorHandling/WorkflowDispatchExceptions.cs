@@ -1,23 +1,17 @@
-using Unload.TaskFlow;
-using Unload.TaskFlow.Exceptions;
+using Unload.Tasks;
 
 namespace Unload.Api.ErrorHandling;
 
+/// <summary>
+/// Устаревший маппер исключений. Используйте <see cref="TaskLaunchExceptions"/>.
+/// Сохранён для совместимости; удалится в Фазе 6.
+/// </summary>
 public static class WorkflowDispatchExceptions
 {
     public static ApiProblemException ToApiProblem(
-        WorkflowTaskDispatchException exception,
+        TaskLaunchException exception,
         string conflictTitle)
     {
-        ArgumentNullException.ThrowIfNull(exception);
-        ArgumentException.ThrowIfNullOrWhiteSpace(conflictTitle);
-
-        var isValidation = exception.FailureKind == WorkflowTaskFailureKind.Validation;
-        return new ApiProblemException(
-            isValidation ? StatusCodes.Status400BadRequest : StatusCodes.Status409Conflict,
-            isValidation ? "Validation error" : conflictTitle,
-            exception.Message,
-            exception.ErrorCode,
-            exception.Extensions);
+        return TaskLaunchExceptions.ToApiProblem(exception, conflictTitle);
     }
 }

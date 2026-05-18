@@ -1,62 +1,55 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
 using Unload.Api.UseCases.Abstractions;
-using Unload.Store;
-using Unload.TaskFlow;
-using Unload.TaskFlow.Exceptions;
-using Unload.Workflow;
+using Unload.Tasks;
 
 namespace Unload.Api.UseCases;
 
 public class RunPresetUseCase(
-    IWorkflowTaskDispatcher dispatcher,
-    IPresetGateService presetGateService,
-    TaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskWorkflow taskWorkflow,
+    DailyWindowPolicy dailyWindowPolicy,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunPresetUseCase> logger) : IRunPresetUseCase
 {
-    private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
-    private readonly IPresetGateService _presetGateService = presetGateService;
-    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
+    private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunPresetUseCase> _logger = logger;
 
     public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, CancellationToken cancellationToken)
     {
-        var startedAt = DateTimeOffset.UtcNow;
         try
         {
             _logger.LogInformation("Preset task launch requested.");
-            var presetState = _presetGateService.Get();
-            var alreadyCompleted = presetState.PresetCompleted;
-            var result = await _dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                WorkflowTaskCodes.Preset,
-                new EmptyWorkflowTaskRequest(adminOverride),
+            var alreadyCompleted = _dailyWindowPolicy.Get().PresetCompleted;
+            var result = await _taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(TaskCode: TaskCodes.Preset, AdminOverride: adminOverride),
                 cancellationToken);
-            _taskExecutionHistoryStore.Add(
-                WorkflowTaskCodes.Preset,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                result.CorrelationId,
-                result.Message,
-                result.ScriptsExecuted,
-                result.FilesWritten,
-                result.OutputPath);
-            await _hubContext.Clients.All.SendAsync("preset_state", _presetGateService.Get(), cancellationToken);
+
+            var scriptResult = new ScriptTaskRunResult(
+                TaskName: result.TaskCode,
+                CorrelationId: result.ExecutionId,
+                ScriptsExecuted: result.ScriptsExecuted ?? 0,
+                FilesWritten: result.FilesWritten ?? 0,
+                OutputPath: result.OutputPath,
+                Message: result.Message);
+
+            await _hubContext.Clients.All.SendAsync("preset_state", _dailyWindowPolicy.Get(), cancellationToken);
             if (alreadyCompleted)
             {
-                await _hubContext.Clients.All.SendAsync("preset_replayed", result, cancellationToken);
+                await _hubContext.Clients.All.SendAsync("preset_replayed", scriptResult, cancellationToken);
             }
+
             _logger.LogInformation(
                 "Preset task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}",
-                result.CorrelationId,
+                result.ExecutionId,
                 result.ScriptsExecuted);
-            return result;
+            return scriptResult;
         }
-        catch (WorkflowTaskDispatchException ex)
+        catch (TaskLaunchException ex)
         {
             _logger.LogWarning("Preset task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
-            throw WorkflowDispatchExceptions.ToApiProblem(ex, "Preset task conflict");
+            throw TaskLaunchExceptions.ToApiProblem(ex, "Preset task conflict");
         }
     }
 }

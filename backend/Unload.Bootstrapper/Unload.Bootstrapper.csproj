@@ -11,9 +11,7 @@
     <ProjectReference Include="..\Unload.Runner\Unload.Runner.csproj" />
     <ProjectReference Include="..\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\Unload.ScriptTasks\Unload.ScriptTasks.csproj" />
-    <ProjectReference Include="..\Unload.TaskFlow\Unload.TaskFlow.csproj" />
-    <ProjectReference Include="..\Unload.TaskFlow.Runtime\Unload.TaskFlow.Runtime.csproj" />
-    <ProjectReference Include="..\Unload.Workflow\Unload.Workflow.csproj" />
+    <ProjectReference Include="..\Unload.Tasks\Unload.Tasks.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.Abstractions;
-using Unload.TaskFlow;
+using Unload.Tasks;
 
 namespace Unload.Api.Services;
 
@@ -9,14 +9,14 @@ namespace Unload.Api.Services;
 /// </summary>
 public class PresetGateBackgroundService(
     PresetGateOptions options,
-    IPresetGateService presetGateService,
+    DailyWindowPolicy dailyWindowPolicy,
     IPresetProbeService presetProbeService,
     IWorkflowInMemoryStateRestorer workflowInMemoryStateRestorer,
     IHubContext<RunStatusHub> hubContext,
     ILogger<PresetGateBackgroundService> logger) : BackgroundService
 {
     private readonly PresetGateOptions _options = options;
-    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly IPresetProbeService _presetProbeService = presetProbeService;
     private readonly IWorkflowInMemoryStateRestorer _workflowInMemoryStateRestorer = workflowInMemoryStateRestorer;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
@@ -24,7 +24,7 @@ public class PresetGateBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _presetGateService.ApplyInitialOptions(_options);
+        _dailyWindowPolicy.ApplyInitialOptions(_options);
         _workflowInMemoryStateRestorer.RestoreForToday();
         _logger.LogInformation(
             "Preset gate service initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
@@ -55,7 +55,7 @@ public class PresetGateBackgroundService(
 
     private async Task CheckAsync(CancellationToken cancellationToken)
     {
-        if (_presetGateService.RefreshDailyWindowState())
+        if (_dailyWindowPolicy.RefreshDailyWindowState())
         {
             _workflowInMemoryStateRestorer.RestoreForToday();
             _logger.LogInformation("Preset gate daily window state updated.");
@@ -68,7 +68,7 @@ public class PresetGateBackgroundService(
         }
 
         // If preset is already completed for the current day, do not start polling/probing.
-        var currentState = _presetGateService.Get();
+        var currentState = _dailyWindowPolicy.Get();
         if (currentState.PresetCompleted)
         {
             return;
@@ -83,13 +83,13 @@ public class PresetGateBackgroundService(
             return;
         }
 
-        if (_presetGateService.StartPolling())
+        if (_dailyWindowPolicy.StartPolling())
         {
             _logger.LogInformation("Preset gate polling started.");
             await PublishStateAsync(cancellationToken);
         }
 
-        var state = _presetGateService.Get();
+        var state = _dailyWindowPolicy.Get();
         if (state.PresetCompleted || state.ReadyForPreset)
         {
             return;
@@ -97,9 +97,9 @@ public class PresetGateBackgroundService(
 
         try
         {
-            var previous = _presetGateService.Get();
+            var previous = _dailyWindowPolicy.Get();
             await _presetProbeService.ExecuteAndApplyAsync(cancellationToken);
-            var current = _presetGateService.Get();
+            var current = _dailyWindowPolicy.Get();
 
             if (!Equals(previous, current))
                 await PublishStateAsync(cancellationToken);
@@ -112,7 +112,7 @@ public class PresetGateBackgroundService(
 
     private async Task PublishStateAsync(CancellationToken cancellationToken)
     {
-        await _hubContext.Clients.All.SendAsync("preset_state", _presetGateService.Get(), cancellationToken);
+        await _hubContext.Clients.All.SendAsync("preset_state", _dailyWindowPolicy.Get(), cancellationToken);
     }
 
     private static int Clamp(int value, int min, int max)

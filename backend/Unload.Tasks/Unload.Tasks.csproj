@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Unload.Tasks\Unload.Tasks.csproj" />
+    <ProjectReference Include="..\Unload.Catalog\Unload.Catalog.csproj" />
     <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
+    <ProjectReference Include="..\Unload.Run.Application\Unload.Run.Application.csproj" />
+    <ProjectReference Include="..\Unload.Store\Unload.Store.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 using Unload.Store;
-using Unload.TaskFlow;
-using Unload.Workflow;
+using Unload.Tasks;
 
 namespace Unload.Api.Services;
 
@@ -10,20 +9,10 @@ namespace Unload.Api.Services;
 /// Фоновый обработчик запусков API.
 /// Используется для запуска раннера, обновления статусов и отправки SignalR-событий клиентам.
 /// </summary>
-/// <remarks>
-/// Создает фоновый обработчик с зависимостями диспетчера запусков, раннера и SignalR.
-/// </remarks>
-/// <param name="runWorkflow">Single-active workflow запросов на выполнение.</param>
-/// <param name="runStateStore">Хранилище состояний запусков.</param>
-/// <param name="runner">Движок выполнения выгрузки.</param>
-/// <param name="hubContext">Контекст SignalR hub для отправки событий.</param>
-/// <param name="logger">Логгер фонового сервиса.</param>
 public class RunProcessingBackgroundService(
     ISingleActiveWorkflow<RunRequest> runWorkflow,
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
-    IWorkflowTaskAccessService workflowTaskAccessService,
-    IWorkflowTaskTransitionService transitionService,
     IRunner runner,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunProcessingBackgroundService> logger) : BackgroundService
@@ -31,8 +20,6 @@ public class RunProcessingBackgroundService(
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
-    private readonly IWorkflowTaskAccessService _workflowTaskAccessService = workflowTaskAccessService;
-    private readonly IWorkflowTaskTransitionService _transitionService = transitionService;
     private readonly IRunner _runner = runner;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunProcessingBackgroundService> _logger = logger;
@@ -40,8 +27,6 @@ public class RunProcessingBackgroundService(
     /// <summary>
     /// Основной цикл обработки запусков.
     /// </summary>
-    /// <param name="stoppingToken">Токен остановки фонового сервиса.</param>
-    /// <returns>Задача жизненного цикла фонового сервиса.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var activation in _runWorkflow.ReadActivationsAsync(stoppingToken))
@@ -99,7 +84,7 @@ public class RunProcessingBackgroundService(
                     if (finalState.Status == RunLifecycleStatus.Completed)
                     {
                         _taskExecutionHistoryStore.Add(
-                            WorkflowTaskCodes.Run,
+                            TaskCodes.Run,
                             finalState.CreatedAt,
                             finalState.UpdatedAt,
                             finalState.CorrelationId,
@@ -107,8 +92,6 @@ public class RunProcessingBackgroundService(
                             scriptsExecuted: null,
                             filesWritten: finalState.OutputArtifacts?.Count ?? 0,
                             outputPath: finalState.OutputPath);
-                        _workflowTaskAccessService.MarkCompleted(WorkflowTaskCodes.Run);
-                        await _transitionService.HandleCompletedAsync(WorkflowTaskCodes.Run, finalState, stoppingToken);
                     }
 
                     _logger.LogInformation(
@@ -143,12 +126,6 @@ public class RunProcessingBackgroundService(
         return _runStateStore.Get(correlationId);
     }
 
-    /// <summary>
-    /// Публикует агрегированный статус запуска всем подключенным клиентам.
-    /// </summary>
-    /// <param name="correlationId">Идентификатор запуска.</param>
-    /// <param name="cancellationToken">Токен отмены отправки.</param>
-    /// <returns>Задача завершения публикации.</returns>
     private async Task PublishRunStateAsync(string correlationId, CancellationToken cancellationToken)
     {
         var state = _runStateStore.Get(correlationId);

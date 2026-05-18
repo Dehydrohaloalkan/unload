@@ -1,51 +1,46 @@
 using Unload.Api.ErrorHandling;
 using Unload.Api.UseCases.Abstractions;
-using Unload.Store;
-using Unload.TaskFlow;
-using Unload.TaskFlow.Exceptions;
-using Unload.Workflow;
+using Unload.Tasks;
 
 namespace Unload.Api.UseCases;
 
 public class RunExtraUseCase(
-    IWorkflowTaskDispatcher dispatcher,
-    TaskExecutionHistoryStore taskExecutionHistoryStore,
+    TaskWorkflow taskWorkflow,
     ILogger<RunExtraUseCase> logger) : IRunExtraUseCase
 {
-    private readonly IWorkflowTaskDispatcher _dispatcher = dispatcher;
-    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
     private readonly ILogger<RunExtraUseCase> _logger = logger;
 
     public async Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, bool publishToGateway, CancellationToken cancellationToken)
     {
-        var startedAt = DateTimeOffset.UtcNow;
         try
         {
             _logger.LogInformation("Extra task launch requested.");
-            var result = await _dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                WorkflowTaskCodes.Extra,
-                new EmptyWorkflowTaskRequest(adminOverride, publishToGateway),
+            var result = await _taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(
+                    TaskCode: TaskCodes.Extra,
+                    AdminOverride: adminOverride,
+                    PublishToGateway: publishToGateway),
                 cancellationToken);
-            _taskExecutionHistoryStore.Add(
-                WorkflowTaskCodes.Extra,
-                startedAt,
-                DateTimeOffset.UtcNow,
-                result.CorrelationId,
-                result.Message,
-                result.ScriptsExecuted,
-                result.FilesWritten,
-                result.OutputPath);
+
             _logger.LogInformation(
                 "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}",
-                result.CorrelationId,
+                result.ExecutionId,
                 result.ScriptsExecuted,
                 result.FilesWritten);
-            return result;
+
+            return new ScriptTaskRunResult(
+                TaskName: result.TaskCode,
+                CorrelationId: result.ExecutionId,
+                ScriptsExecuted: result.ScriptsExecuted ?? 0,
+                FilesWritten: result.FilesWritten ?? 0,
+                OutputPath: result.OutputPath,
+                Message: result.Message);
         }
-        catch (WorkflowTaskDispatchException ex)
+        catch (TaskLaunchException ex)
         {
             _logger.LogWarning("Extra task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
-            throw WorkflowDispatchExceptions.ToApiProblem(ex, "Extra task conflict");
+            throw TaskLaunchExceptions.ToApiProblem(ex, "Extra task conflict");
         }
     }
 }

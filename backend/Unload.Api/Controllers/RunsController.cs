@@ -5,8 +5,7 @@ using Unload.Api.Models;
 using Unload.Core;
 using Unload.Api.UseCases.Abstractions;
 using Unload.Store;
-using Unload.TaskFlow;
-using Unload.Workflow;
+using Unload.Tasks;
 
 namespace Unload.Api.Controllers;
 
@@ -22,7 +21,7 @@ public class RunsController(
     IRequeueToGatewayUseCase requeueToGatewayUseCase,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
     RunStateStore runStateStore,
-    IPresetGateService presetGateService,
+    DailyWindowPolicy dailyWindowPolicy,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     HistoryRetentionOptions historyRetentionOptions,
     IHubContext<RunStatusHub> hubContext,
@@ -34,7 +33,7 @@ public class RunsController(
     private readonly IRequeueToGatewayUseCase _requeueToGatewayUseCase = requeueToGatewayUseCase;
     private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
-    private readonly IPresetGateService _presetGateService = presetGateService;
+    private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly HistoryRetentionOptions _historyRetentionOptions = historyRetentionOptions;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
@@ -61,7 +60,7 @@ public class RunsController(
     [HttpGet("preset/state")]
     public IActionResult GetPresetState()
     {
-        var state = _presetGateService.Get();
+        var state = _dailyWindowPolicy.Get();
         _logger.LogDebug(
             "Preset state requested. Enabled: {Enabled}, PollingStarted: {PollingStarted}, ReadyForPreset: {ReadyForPreset}, PresetCompleted: {PresetCompleted}",
             state.Enabled,
@@ -121,7 +120,7 @@ public class RunsController(
         var runs = _runStateStore
             .List()
             .Where(run =>
-                string.Equals(run.TaskCode, WorkflowTaskCodes.Run, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(run.TaskCode, TaskCodes.Run, StringComparison.OrdinalIgnoreCase) &&
                 DateOnly.FromDateTime(run.CreatedAt.LocalDateTime) == today)
             .OrderByDescending(static run => run.CreatedAt)
             .ToArray();
@@ -134,16 +133,16 @@ public class RunsController(
         var today = DateOnly.FromDateTime(DateTime.Now);
         var history = _taskExecutionHistoryStore.List(today);
         var runLastCompletedAt = history
-            .FirstOrDefault(record => string.Equals(record.TaskCode, WorkflowTaskCodes.Run, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(record => string.Equals(record.TaskCode, TaskCodes.Run, StringComparison.OrdinalIgnoreCase))
             ?.CompletedAt;
         var extraLastCompletedAt = history
-            .FirstOrDefault(record => string.Equals(record.TaskCode, WorkflowTaskCodes.Extra, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(record => string.Equals(record.TaskCode, TaskCodes.Extra, StringComparison.OrdinalIgnoreCase))
             ?.CompletedAt;
 
         return Ok(new WorkflowDashboardSnapshotResponse(
-            _presetGateService.Get(),
-            _taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Run, today),
-            _taskExecutionHistoryStore.HasRunToday(WorkflowTaskCodes.Extra, today),
+            _dailyWindowPolicy.Get(),
+            _taskExecutionHistoryStore.HasRunToday(TaskCodes.Run, today),
+            _taskExecutionHistoryStore.HasRunToday(TaskCodes.Extra, today),
             runLastCompletedAt,
             extraLastCompletedAt,
             history));

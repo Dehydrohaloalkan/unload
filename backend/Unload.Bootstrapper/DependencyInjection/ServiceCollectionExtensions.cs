@@ -10,10 +10,8 @@ using Unload.Run.Application.DependencyInjection;
 using Unload.Runner;
 using Unload.ScriptTasks.DependencyInjection;
 using Unload.Store;
-using Unload.TaskFlow;
-using Unload.TaskFlow.DependencyInjection;
-using Unload.TaskFlow.Runtime.DependencyInjection;
-using Unload.Workflow;
+using Unload.Tasks;
+using Unload.Tasks.DependencyInjection;
 
 namespace Unload.Bootstrapper.DependencyInjection;
 
@@ -60,21 +58,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGatewaySenderFeedbackSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
         services.AddHostedService<FtpGatewayBackgroundService>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-        services.AddSingleton<IWorkflowTaskDispatcher, WorkflowTaskDispatcher>();
-        services.AddSingleton<IWorkflowTaskRegistry, WorkflowTaskRegistry>();
         var opts = runnerOptions ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
         var stateDirectory = Path.Combine(paths.OutputDirectory, "_state");
         var runStateFilePath = Path.Combine(stateDirectory, "runs.json");
         var taskHistoryFilePath = Path.Combine(stateDirectory, "task-history.json");
         services.AddSingleton(opts);
         services.AddSingleton<IRunner, RunnerEngine>();
-        services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
         services.AddSingleton<RunStateStore>(_ => new RunStateStore(opts.WorkerCount, runStateFilePath));
         services.AddSingleton<TaskExecutionHistoryStore>(_ => new TaskExecutionHistoryStore(taskHistoryFilePath));
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
         services.AddUnloadRunApplication(paths.OutputDirectory);
-        services.AddUnloadTaskFlow(presetGateOptions ?? PresetGateOptions.Default);
-        services.AddUnloadTaskFlowRuntime();
+        services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
         services.AddUnloadScriptTasksInfrastructure(paths.ScriptsDirectory, paths.OutputDirectory);
 
         return services;

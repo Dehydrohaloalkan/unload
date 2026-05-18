@@ -8,9 +8,7 @@ using Unload.Core;
 using Unload.Run.Application;
 using Unload.Runner;
 using Unload.Store;
-using Unload.TaskFlow;
-using Unload.TaskFlow.Exceptions;
-using Unload.Workflow;
+using Unload.Tasks;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 const int WorkerColumnWidth = 26;
@@ -45,12 +43,11 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
-var dispatcher = provider.ServiceProvider.GetRequiredService<IWorkflowTaskDispatcher>();
+var taskWorkflow = provider.ServiceProvider.GetRequiredService<TaskWorkflow>();
 var runWorkflow = provider.ServiceProvider.GetRequiredService<ISingleActiveWorkflow<RunRequest>>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<RunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
-var presetGateService = provider.ServiceProvider.GetRequiredService<IPresetGateService>();
-var workflowStageStateStore = provider.ServiceProvider.GetRequiredService<IWorkflowStageStateStore>();
+var dailyWindowPolicy = provider.ServiceProvider.GetRequiredService<DailyWindowPolicy>();
 var presetProbeService = provider.ServiceProvider.GetRequiredService<IPresetProbeService>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
@@ -62,13 +59,12 @@ if (mode == "--default" && args.Length == 0)
         catalogPath,
         scriptsDirectory,
         catalogService,
-        dispatcher,
+        taskWorkflow,
         runWorkflow,
         runStateStore,
         runner,
         runnerOptions,
-        presetGateService,
-        workflowStageStateStore,
+        dailyWindowPolicy,
         presetProbeService,
         presetGateOptions,
         CancellationToken.None);
@@ -86,27 +82,25 @@ if (mode is "--preset" or "--extra")
         taskCts.Cancel();
     };
 
-    ScriptTaskRunResult taskResult;
+    TaskExecutionResult taskResult;
     try
     {
         taskResult = mode == "--preset"
-            ? await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                WorkflowTaskCodes.Preset,
-                new EmptyWorkflowTaskRequest(),
+            ? await taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(TaskCode: TaskCodes.Preset),
                 taskCts.Token)
-            : await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                WorkflowTaskCodes.Extra,
-                new EmptyWorkflowTaskRequest(),
+            : await taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(TaskCode: TaskCodes.Extra),
                 taskCts.Token);
     }
-    catch (WorkflowTaskDispatchException ex)
+    catch (TaskLaunchException ex)
     {
         AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
         return;
     }
 
-    AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskName)}");
-    AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.CorrelationId)}");
+    AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskCode)}");
+    AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.ExecutionId)}");
     AnsiConsole.MarkupLine($"[grey]Scripts:[/] {taskResult.ScriptsExecuted}");
     AnsiConsole.MarkupLine($"[grey]Files:[/] {taskResult.FilesWritten}");
     AnsiConsole.MarkupLine($"[grey]Output:[/] {Markup.Escape(taskResult.OutputPath ?? "-")}");
@@ -139,9 +133,9 @@ Console.CancelKeyPress += (_, e) =>
 
 try
 {
-    await ExecuteRunAsync(dispatcher, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cts.Token);
+    await ExecuteRunAsync(taskWorkflow, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cts.Token);
 }
-catch (WorkflowTaskDispatchException ex)
+catch (TaskLaunchException ex)
 {
     AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
     return;
@@ -153,13 +147,12 @@ static async Task RunInteractiveSessionAsync(
     string catalogPath,
     string scriptsDirectory,
     ICatalogService catalogService,
-    IWorkflowTaskDispatcher dispatcher,
+    TaskWorkflow taskWorkflow,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
     RunStateStore runStateStore,
     IRunner runner,
     RunnerOptions runnerOptions,
-    IPresetGateService presetGateService,
-    IWorkflowStageStateStore workflowStageStateStore,
+    DailyWindowPolicy dailyWindowPolicy,
     IPresetProbeService presetProbeService,
     PresetGateOptions presetGateOptions,
     CancellationToken cancellationToken)
@@ -180,8 +173,8 @@ static async Task RunInteractiveSessionAsync(
         AnsiConsole.MarkupLine("[grey]Одна сессия для всех фаз: probe -> preset -> run -> extra[/]");
         AnsiConsole.MarkupLine(string.Empty);
 
-        presetGateService.RefreshDailyWindowState();
-        var state = presetGateService.Get();
+        dailyWindowPolicy.RefreshDailyWindowState();
+        var state = dailyWindowPolicy.Get();
         RenderStageState(state, presetGateOptions);
 
         var action = AnsiConsole.Prompt(
@@ -215,31 +208,29 @@ static async Task RunInteractiveSessionAsync(
             }
             else if (string.Equals(action, "Запустить preset", StringComparison.Ordinal))
             {
-                var presetResult = await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                    WorkflowTaskCodes.Preset,
-                    new EmptyWorkflowTaskRequest(),
+                var presetResult = await taskWorkflow.LaunchAsync(
+                    new TaskLaunchRequest(TaskCode: TaskCodes.Preset),
                     cancellationToken);
-                AnsiConsole.MarkupLine($"[green]Preset completed.[/] CorrelationId: {Markup.Escape(presetResult.CorrelationId)}");
+                AnsiConsole.MarkupLine($"[green]Preset completed.[/] CorrelationId: {Markup.Escape(presetResult.ExecutionId)}");
                 Pause();
             }
             else if (string.Equals(action, "Запустить run", StringComparison.Ordinal))
             {
                 var targetCodes = await Unload.Console.TargetCodePrompter.PromptTargetCodesAsync(catalogService, cancellationToken);
-                await ExecuteRunAsync(dispatcher, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
+                await ExecuteRunAsync(taskWorkflow, runWorkflow, runStateStore, runner, runnerOptions, targetCodes, cancellationToken);
                 Pause();
             }
             else if (string.Equals(action, "Запустить extra", StringComparison.Ordinal))
             {
-                var extraResult = await dispatcher.DispatchAsync<EmptyWorkflowTaskRequest, ScriptTaskRunResult>(
-                    WorkflowTaskCodes.Extra,
-                    new EmptyWorkflowTaskRequest(),
+                var extraResult = await taskWorkflow.LaunchAsync(
+                    new TaskLaunchRequest(TaskCode: TaskCodes.Extra),
                     cancellationToken);
                 AnsiConsole.MarkupLine(
                     $"[green]Extra completed.[/] Files: {extraResult.FilesWritten}, Output: {Markup.Escape(extraResult.OutputPath ?? "-")}");
                 Pause();
             }
         }
-        catch (WorkflowTaskDispatchException ex)
+        catch (TaskLaunchException ex)
         {
             AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
             Pause();
@@ -261,7 +252,7 @@ static async Task RunInteractiveSessionAsync(
 }
 
 static async Task ExecuteRunAsync(
-    IWorkflowTaskDispatcher dispatcher,
+    TaskWorkflow taskWorkflow,
     ISingleActiveWorkflow<RunRequest> runWorkflow,
     RunStateStore runStateStore,
     IRunner runner,
@@ -269,12 +260,14 @@ static async Task ExecuteRunAsync(
     IReadOnlyCollection<string> targetCodes,
     CancellationToken cancellationToken)
 {
-    StartRunTaskResult startRunResult = await dispatcher.DispatchAsync<StartRunTaskRequest, StartRunTaskResult>(
-        WorkflowTaskCodes.Run,
-        new StartRunTaskRequest(targetCodes, RunSelectionMode.TargetCodes),
+    TaskExecutionResult startRunResult = await taskWorkflow.LaunchAsync(
+        new TaskLaunchRequest(
+            TaskCode: TaskCodes.Run,
+            Codes: targetCodes,
+            SelectionMode: RunSelectionMode.TargetCodes),
         cancellationToken);
 
-    var correlationId = startRunResult.CorrelationId;
+    var correlationId = startRunResult.ExecutionId;
     var request = await WaitForRunRequestAsync(runWorkflow, correlationId, cancellationToken);
     if (request is null)
     {
@@ -509,4 +502,3 @@ static string TrimForCell(string value, int width)
 
     return value[..(width - 3)] + "...";
 }
-

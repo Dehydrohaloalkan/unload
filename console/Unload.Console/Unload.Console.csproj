@@ -4,7 +4,7 @@
     <ProjectReference Include="..\..\backend\Unload.Bootstrapper\Unload.Bootstrapper.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Run.Application\Unload.Run.Application.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Store\Unload.Store.csproj" />
-    <ProjectReference Include="..\..\backend\Unload.TaskFlow\Unload.TaskFlow.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.Tasks\Unload.Tasks.csproj" />
   </ItemGroup>
 
   <ItemGroup>

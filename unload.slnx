@@ -12,9 +12,7 @@
     <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
     <Project Path="backend/Unload.Store/Unload.Store.csproj" />
     <Project Path="backend/Unload.ScriptTasks/Unload.ScriptTasks.csproj" />
-    <Project Path="backend/Unload.TaskFlow/Unload.TaskFlow.csproj" />
-    <Project Path="backend/Unload.TaskFlow.Runtime/Unload.TaskFlow.Runtime.csproj" />
-    <Project Path="backend/Unload.Workflow/Unload.Workflow.csproj" />
+    <Project Path="backend/Unload.Tasks/Unload.Tasks.csproj" />
   </Folder>
   <Folder Name="/console/">
     <Project Path="console/Unload.Console/Unload.Console.csproj" />
