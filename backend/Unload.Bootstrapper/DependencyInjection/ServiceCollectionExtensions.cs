@@ -6,12 +6,12 @@ using Unload.DataBase;
 using Unload.FileWriter;
 using Microsoft.Extensions.Configuration;
 using Unload.Gateway;
-using Unload.ScriptTasks.DependencyInjection;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.DependencyInjection;
 using Unload.Tasks.ExtraUnload.DependencyInjection;
 using Unload.Tasks.MainUnload;
+using Unload.Tasks.Preset.DependencyInjection;
 using Unload.Tasks.MainUnload.DependencyInjection;
 
 namespace Unload.Bootstrapper.DependencyInjection;
@@ -70,7 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
         services.AddUnloadMainUnload(paths.OutputDirectory);
         services.AddUnloadExtraUnload(paths.ScriptsDirectory, paths.OutputDirectory);
-        services.AddUnloadScriptTasksInfrastructure(paths.ScriptsDirectory);
+        services.AddUnloadPreset(paths.ScriptsDirectory);
 
         return services;
     }

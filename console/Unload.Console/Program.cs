@@ -47,7 +47,6 @@ var runWorkflow = provider.ServiceProvider.GetRequiredService<RunActivationChann
 var runStateStore = provider.ServiceProvider.GetRequiredService<RunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<MainUnloadEngine>();
 var dailyWindowPolicy = provider.ServiceProvider.GetRequiredService<DailyWindowPolicy>();
-var presetProbeService = provider.ServiceProvider.GetRequiredService<IPresetProbeService>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
     : "--default";
@@ -64,7 +63,6 @@ if (mode == "--default" && args.Length == 0)
         runner,
         runnerOptions,
         dailyWindowPolicy,
-        presetProbeService,
         presetGateOptions,
         CancellationToken.None);
     return;
@@ -152,7 +150,6 @@ static async Task RunInteractiveSessionAsync(
     MainUnloadEngine runner,
     RunnerOptions runnerOptions,
     DailyWindowPolicy dailyWindowPolicy,
-    IPresetProbeService presetProbeService,
     PresetGateOptions presetGateOptions,
     CancellationToken cancellationToken)
 {
@@ -201,8 +198,8 @@ static async Task RunInteractiveSessionAsync(
         {
             if (string.Equals(action, "Проверить готовность preset (probe)", StringComparison.Ordinal))
             {
-                var probeResult = await presetProbeService.ExecuteAndApplyAsync(cancellationToken);
-                AnsiConsole.MarkupLine($"[grey]Последний probe:[/] {probeResult}");
+                await taskWorkflow.LaunchAsync(new TaskLaunchRequest(TaskCode: TaskCodes.Probe), cancellationToken);
+                AnsiConsole.MarkupLine($"[grey]Последний probe:[/] {dailyWindowPolicy.Get().LastProbeValue}");
                 Pause();
             }
             else if (string.Equals(action, "Запустить preset", StringComparison.Ordinal))

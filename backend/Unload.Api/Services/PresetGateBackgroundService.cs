@@ -10,14 +10,14 @@ namespace Unload.Api.Services;
 public class PresetGateBackgroundService(
     PresetGateOptions options,
     DailyWindowPolicy dailyWindowPolicy,
-    IPresetProbeService presetProbeService,
+    TaskWorkflow taskWorkflow,
     IWorkflowInMemoryStateRestorer workflowInMemoryStateRestorer,
     IHubContext<RunStatusHub> hubContext,
     ILogger<PresetGateBackgroundService> logger) : BackgroundService
 {
     private readonly PresetGateOptions _options = options;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
-    private readonly IPresetProbeService _presetProbeService = presetProbeService;
+    private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
     private readonly IWorkflowInMemoryStateRestorer _workflowInMemoryStateRestorer = workflowInMemoryStateRestorer;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<PresetGateBackgroundService> _logger = logger;
@@ -98,7 +98,7 @@ public class PresetGateBackgroundService(
         try
         {
             var previous = _dailyWindowPolicy.Get();
-            await _presetProbeService.ExecuteAndApplyAsync(cancellationToken);
+            await _taskWorkflow.LaunchAsync(new TaskLaunchRequest(TaskCode: TaskCodes.Probe), cancellationToken);
             var current = _dailyWindowPolicy.Get();
 
             if (!Equals(previous, current))

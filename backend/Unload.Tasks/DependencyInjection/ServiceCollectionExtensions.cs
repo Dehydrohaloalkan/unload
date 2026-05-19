@@ -19,12 +19,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton(presetGateOptions);
         services.AddSingleton<DailyWindowPolicy>();
-        services.AddSingleton<IPresetProbeService, PresetProbeService>();
         services.AddSingleton<RunActivationChannel>();
-
-        services.AddSingleton<PresetTask>();
-
-        services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<PresetTask>());
 
         services.AddSingleton<TaskWorkflow>();
 
