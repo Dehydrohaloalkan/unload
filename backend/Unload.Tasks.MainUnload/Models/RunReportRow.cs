@@ -1,4 +1,4 @@
-namespace Unload.Runner.Models;
+namespace Unload.Tasks.MainUnload.Models;
 
 internal record RunReportRow(
     string MemberName,
@@ -8,4 +8,3 @@ internal record RunReportRow(
     int RowsCount,
     bool MqSent,
     long ExecutionTimeMs);
-

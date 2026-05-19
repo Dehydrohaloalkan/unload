@@ -1,4 +1,4 @@
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Параметры работы движка раннера.

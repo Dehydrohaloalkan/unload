@@ -5,10 +5,9 @@ using System.Text.RegularExpressions;
 using Unload.Bootstrapper;
 using Unload.Bootstrapper.DependencyInjection;
 using Unload.Core;
-using Unload.Run.Application;
-using Unload.Runner;
 using Unload.Store;
 using Unload.Tasks;
+using Unload.Tasks.MainUnload;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
 const int WorkerColumnWidth = 26;
@@ -44,9 +43,9 @@ services.AddUnloadRuntime(new UnloadRuntimePaths(
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
 var taskWorkflow = provider.ServiceProvider.GetRequiredService<TaskWorkflow>();
-var runWorkflow = provider.ServiceProvider.GetRequiredService<ISingleActiveWorkflow<RunRequest>>();
+var runWorkflow = provider.ServiceProvider.GetRequiredService<RunActivationChannel>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<RunStateStore>();
-var runner = provider.ServiceProvider.GetRequiredService<IRunner>();
+var runner = provider.ServiceProvider.GetRequiredService<MainUnloadEngine>();
 var dailyWindowPolicy = provider.ServiceProvider.GetRequiredService<DailyWindowPolicy>();
 var presetProbeService = provider.ServiceProvider.GetRequiredService<IPresetProbeService>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
@@ -148,9 +147,9 @@ static async Task RunInteractiveSessionAsync(
     string scriptsDirectory,
     ICatalogService catalogService,
     TaskWorkflow taskWorkflow,
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+    RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
-    IRunner runner,
+    MainUnloadEngine runner,
     RunnerOptions runnerOptions,
     DailyWindowPolicy dailyWindowPolicy,
     IPresetProbeService presetProbeService,
@@ -253,9 +252,9 @@ static async Task RunInteractiveSessionAsync(
 
 static async Task ExecuteRunAsync(
     TaskWorkflow taskWorkflow,
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+    RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
-    IRunner runner,
+    MainUnloadEngine runner,
     RunnerOptions runnerOptions,
     IReadOnlyCollection<string> targetCodes,
     CancellationToken cancellationToken)
@@ -372,8 +371,8 @@ static DateTimeOffset ResolveNextPresetWindowStart(DateTimeOffset now, int start
     return now <= todayStart ? todayStart : todayStart.AddDays(1);
 }
 
-static async Task<WorkflowActivation<RunRequest>?> WaitForRunRequestAsync(
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+static async Task<RunActivation?> WaitForRunRequestAsync(
+    RunActivationChannel runWorkflow,
     string correlationId,
     CancellationToken cancellationToken)
 {

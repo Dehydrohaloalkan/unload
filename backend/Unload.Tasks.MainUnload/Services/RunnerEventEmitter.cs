@@ -1,9 +1,9 @@
 using System.Threading.Channels;
 using Unload.Core;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
-internal  class RunnerEventEmitter
+internal class RunnerEventEmitter
 {
     private const int EventChannelCapacity = 64;
     private readonly Channel<RunnerEvent> _channel;

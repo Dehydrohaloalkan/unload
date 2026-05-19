@@ -1,7 +1,7 @@
 using System.Data.Common;
 using Unload.Core;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Вспомогательные операции чтения данных из <see cref="DbDataReader"/>.

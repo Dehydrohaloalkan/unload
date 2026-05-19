@@ -6,6 +6,7 @@ using Unload.Core;
 using Unload.Api.UseCases.Abstractions;
 using Unload.Store;
 using Unload.Tasks;
+using Unload.Tasks.MainUnload;
 
 namespace Unload.Api.Controllers;
 
@@ -19,7 +20,7 @@ public class RunsController(
     IRunPresetUseCase runPresetUseCase,
     IRunExtraUseCase runExtraUseCase,
     IRequeueToGatewayUseCase requeueToGatewayUseCase,
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+    RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
     DailyWindowPolicy dailyWindowPolicy,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
@@ -31,7 +32,7 @@ public class RunsController(
     private readonly IRunPresetUseCase _runPresetUseCase = runPresetUseCase;
     private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
     private readonly IRequeueToGatewayUseCase _requeueToGatewayUseCase = requeueToGatewayUseCase;
-    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
+    private readonly RunActivationChannel _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;

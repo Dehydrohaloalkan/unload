@@ -1,6 +1,6 @@
 using Unload.Core;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Валидации и guard-проверки для запуска выгрузки.

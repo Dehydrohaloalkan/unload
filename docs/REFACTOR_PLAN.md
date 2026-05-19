@@ -319,7 +319,18 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
 Каждая фаза завершается **зелёной сборкой** (`dotnet build unload.slnx`) и работающим
 приложением. После каждой фазы — коммит. `unload.slnx` обновлять по ходу.
 
-### Фаза 1 — `Unload.Store`
+### Прогресс
+
+- [x] Фаза 1 — `Unload.Store` (коммит `37c4c3f`)
+- [x] Фаза 2 — `Unload.Tasks` ядро (коммит `c0c8fd4`)
+- [x] Фаза 3 — `Unload.Tasks.MainUnload` (коммит `f4797a7`)
+- [ ] Фаза 4 — `Unload.Tasks.ExtraUnload`
+- [ ] Фаза 5 — `Unload.Tasks.Preset`
+- [ ] Фаза 6 — слим API
+- [ ] Фаза 7 — конфиг в Bootstrapper
+- [ ] Фаза 8 — Console и документация
+
+### Фаза 1 — `Unload.Store` ✅ ВЫПОЛНЕНО
 
 - Создать проект `backend/Unload.Store`.
 - Перенести `RunStatusModels.cs` (из `Run.Application`) → модели `RunDetail` + `TaskExecution`.
@@ -332,7 +343,7 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
   Чтобы сборка была зелёной — временно адаптировать сигнатуры (`IRunStateStore` →
   `TaskExecutionStore`) у текущих definition'ов и hosted-сервисов.
 
-### Фаза 2 — `Unload.Tasks` (ядро)
+### Фаза 2 — `Unload.Tasks` (ядро) ✅ ВЫПОЛНЕНО
 
 - Создать `backend/Unload.Tasks`, влить `Unload.Workflow` + `Unload.TaskFlow`
   + `Unload.TaskFlow.Runtime`.
@@ -353,6 +364,10 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
   нормализация target-кодов из `StartRunWorkflowTaskDefinition`).
 - Перенести сюда `MainUnloadTask` (бывший `StartRunWorkflowTaskDefinition`) из `Unload.Tasks`.
 - Де-дженерикизировать `InMemorySingleActiveWorkflow<RunRequest>` → `RunActivationChannel`.
+  **Уточнение:** `RunActivationChannel` оставить в `Unload.Tasks` (ядро), НЕ переносить в
+  `MainUnload` — `TaskWorkflow` зависит от него для single-active проверки, а `Unload.Tasks`
+  не может ссылаться на `MainUnload`. Generic-интерфейс `ISingleActiveWorkflow<>` и
+  `WorkflowActivation<>` удалить, заменив на не-generic `RunActivationChannel`/`RunActivation`.
 - `IRunner` (из `Core`) → `MainUnloadEngine` здесь; `RunnerEngine` переименовать
   в `MainUnloadEngine`. Опционально (low-priority, ограничить churn): `RunnerEvent`/
   `RunnerStep` можно оставить с текущими именами.

@@ -1,22 +1,22 @@
 using System.Threading.Channels;
+using Unload.Core;
 
 namespace Unload.Tasks;
 
 /// <summary>
-/// In-memory реализация single-active workflow без очереди ожидания.
+/// In-memory канал для single-active задачи основной выгрузки.
 /// Гарантирует, что одновременно активна только одна задача.
-/// Де-дженерикизируется в <c>RunActivationChannel</c> в Фазе 3.
+/// Не-generic замена <c>InMemorySingleActiveWorkflow&lt;RunRequest&gt;</c>.
 /// </summary>
-/// <typeparam name="TPayload">Тип полезной нагрузки задачи workflow.</typeparam>
-public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPayload>
+public class RunActivationChannel
 {
-    private readonly Channel<WorkflowActivation<TPayload>> _channel;
+    private readonly Channel<RunActivation> _channel;
     private readonly object _sync = new();
-    private ActiveWorkflowContext? _active;
+    private ActiveContext? _active;
 
-    public InMemorySingleActiveWorkflow()
+    public RunActivationChannel()
     {
-        _channel = Channel.CreateBounded<WorkflowActivation<TPayload>>(new BoundedChannelOptions(1)
+        _channel = Channel.CreateBounded<RunActivation>(new BoundedChannelOptions(1)
         {
             FullMode = BoundedChannelFullMode.DropWrite,
             SingleReader = true,
@@ -24,7 +24,10 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
         });
     }
 
-    public bool TryActivate(string correlationId, TPayload payload)
+    /// <summary>
+    /// Пытается активировать новую задачу.
+    /// </summary>
+    public bool TryActivate(string correlationId, RunRequest payload)
     {
         lock (_sync)
         {
@@ -34,8 +37,8 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
             }
 
             var activationCts = new CancellationTokenSource();
-            var activation = new WorkflowActivation<TPayload>(correlationId, payload, activationCts.Token);
-            _active = new ActiveWorkflowContext(correlationId, activationCts);
+            var activation = new RunActivation(correlationId, payload, activationCts.Token);
+            _active = new ActiveContext(correlationId, activationCts);
             if (_channel.Writer.TryWrite(activation))
             {
                 return true;
@@ -47,11 +50,17 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
         }
     }
 
-    public IAsyncEnumerable<WorkflowActivation<TPayload>> ReadActivationsAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Возвращает асинхронный поток принятых активаций.
+    /// </summary>
+    public IAsyncEnumerable<RunActivation> ReadActivationsAsync(CancellationToken cancellationToken)
     {
         return _channel.Reader.ReadAllAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Освобождает слот активной задачи.
+    /// </summary>
     public void Complete(string correlationId)
     {
         lock (_sync)
@@ -65,6 +74,9 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
         }
     }
 
+    /// <summary>
+    /// Возвращает идентификатор активной задачи.
+    /// </summary>
     public string? GetActiveCorrelationId()
     {
         lock (_sync)
@@ -73,6 +85,9 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
         }
     }
 
+    /// <summary>
+    /// Пытается запросить отмену активной задачи.
+    /// </summary>
     public bool TryCancel(string correlationId)
     {
         lock (_sync)
@@ -93,5 +108,5 @@ public class InMemorySingleActiveWorkflow<TPayload> : ISingleActiveWorkflow<TPay
         }
     }
 
-    private record ActiveWorkflowContext(string CorrelationId, CancellationTokenSource Cancellation);
+    private record ActiveContext(string CorrelationId, CancellationTokenSource Cancellation);
 }

@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using Unload.Core;
-using Unload.Runner.Models;
+using Unload.Tasks.MainUnload.Models;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
-internal  class ScriptDistributor
+internal class ScriptDistributor
 {
     private readonly Queue<ScriptDefinition> _bigScripts;
     private readonly Queue<ScriptDefinition> _lightScripts;

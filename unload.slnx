@@ -8,11 +8,10 @@
     <Project Path="backend/Unload.DataBase/Unload.DataBase.csproj" />
     <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
     <Project Path="backend/Unload.Gateway/Unload.Gateway.csproj" />
-    <Project Path="backend/Unload.Run.Application/Unload.Run.Application.csproj" />
-    <Project Path="backend/Unload.Runner/Unload.Runner.csproj" />
     <Project Path="backend/Unload.Store/Unload.Store.csproj" />
     <Project Path="backend/Unload.ScriptTasks/Unload.ScriptTasks.csproj" />
     <Project Path="backend/Unload.Tasks/Unload.Tasks.csproj" />
+    <Project Path="backend/Unload.Tasks.MainUnload/Unload.Tasks.MainUnload.csproj" />
   </Folder>
   <Folder Name="/console/">
     <Project Path="console/Unload.Console/Unload.Console.csproj" />

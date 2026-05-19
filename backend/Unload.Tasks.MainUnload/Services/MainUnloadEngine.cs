@@ -2,15 +2,15 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
 using Unload.Core;
-using Unload.Runner.Models;
+using Unload.Tasks.MainUnload.Models;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
-/// Реализация движка выгрузки данных.
+/// Движок основной выгрузки данных.
 /// N worker-потоков (n-1 для больших скриптов, 1 для легких), каждый с одним клиентом БД.
 /// </summary>
-public class RunnerEngine : IRunner
+public class MainUnloadEngine
 {
     private const int EventChannelCapacity = 64;
     private readonly ICatalogService _catalogService;
@@ -19,7 +19,7 @@ public class RunnerEngine : IRunner
     private readonly IGatewayPublisher _gatewayPublisher;
     private readonly RunnerOptions _options;
 
-    public RunnerEngine(
+    public MainUnloadEngine(
         ICatalogService catalogService,
         IDatabaseClientFactory databaseClientFactory,
         IFileChunkWriter fileChunkWriter,
@@ -191,9 +191,9 @@ public class RunnerEngine : IRunner
         ConcurrentBag<RunReportRow> reportRows,
         ConcurrentDictionary<string, int> memberChunkCounters,
         ConcurrentDictionary<string, int> remainingScriptsByMember,
-                bool publishToGateway,
-                string correlationId,
-                CancellationToken cancellationToken)
+        bool publishToGateway,
+        string correlationId,
+        CancellationToken cancellationToken)
     {
         var client = _databaseClientFactory.CreateClient();
         try

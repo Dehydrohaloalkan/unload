@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Создание и именование директорий результатов запуска.

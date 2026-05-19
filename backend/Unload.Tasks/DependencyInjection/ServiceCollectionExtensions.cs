@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Unload.Core;
 
 namespace Unload.Tasks.DependencyInjection;
 
@@ -10,8 +9,9 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Регистрирует <see cref="TaskWorkflow"/>, <see cref="DailyWindowPolicy"/>,
-    /// все три задачи как <see cref="UnloadTask"/> и <see cref="IPresetProbeService"/>.
-    /// <see cref="IScriptTaskOrchestrator"/> регистрируется отдельно из ScriptTasks DI.
+    /// <see cref="RunActivationChannel"/> и вспомогательные сервисы ядра.
+    /// Конкретные задачи (<see cref="UnloadTask"/>) регистрируются из проектов задач
+    /// (например, <c>AddUnloadMainUnload</c>).
     /// </summary>
     public static IServiceCollection AddUnloadTasks(
         this IServiceCollection services,
@@ -20,14 +20,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(presetGateOptions);
         services.AddSingleton<DailyWindowPolicy>();
         services.AddSingleton<IPresetProbeService, PresetProbeService>();
-        services.AddSingleton<ISingleActiveWorkflow<RunRequest>, InMemorySingleActiveWorkflow<RunRequest>>();
+        services.AddSingleton<RunActivationChannel>();
 
-        // Задачи регистрируются как конкретные типы и как IEnumerable<UnloadTask>.
-        services.AddSingleton<MainUnloadTask>();
         services.AddSingleton<PresetTask>();
         services.AddSingleton<ExtraUnloadTask>();
 
-        services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<MainUnloadTask>());
         services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<PresetTask>());
         services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<ExtraUnloadTask>());
 

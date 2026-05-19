@@ -3,6 +3,7 @@ using Unload.Api.Models;
 using Unload.Core;
 using Unload.Store;
 using Unload.Tasks;
+using Unload.Tasks.MainUnload;
 
 namespace Unload.Api.Controllers;
 
@@ -19,11 +20,11 @@ namespace Unload.Api.Controllers;
 [Route("api")]
 public class CatalogController(
     ICatalogService catalogService,
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+    RunActivationChannel runWorkflow,
     RunStateStore runStateStore) : ControllerBase
 {
     private readonly ICatalogService _catalogService = catalogService;
-    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
+    private readonly RunActivationChannel _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
 
     /// <summary>

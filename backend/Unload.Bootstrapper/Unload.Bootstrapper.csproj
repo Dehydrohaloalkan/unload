@@ -7,11 +7,10 @@
     <ProjectReference Include="..\Unload.DataBase\Unload.DataBase.csproj" />
     <ProjectReference Include="..\Unload.FileWriter\Unload.FileWriter.csproj" />
     <ProjectReference Include="..\Unload.Gateway\Unload.Gateway.csproj" />
-    <ProjectReference Include="..\Unload.Run.Application\Unload.Run.Application.csproj" />
-    <ProjectReference Include="..\Unload.Runner\Unload.Runner.csproj" />
-    <ProjectReference Include="..\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\Unload.ScriptTasks\Unload.ScriptTasks.csproj" />
+    <ProjectReference Include="..\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\Unload.Tasks\Unload.Tasks.csproj" />
+    <ProjectReference Include="..\Unload.Tasks.MainUnload\Unload.Tasks.MainUnload.csproj" />
   </ItemGroup>
 
   <ItemGroup>

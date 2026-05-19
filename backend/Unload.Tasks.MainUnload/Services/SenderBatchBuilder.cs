@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using Unload.Core;
 
-namespace Unload.Runner;
+namespace Unload.Tasks.MainUnload;
 
-internal  class SenderBatchBuilder
+internal class SenderBatchBuilder
 {
     private readonly ConcurrentDictionary<string, ConcurrentBag<SenderFileDescriptor>> _filesByMember =
         new(StringComparer.OrdinalIgnoreCase);

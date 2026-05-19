@@ -14,7 +14,7 @@ public class TaskWorkflow
     private readonly IReadOnlyDictionary<string, UnloadTask> _tasks;
     private readonly DailyWindowPolicy _window;
     private readonly TaskExecutionHistoryStore _historyStore;
-    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow;
+    private readonly RunActivationChannel _runWorkflow;
     private readonly ILogger<TaskWorkflow> _logger;
 
     // Потокобезопасный набор активных foreground-задач (preset, extra).
@@ -25,7 +25,7 @@ public class TaskWorkflow
         IEnumerable<UnloadTask> tasks,
         DailyWindowPolicy window,
         TaskExecutionHistoryStore historyStore,
-        ISingleActiveWorkflow<RunRequest> runWorkflow,
+        RunActivationChannel runWorkflow,
         ILogger<TaskWorkflow> logger)
     {
         _tasks = tasks.ToDictionary(static t => t.Code, StringComparer.OrdinalIgnoreCase);
@@ -144,7 +144,7 @@ public class TaskWorkflow
             }
         }
 
-        // Single-active для run: проверяем ISingleActiveWorkflow<RunRequest>.
+        // Single-active для run: проверяем RunActivationChannel.
         var isRunTask = string.Equals(task.Code, TaskCodes.Run, StringComparison.OrdinalIgnoreCase);
         var conflictsWithRun = task.ConflictsWith.Contains(TaskCodes.Run, StringComparer.OrdinalIgnoreCase);
         if (isRunTask || conflictsWithRun)

@@ -6,12 +6,12 @@ using Unload.DataBase;
 using Unload.FileWriter;
 using Microsoft.Extensions.Configuration;
 using Unload.Gateway;
-using Unload.Run.Application.DependencyInjection;
-using Unload.Runner;
 using Unload.ScriptTasks.DependencyInjection;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.DependencyInjection;
+using Unload.Tasks.MainUnload;
+using Unload.Tasks.MainUnload.DependencyInjection;
 
 namespace Unload.Bootstrapper.DependencyInjection;
 
@@ -63,12 +63,11 @@ public static class ServiceCollectionExtensions
         var runStateFilePath = Path.Combine(stateDirectory, "runs.json");
         var taskHistoryFilePath = Path.Combine(stateDirectory, "task-history.json");
         services.AddSingleton(opts);
-        services.AddSingleton<IRunner, RunnerEngine>();
         services.AddSingleton<RunStateStore>(_ => new RunStateStore(opts.WorkerCount, runStateFilePath));
         services.AddSingleton<TaskExecutionHistoryStore>(_ => new TaskExecutionHistoryStore(taskHistoryFilePath));
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
-        services.AddUnloadRunApplication(paths.OutputDirectory);
         services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
+        services.AddUnloadMainUnload(paths.OutputDirectory);
         services.AddUnloadScriptTasksInfrastructure(paths.ScriptsDirectory, paths.OutputDirectory);
 
         return services;

@@ -1,19 +1,16 @@
 using Unload.Core;
 
-namespace Unload.Run.Application;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Фабрика формирования стандартного запроса запуска выгрузки.
-/// Используется orchestrator для генерации уникального correlation id.
+/// Генерирует уникальный correlation id для каждого запуска.
 /// </summary>
-public class RunRequestFactory : IRunRequestFactory
+public class RunRequestFactory
 {
     /// <summary>
     /// Создает <see cref="RunRequest"/> c уникальным идентификатором запуска.
     /// </summary>
-    /// <param name="targetCodes">Target-коды для выполнения.</param>
-    /// <param name="outputDirectory">Базовая директория вывода.</param>
-    /// <returns>Новый объект запроса запуска.</returns>
     public RunRequest Create(IReadOnlyCollection<string> targetCodes, string outputDirectory, bool publishToGateway = true)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];

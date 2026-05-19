@@ -1,28 +1,28 @@
 using System.Text.RegularExpressions;
 using Unload.Catalog;
 using Unload.Core;
-using Unload.Run.Application;
 using Unload.Store;
+using Unload.Tasks;
 
-namespace Unload.Tasks;
+namespace Unload.Tasks.MainUnload;
 
 /// <summary>
 /// Задача основной выгрузки (main run).
-/// Deferred: стартует фоновую обработку через <see cref="ISingleActiveWorkflow{RunRequest}"/> и возвращает Accepted.
+/// Deferred: стартует фоновую обработку через <see cref="RunActivationChannel"/> и возвращает Accepted.
 /// Фиксацию завершения делает фоновый воркер (<c>RunProcessingBackgroundService</c>), не эта задача.
 /// </summary>
 public class MainUnloadTask(
     ICatalogService catalogService,
-    IRunRequestFactory requestFactory,
-    ISingleActiveWorkflow<RunRequest> runWorkflow,
+    RunRequestFactory requestFactory,
+    RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
     RunApplicationOptions runOptions) : UnloadTask
 {
     private static readonly Regex TargetCodePattern = new("^[A-Z0-9_]{3,64}$", RegexOptions.Compiled);
 
     private readonly ICatalogService _catalogService = catalogService;
-    private readonly IRunRequestFactory _requestFactory = requestFactory;
-    private readonly ISingleActiveWorkflow<RunRequest> _runWorkflow = runWorkflow;
+    private readonly RunRequestFactory _requestFactory = requestFactory;
+    private readonly RunActivationChannel _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly RunApplicationOptions _runOptions = runOptions;
 
