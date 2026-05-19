@@ -23,10 +23,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RunActivationChannel>();
 
         services.AddSingleton<PresetTask>();
-        services.AddSingleton<ExtraUnloadTask>();
 
         services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<PresetTask>());
-        services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<ExtraUnloadTask>());
 
         services.AddSingleton<TaskWorkflow>();
 

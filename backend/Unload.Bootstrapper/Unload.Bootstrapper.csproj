@@ -10,6 +10,7 @@
     <ProjectReference Include="..\Unload.ScriptTasks\Unload.ScriptTasks.csproj" />
     <ProjectReference Include="..\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\Unload.Tasks\Unload.Tasks.csproj" />
+    <ProjectReference Include="..\Unload.Tasks.ExtraUnload\Unload.Tasks.ExtraUnload.csproj" />
     <ProjectReference Include="..\Unload.Tasks.MainUnload\Unload.Tasks.MainUnload.csproj" />
   </ItemGroup>
 

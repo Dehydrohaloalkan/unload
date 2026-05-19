@@ -2,14 +2,12 @@ using System.Collections.Concurrent;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
-using Unload.ScriptTasks.Abstractions;
-using Unload.ScriptTasks.Models;
 
-namespace Unload.ScriptTasks;
+namespace Unload.Tasks.ExtraUnload;
 
 public class ExtraScriptExecutor(
     IDatabaseClientFactory databaseClientFactory,
-    ILogger<ExtraScriptExecutor> logger) : IExtraScriptExecutor
+    ILogger<ExtraScriptExecutor> logger)
 {
     private readonly IDatabaseClientFactory _databaseClientFactory = databaseClientFactory;
     private readonly ILogger<ExtraScriptExecutor> _logger = logger;
@@ -48,7 +46,7 @@ public class ExtraScriptExecutor(
         }
         finally
         {
-            await ScriptTaskDatabaseClientDisposer.DisposeAsync(client);
+            await DisposeDatabaseClientAsync(client);
         }
 
         _logger.LogDebug(
@@ -76,5 +74,19 @@ public class ExtraScriptExecutor(
         }
 
         throw new InvalidOperationException($"Result set does not contain required column '{columnName}'.");
+    }
+
+    private static async Task DisposeDatabaseClientAsync(IDatabaseClient client)
+    {
+        if (client is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync();
+            return;
+        }
+
+        if (client is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 }

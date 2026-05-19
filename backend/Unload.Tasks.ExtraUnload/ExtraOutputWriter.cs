@@ -1,13 +1,11 @@
 using System.Collections.Concurrent;
 using Unload.Core;
-using Unload.ScriptTasks.Abstractions;
-using Unload.ScriptTasks.Models;
 
-namespace Unload.ScriptTasks;
+namespace Unload.Tasks.ExtraUnload;
 
-public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtraOutputWriter
+public class ExtraOutputWriter(IGatewayPublisher gatewayPublisher)
 {
-    private readonly IScriptTaskEventPublisher _eventPublisher = eventPublisher;
+    private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
 
     public async Task<ExtraOutputWriteResult> WriteAsync(
         string baseOutputDirectory,
@@ -44,11 +42,14 @@ public class ExtraOutputWriter(IScriptTaskEventPublisher eventPublisher) : IExtr
         {
             foreach (var memberBatch in filesByMember)
             {
-                await _eventPublisher.PublishFileBatchReadyAsync(
-                    correlationId,
-                    memberBatch.Key,
-                    memberBatch.Value,
-                    cancellationToken);
+                var @event = new SenderFileBatchReadyEvent(
+                    OccurredAt: DateTimeOffset.UtcNow,
+                    CorrelationId: correlationId,
+                    MemberName: memberBatch.Key,
+                    BatchId: $"{correlationId}:{memberBatch.Key}",
+                    Version: 1,
+                    Files: memberBatch.Value);
+                await _gatewayPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
             }
         }
 

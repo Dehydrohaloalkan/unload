@@ -10,6 +10,7 @@ using Unload.ScriptTasks.DependencyInjection;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.DependencyInjection;
+using Unload.Tasks.ExtraUnload.DependencyInjection;
 using Unload.Tasks.MainUnload;
 using Unload.Tasks.MainUnload.DependencyInjection;
 
@@ -68,7 +69,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
         services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
         services.AddUnloadMainUnload(paths.OutputDirectory);
-        services.AddUnloadScriptTasksInfrastructure(paths.ScriptsDirectory, paths.OutputDirectory);
+        services.AddUnloadExtraUnload(paths.ScriptsDirectory, paths.OutputDirectory);
+        services.AddUnloadScriptTasksInfrastructure(paths.ScriptsDirectory);
 
         return services;
     }

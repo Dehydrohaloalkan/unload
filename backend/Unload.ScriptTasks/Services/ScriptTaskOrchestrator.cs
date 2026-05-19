@@ -1,32 +1,23 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using Unload.Core;
 using Unload.ScriptTasks.Abstractions;
 using Unload.Tasks;
 
 namespace Unload.ScriptTasks;
 
 /// <summary>
-/// Выполняет доп-задачи на SQL-скриптах вне каталожного пайплайна.
+/// Выполняет preset-задачу на SQL-скриптах вне каталожного пайплайна.
 /// </summary>
 public class ScriptTaskOrchestrator(
     string scriptsDirectory,
-    string outputDirectory,
     IPresetScriptExecutor presetScriptExecutor,
-    IExtraScriptExecutor extraScriptExecutor,
-    IExtraOutputWriter extraOutputWriter,
     IScriptTaskEventPublisher eventPublisher,
     ILogger<ScriptTaskOrchestrator> logger) : IScriptTaskOrchestrator
 {
     private readonly string _scriptsDirectory = Path.GetFullPath(scriptsDirectory);
-    private readonly string _outputDirectory = Path.GetFullPath(outputDirectory);
     private readonly IPresetScriptExecutor _presetScriptExecutor = presetScriptExecutor;
-    private readonly IExtraScriptExecutor _extraScriptExecutor = extraScriptExecutor;
-    private readonly IExtraOutputWriter _extraOutputWriter = extraOutputWriter;
     private readonly IScriptTaskEventPublisher _eventPublisher = eventPublisher;
     private readonly ILogger<ScriptTaskOrchestrator> _logger = logger;
     private readonly SemaphoreSlim _presetSemaphore = new(1, 1);
-    private readonly SemaphoreSlim _extraSemaphore = new(1, 1);
 
     public async Task<ScriptTaskRunResult> RunPresetAsync(CancellationToken cancellationToken)
     {
@@ -86,77 +77,6 @@ public class ScriptTaskOrchestrator(
         finally
         {
             _presetSemaphore.Release();
-        }
-    }
-
-    public async Task<ScriptTaskRunResult> RunExtraAsync(bool publishToGateway, CancellationToken cancellationToken)
-    {
-        if (!await _extraSemaphore.WaitAsync(0, cancellationToken))
-        {
-            _logger.LogWarning("Extra task launch rejected: another extra task is already running.");
-            throw new InvalidOperationException("Extra scripts task is already running.");
-        }
-
-        try
-        {
-            _logger.LogInformation("Extra task started. ScriptsRoot: {ScriptsDirectory}", _scriptsDirectory);
-            if (!Directory.Exists(_scriptsDirectory))
-            {
-                throw new DirectoryNotFoundException($"Scripts directory was not found: {_scriptsDirectory}");
-            }
-
-            var scripts = Directory
-                .EnumerateFiles(_scriptsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
-                .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            var correlationId = BuildCorrelationId("extra");
-            if (scripts.Length == 0)
-            {
-                _logger.LogInformation("Extra task finished with no scripts. CorrelationId: {CorrelationId}", correlationId);
-                return new ScriptTaskRunResult(
-                    TaskName: "extra",
-                    CorrelationId: correlationId,
-                    ScriptsExecuted: 0,
-                    FilesWritten: 0,
-                    OutputPath: null,
-                    Message: "No root scripts found.");
-            }
-
-            var aggregatedLines = new ConcurrentDictionary<string, ConcurrentQueue<string>>(StringComparer.OrdinalIgnoreCase);
-            var tasks = scripts.Select(path =>
-                _extraScriptExecutor.ExecuteAsync(path, correlationId, aggregatedLines, cancellationToken));
-            await Task.WhenAll(tasks);
-
-            var writeResult = await _extraOutputWriter.WriteAsync(
-                _outputDirectory,
-                correlationId,
-                aggregatedLines,
-                publishToGateway,
-                cancellationToken);
-            _logger.LogInformation(
-                "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}, OutputPath: {OutputPath}",
-                correlationId,
-                scripts.Length,
-                writeResult.FilesWritten,
-                writeResult.OutputPath);
-
-            return new ScriptTaskRunResult(
-                TaskName: "extra",
-                CorrelationId: correlationId,
-                ScriptsExecuted: scripts.Length,
-                FilesWritten: writeResult.FilesWritten,
-                OutputPath: writeResult.OutputPath,
-                Message: "Extra scripts executed and files created.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Extra task failed.");
-            throw;
-        }
-        finally
-        {
-            _extraSemaphore.Release();
         }
     }
 

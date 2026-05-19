@@ -11,23 +11,17 @@ namespace Unload.ScriptTasks.DependencyInjection;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Регистрирует SQL/file-based реализации task orchestration.
+    /// Регистрирует SQL-based реализации preset orchestration.
     /// </summary>
     public static IServiceCollection AddUnloadScriptTasksInfrastructure(
         this IServiceCollection services,
-        string scriptsDirectory,
-        string outputDirectory)
+        string scriptsDirectory)
     {
         services.AddSingleton<IScriptTaskEventPublisher, ScriptTaskEventPublisher>();
         services.AddSingleton<IPresetScriptExecutor, PresetScriptExecutor>();
-        services.AddSingleton<IExtraScriptExecutor, ExtraScriptExecutor>();
-        services.AddSingleton<IExtraOutputWriter, ExtraOutputWriter>();
         services.AddSingleton<IScriptTaskOrchestrator>(_ => new ScriptTaskOrchestrator(
             scriptsDirectory,
-            outputDirectory,
             _.GetRequiredService<IPresetScriptExecutor>(),
-            _.GetRequiredService<IExtraScriptExecutor>(),
-            _.GetRequiredService<IExtraOutputWriter>(),
             _.GetRequiredService<IScriptTaskEventPublisher>(),
             _.GetRequiredService<ILogger<ScriptTaskOrchestrator>>()));
         return services;
