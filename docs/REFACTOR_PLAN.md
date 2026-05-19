@@ -326,8 +326,8 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
 - [x] Фаза 3 — `Unload.Tasks.MainUnload` (коммит `dc58da2`)
 - [x] Фаза 4 — `Unload.Tasks.ExtraUnload` (коммит `90ab9ee`)
 - [x] Фаза 5 — `Unload.Tasks.Preset` (коммит `4cd5162`)
-- [x] Фаза 6 — слим API
-- [ ] Фаза 7 — конфиг в Bootstrapper
+- [x] Фаза 6 — слим API (коммит `ec065f2`)
+- [x] Фаза 7 — конфиг в Bootstrapper
 - [ ] Фаза 8 — Console и документация
 
 ### Фаза 1 — `Unload.Store` ✅ ВЫПОЛНЕНО

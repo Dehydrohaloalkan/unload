@@ -1,4 +1,4 @@
-namespace Unload.Api.Models;
+namespace Unload.Bootstrapper;
 
 public sealed record HistoryRetentionOptions(
     int RetentionDays,
@@ -10,4 +10,3 @@ public sealed record HistoryRetentionOptions(
         RetentionDays: 14,
         PruneIntervalMinutes: 60);
 }
-

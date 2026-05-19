@@ -7,10 +7,8 @@ using Unload.DataBase;
 using Unload.FileWriter;
 using Unload.Gateway;
 using Unload.Store;
-using Unload.Tasks;
 using Unload.Tasks.DependencyInjection;
 using Unload.Tasks.ExtraUnload.DependencyInjection;
-using Unload.Tasks.MainUnload;
 using Unload.Tasks.MainUnload.DependencyInjection;
 using Unload.Tasks.Preset.DependencyInjection;
 
@@ -23,20 +21,19 @@ namespace Unload.Bootstrapper.DependencyInjection;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Регистрирует полный набор инфраструктурных и application сервисов выгрузки.
+    /// Загружает конфигурацию и регистрирует полный набор инфраструктурных и application сервисов выгрузки.
     /// </summary>
     /// <param name="services">Коллекция сервисов приложения.</param>
-    /// <param name="paths">Пути к каталогу, скриптам и output.</param>
+    /// <param name="configuration">Конфигурация приложения.</param>
     /// <returns>Та же коллекция сервисов для цепочки вызовов.</returns>
     public static IServiceCollection AddUnloadRuntime(
         this IServiceCollection services,
-        UnloadRuntimePaths paths,
-        DatabaseRuntimeSettings databaseSettings,
-        IConfiguration configuration,
-        RunnerOptions? runnerOptions = null,
-        PresetGateOptions? presetGateOptions = null)
+        IConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(databaseSettings);
+        var config = UnloadConfigurationLoader.Load(configuration);
+
+        var databaseSettings = config.Database;
+
         if (databaseSettings.TimeoutSeconds <= 0)
         {
             throw new InvalidOperationException("Database timeout must be greater than zero.");
@@ -47,7 +44,11 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException("Database connection string is required.");
         }
 
-        services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(paths.CatalogPath, paths.ScriptsDirectory));
+        services.AddSingleton(config);
+        services.AddSingleton(config.Paths);
+        services.AddSingleton(config.HistoryRetention);
+
+        services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(config.Paths.CatalogPath, config.Paths.ScriptsDirectory));
         services.AddSingleton<IDatabaseClientFactory>(_ => new DatabaseClientFactory(
             databaseSettings.TimeoutSeconds,
             databaseSettings.ConnectionString));
@@ -59,22 +60,25 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGatewaySenderFeedbackSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
         services.AddHostedService<FtpGatewayBackgroundService>();
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-        var opts = runnerOptions ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
-        var stateDirectory = Path.Combine(paths.OutputDirectory, "_state");
+
+        var stateDirectory = Path.Combine(config.Paths.OutputDirectory, "_state");
         var runStateFilePath = Path.Combine(stateDirectory, "runs.json");
         var taskHistoryFilePath = Path.Combine(stateDirectory, "task-history.json");
-        services.AddSingleton(opts);
-        services.AddSingleton<RunStateStore>(_ => new RunStateStore(opts.WorkerCount, runStateFilePath));
+
+        services.AddSingleton(config.Runner);
+        services.AddSingleton<RunStateStore>(_ => new RunStateStore(config.Runner.WorkerCount, runStateFilePath));
         services.AddSingleton<TaskExecutionHistoryStore>(_ => new TaskExecutionHistoryStore(taskHistoryFilePath));
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
         services.AddSingleton<RequeueService>();
-        var uploadOptions = new GatewayUploadOptions(Path.Combine(paths.OutputDirectory, "_uploads"));
+
+        var uploadOptions = new GatewayUploadOptions(Path.Combine(config.Paths.OutputDirectory, "_uploads"));
         services.AddSingleton(uploadOptions);
         services.AddSingleton<GatewayUploadService>();
-        services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
-        services.AddUnloadMainUnload(paths.OutputDirectory);
-        services.AddUnloadExtraUnload(paths.ScriptsDirectory, paths.OutputDirectory);
-        services.AddUnloadPreset(paths.ScriptsDirectory);
+
+        services.AddUnloadTasks(config.PresetGate);
+        services.AddUnloadMainUnload(config.Paths.OutputDirectory);
+        services.AddUnloadExtraUnload(config.Paths.ScriptsDirectory, config.Paths.OutputDirectory);
+        services.AddUnloadPreset(config.Paths.ScriptsDirectory);
 
         return services;
     }

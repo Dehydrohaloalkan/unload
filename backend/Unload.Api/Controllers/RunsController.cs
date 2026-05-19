@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Models;
+using Unload.Bootstrapper;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.MainUnload;

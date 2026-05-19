@@ -13,10 +13,6 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 const int WorkerColumnWidth = 26;
 const int MaxGlobalLogs = 15;
 
-var root = Unload.Console.WorkspacePathResolver.ResolveWorkspaceRoot();
-var scriptsDirectory = Path.Combine(root, "scripts");
-var catalogPath = Path.Combine(root, "configs", "catalog.json");
-var outputDirectory = Path.Combine(root, "output");
 var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
     ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
     ?? "Production";
@@ -24,23 +20,18 @@ var configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile($"appsettings.{environment}.json", optional: false, reloadOnChange: false)
     .Build();
-var databaseSettings = configuration
-    .GetSection(DatabaseRuntimeSettings.SectionName)
-    .Get<DatabaseRuntimeSettings>()
-    ?? throw new InvalidOperationException(
-        $"Configuration section '{DatabaseRuntimeSettings.SectionName}' is required.");
-var runnerOptions = configuration.GetSection("Runner").Get<RunnerOptions>()
-    ?? new RunnerOptions(ChunkSizeBytes: 10 * 1024 * 1024, WorkerCount: 4);
-var presetGateOptions = configuration.GetSection("PresetGate").Get<PresetGateOptions>() ?? PresetGateOptions.Default;
 
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddUnloadRuntime(new UnloadRuntimePaths(
-    CatalogPath: catalogPath,
-    ScriptsDirectory: scriptsDirectory,
-    OutputDirectory: outputDirectory), databaseSettings, configuration, runnerOptions, presetGateOptions);
+services.AddUnloadRuntime(configuration);
 
 await using var provider = services.BuildServiceProvider().CreateAsyncScope();
+var unloadConfig = provider.ServiceProvider.GetRequiredService<UnloadConfiguration>();
+var catalogPath = unloadConfig.Paths.CatalogPath;
+var scriptsDirectory = unloadConfig.Paths.ScriptsDirectory;
+var runnerOptions = unloadConfig.Runner;
+var presetGateOptions = unloadConfig.PresetGate;
+
 var catalogService = provider.ServiceProvider.GetRequiredService<ICatalogService>();
 var taskWorkflow = provider.ServiceProvider.GetRequiredService<TaskWorkflow>();
 var runWorkflow = provider.ServiceProvider.GetRequiredService<RunActivationChannel>();
