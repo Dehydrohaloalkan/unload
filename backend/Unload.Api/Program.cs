@@ -1,15 +1,11 @@
 using Unload.Api;
 using Unload.Api.ErrorHandling;
-using Unload.Api.Abstractions;
-using Unload.Api.ErrorHandling.Abstractions;
 using Unload.Api.Models;
 using Unload.Api.Services;
-using Unload.Api.UseCases;
-using Unload.Api.UseCases.Abstractions;
 using Unload.Bootstrapper;
 using Unload.Bootstrapper.DependencyInjection;
-using Unload.Tasks.MainUnload;
 using Unload.Tasks;
+using Unload.Tasks.MainUnload;
 using NLog.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,22 +37,15 @@ var historyRetentionOptions = builder.Configuration
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
-builder.Services.AddSingleton<IApiProblemDetailsFactory, ApiProblemDetailsFactory>();
+builder.Services.AddSingleton<ApiProblemDetailsFactory>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddScoped<IStartRunUseCase, StartRunUseCase>();
-builder.Services.AddScoped<IRunPresetUseCase, RunPresetUseCase>();
-builder.Services.AddScoped<IRunExtraUseCase, RunExtraUseCase>();
-builder.Services.AddScoped<IRequeueToGatewayUseCase, RequeueToGatewayUseCase>();
-builder.Services.AddScoped<IGetServerTimeUseCase, GetServerTimeUseCase>();
-builder.Services.AddScoped<IOutputFilesService, OutputFilesService>();
-builder.Services.AddSingleton<IWorkflowInMemoryStateRestorer, WorkflowInMemoryStateRestorer>();
+builder.Services.AddScoped<OutputFilesService>();
 builder.Services.AddSingleton(historyRetentionOptions);
 builder.Services.AddSingleton(runtimePaths);
 builder.Services.AddUnloadRuntime(runtimePaths, databaseSettings, builder.Configuration, runnerOptions, presetGateOptions);
-builder.Services.AddHostedService<WorkflowStateRestoreHostedService>();
 builder.Services.AddHostedService<HistoryRetentionBackgroundService>();
-builder.Services.AddHostedService<RunProcessingBackgroundService>();
-builder.Services.AddHostedService<PresetGateBackgroundService>();
+builder.Services.AddHostedService<MainUnloadHostedService>();
+builder.Services.AddHostedService<ProbeSchedulerHostedService>();
 builder.Services.AddHostedService<SenderFeedbackProjectionBackgroundService>();
 
 var app = builder.Build();

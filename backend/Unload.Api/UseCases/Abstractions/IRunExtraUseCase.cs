@@ -1,9 +1,0 @@
-using Unload.Tasks;
-
-namespace Unload.Api.UseCases.Abstractions;
-
-public interface IRunExtraUseCase
-{
-    Task<ScriptTaskRunResult> ExecuteAsync(bool adminOverride, bool publishToGateway, CancellationToken cancellationToken);
-}
-

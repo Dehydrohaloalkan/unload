@@ -1,4 +1,4 @@
-namespace Unload.Api.Models;
+namespace Unload.Gateway;
 
 public record GatewayUploadResponse(
     string RequestId,

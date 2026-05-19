@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.SignalR;
-using Unload.Api.Abstractions;
 using Unload.Tasks;
 
 namespace Unload.Api.Services;
@@ -7,27 +6,24 @@ namespace Unload.Api.Services;
 /// <summary>
 /// Фоновая задача проверки доступности preset-этапа по расписанию.
 /// </summary>
-public class PresetGateBackgroundService(
+public class ProbeSchedulerHostedService(
     PresetGateOptions options,
     DailyWindowPolicy dailyWindowPolicy,
     TaskWorkflow taskWorkflow,
-    IWorkflowInMemoryStateRestorer workflowInMemoryStateRestorer,
     IHubContext<RunStatusHub> hubContext,
-    ILogger<PresetGateBackgroundService> logger) : BackgroundService
+    ILogger<ProbeSchedulerHostedService> logger) : BackgroundService
 {
     private readonly PresetGateOptions _options = options;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
-    private readonly IWorkflowInMemoryStateRestorer _workflowInMemoryStateRestorer = workflowInMemoryStateRestorer;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
-    private readonly ILogger<PresetGateBackgroundService> _logger = logger;
+    private readonly ILogger<ProbeSchedulerHostedService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _dailyWindowPolicy.ApplyInitialOptions(_options);
-        _workflowInMemoryStateRestorer.RestoreForToday();
         _logger.LogInformation(
-            "Preset gate service initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
+            "Probe scheduler initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
             _options.Enabled,
             Clamp(_options.StartHour, 0, 23),
             Clamp(_options.StartMinute, 0, 59),
@@ -45,7 +41,7 @@ public class PresetGateBackgroundService(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Preset gate service stopping.");
+            _logger.LogInformation("Probe scheduler stopping.");
         }
         finally
         {
@@ -57,7 +53,6 @@ public class PresetGateBackgroundService(
     {
         if (_dailyWindowPolicy.RefreshDailyWindowState())
         {
-            _workflowInMemoryStateRestorer.RestoreForToday();
             _logger.LogInformation("Preset gate daily window state updated.");
             await PublishStateAsync(cancellationToken);
         }

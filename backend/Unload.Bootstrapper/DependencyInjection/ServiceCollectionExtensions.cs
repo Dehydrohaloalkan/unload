@@ -1,18 +1,18 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Unload.Catalog;
 using Unload.Core;
 using Unload.Cryptography;
 using Unload.DataBase;
 using Unload.FileWriter;
-using Microsoft.Extensions.Configuration;
 using Unload.Gateway;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.DependencyInjection;
 using Unload.Tasks.ExtraUnload.DependencyInjection;
 using Unload.Tasks.MainUnload;
-using Unload.Tasks.Preset.DependencyInjection;
 using Unload.Tasks.MainUnload.DependencyInjection;
+using Unload.Tasks.Preset.DependencyInjection;
 
 namespace Unload.Bootstrapper.DependencyInjection;
 
@@ -67,6 +67,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RunStateStore>(_ => new RunStateStore(opts.WorkerCount, runStateFilePath));
         services.AddSingleton<TaskExecutionHistoryStore>(_ => new TaskExecutionHistoryStore(taskHistoryFilePath));
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
+        services.AddSingleton<RequeueService>();
+        var uploadOptions = new GatewayUploadOptions(Path.Combine(paths.OutputDirectory, "_uploads"));
+        services.AddSingleton(uploadOptions);
+        services.AddSingleton<GatewayUploadService>();
         services.AddUnloadTasks(presetGateOptions ?? PresetGateOptions.Default);
         services.AddUnloadMainUnload(paths.OutputDirectory);
         services.AddUnloadExtraUnload(paths.ScriptsDirectory, paths.OutputDirectory);

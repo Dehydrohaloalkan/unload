@@ -10,20 +10,20 @@ namespace Unload.Api.Services;
 /// Фоновый обработчик запусков API.
 /// Используется для запуска раннера, обновления статусов и отправки SignalR-событий клиентам.
 /// </summary>
-public class RunProcessingBackgroundService(
+public class MainUnloadHostedService(
     RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     MainUnloadEngine runner,
     IHubContext<RunStatusHub> hubContext,
-    ILogger<RunProcessingBackgroundService> logger) : BackgroundService
+    ILogger<MainUnloadHostedService> logger) : BackgroundService
 {
     private readonly RunActivationChannel _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly MainUnloadEngine _runner = runner;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
-    private readonly ILogger<RunProcessingBackgroundService> _logger = logger;
+    private readonly ILogger<MainUnloadHostedService> _logger = logger;
 
     /// <summary>
     /// Основной цикл обработки запусков.

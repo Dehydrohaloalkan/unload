@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Diagnostics;
-using Unload.Api.ErrorHandling.Abstractions;
 using Unload.Tasks.MainUnload;
 
 namespace Unload.Api.ErrorHandling;
@@ -9,10 +8,10 @@ namespace Unload.Api.ErrorHandling;
 /// </summary>
 public class GlobalExceptionHandler(
     ILogger<GlobalExceptionHandler> logger,
-    IApiProblemDetailsFactory problemFactory) : IExceptionHandler
+    ApiProblemDetailsFactory problemFactory) : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger = logger;
-    private readonly IApiProblemDetailsFactory _problemFactory = problemFactory;
+    private readonly ApiProblemDetailsFactory _problemFactory = problemFactory;
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {

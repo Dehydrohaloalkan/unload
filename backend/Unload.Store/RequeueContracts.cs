@@ -1,6 +1,6 @@
 using Unload.Core;
 
-namespace Unload.Api.Models;
+namespace Unload.Store;
 
 public record RequeueToGatewayRequest(
     string? IdempotencyKey,
@@ -31,4 +31,3 @@ public record RequeueBatchResult(
     string BatchId,
     SenderBatchStatus Status,
     string? Message = null);
-

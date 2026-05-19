@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Models;
-using Unload.Core;
-using Unload.Api.UseCases.Abstractions;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.MainUnload;
@@ -16,10 +14,8 @@ namespace Unload.Api.Controllers;
 [ApiController]
 [Route("api/runs")]
 public class RunsController(
-    IStartRunUseCase startRunUseCase,
-    IRunPresetUseCase runPresetUseCase,
-    IRunExtraUseCase runExtraUseCase,
-    IRequeueToGatewayUseCase requeueToGatewayUseCase,
+    TaskWorkflow taskWorkflow,
+    RequeueService requeueService,
     RunActivationChannel runWorkflow,
     RunStateStore runStateStore,
     DailyWindowPolicy dailyWindowPolicy,
@@ -28,10 +24,8 @@ public class RunsController(
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunsController> logger) : ControllerBase
 {
-    private readonly IStartRunUseCase _startRunUseCase = startRunUseCase;
-    private readonly IRunPresetUseCase _runPresetUseCase = runPresetUseCase;
-    private readonly IRunExtraUseCase _runExtraUseCase = runExtraUseCase;
-    private readonly IRequeueToGatewayUseCase _requeueToGatewayUseCase = requeueToGatewayUseCase;
+    private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
+    private readonly RequeueService _requeueService = requeueService;
     private readonly RunActivationChannel _runWorkflow = runWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
@@ -49,10 +43,52 @@ public class RunsController(
     [HttpPost]
     public async Task<IActionResult> StartRunAsync([FromBody] RunStartRequest request, CancellationToken cancellationToken)
     {
-        var response = await _startRunUseCase.ExecuteAsync(request, cancellationToken);
-        return Accepted(
-            response.RunStatusPath,
-            response);
+        try
+        {
+            var selectedTargetCodes = request.TargetCodes?
+                .Where(static code => !string.IsNullOrWhiteSpace(code))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? [];
+            var selectionMode = selectedTargetCodes.Length > 0
+                ? RunSelectionMode.TargetCodes
+                : RunSelectionMode.MemberCodes;
+            var selectedCodes = selectionMode == RunSelectionMode.TargetCodes
+                ? selectedTargetCodes
+                : request.MemberCodes;
+
+            var result = await _taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(
+                    TaskCode: TaskCodes.Run,
+                    AdminOverride: request.AdminOverride,
+                    PublishToGateway: request.PublishToGateway,
+                    Codes: selectedCodes,
+                    SelectionMode: selectionMode),
+                cancellationToken);
+
+            _logger.LogInformation("Run accepted. CorrelationId: {CorrelationId}", result.ExecutionId);
+
+            var runState = _runStateStore.Get(result.ExecutionId);
+            if (runState is not null)
+            {
+                await _hubContext.Clients.All.SendAsync("run_status", runState, cancellationToken);
+            }
+
+            var response = new RunAcceptedResponse(
+                result.ExecutionId,
+                $"/api/runs/{result.ExecutionId}",
+                "/hubs/status",
+                "SubscribeRun",
+                "status",
+                "run_status",
+                $"/api/runs/{result.ExecutionId}/stop");
+
+            return Accepted(response.RunStatusPath, response);
+        }
+        catch (TaskLaunchException ex)
+        {
+            _logger.LogWarning("Run launch rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
+            throw TaskLaunchExceptions.ToApiProblem(ex, "Run conflict");
+        }
     }
 
     /// <summary>
@@ -77,8 +113,39 @@ public class RunsController(
     [HttpPost("preset")]
     public async Task<IActionResult> RunPresetAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _runPresetUseCase.ExecuteAsync(request?.AdminOverride == true, cancellationToken);
-        return Ok(result);
+        try
+        {
+            _logger.LogInformation("Preset task launch requested.");
+            var alreadyCompleted = _dailyWindowPolicy.Get().PresetCompleted;
+            var result = await _taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(TaskCode: TaskCodes.Preset, AdminOverride: request?.AdminOverride == true),
+                cancellationToken);
+
+            var scriptResult = new ScriptTaskRunResult(
+                TaskName: result.TaskCode,
+                CorrelationId: result.ExecutionId,
+                ScriptsExecuted: result.ScriptsExecuted ?? 0,
+                FilesWritten: result.FilesWritten ?? 0,
+                OutputPath: result.OutputPath,
+                Message: result.Message);
+
+            await _hubContext.Clients.All.SendAsync("preset_state", _dailyWindowPolicy.Get(), cancellationToken);
+            if (alreadyCompleted)
+            {
+                await _hubContext.Clients.All.SendAsync("preset_replayed", scriptResult, cancellationToken);
+            }
+
+            _logger.LogInformation(
+                "Preset task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}",
+                result.ExecutionId,
+                result.ScriptsExecuted);
+            return Ok(scriptResult);
+        }
+        catch (TaskLaunchException ex)
+        {
+            _logger.LogWarning("Preset task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
+            throw TaskLaunchExceptions.ToApiProblem(ex, "Preset task conflict");
+        }
     }
 
     /// <summary>
@@ -87,11 +154,35 @@ public class RunsController(
     [HttpPost("extra")]
     public async Task<IActionResult> RunExtraAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _runExtraUseCase.ExecuteAsync(
-            request?.AdminOverride == true,
-            request?.PublishToGateway != false,
-            cancellationToken);
-        return Ok(result);
+        try
+        {
+            _logger.LogInformation("Extra task launch requested.");
+            var result = await _taskWorkflow.LaunchAsync(
+                new TaskLaunchRequest(
+                    TaskCode: TaskCodes.Extra,
+                    AdminOverride: request?.AdminOverride == true,
+                    PublishToGateway: request?.PublishToGateway != false),
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}",
+                result.ExecutionId,
+                result.ScriptsExecuted,
+                result.FilesWritten);
+
+            return Ok(new ScriptTaskRunResult(
+                TaskName: result.TaskCode,
+                CorrelationId: result.ExecutionId,
+                ScriptsExecuted: result.ScriptsExecuted ?? 0,
+                FilesWritten: result.FilesWritten ?? 0,
+                OutputPath: result.OutputPath,
+                Message: result.Message));
+        }
+        catch (TaskLaunchException ex)
+        {
+            _logger.LogWarning("Extra task rejected. Code: {ErrorCode}, Message: {Message}", ex.ErrorCode, ex.Message);
+            throw TaskLaunchExceptions.ToApiProblem(ex, "Extra task conflict");
+        }
     }
 
     /// <summary>
@@ -100,7 +191,7 @@ public class RunsController(
     [HttpPost("requeue")]
     public async Task<IActionResult> RequeueToGatewayAsync([FromBody] RequeueToGatewayRequest request, CancellationToken cancellationToken)
     {
-        var result = await _requeueToGatewayUseCase.ExecuteAsync(request, cancellationToken);
+        var result = await _requeueService.ExecuteAsync(request, cancellationToken);
         return Ok(result);
     }
 

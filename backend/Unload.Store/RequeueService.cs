@@ -1,21 +1,19 @@
 using System.Collections.Concurrent;
-using Unload.Api.Models;
-using Unload.Api.UseCases.Abstractions;
+using Microsoft.Extensions.Logging;
 using Unload.Core;
-using Unload.Store;
 
-namespace Unload.Api.UseCases;
+namespace Unload.Store;
 
-public class RequeueToGatewayUseCase(
+public class RequeueService(
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     IGatewayPublisher gatewayPublisher,
-    ILogger<RequeueToGatewayUseCase> logger) : IRequeueToGatewayUseCase
+    ILogger<RequeueService> logger)
 {
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
-    private readonly ILogger<RequeueToGatewayUseCase> _logger = logger;
+    private readonly ILogger<RequeueService> _logger = logger;
 
     private static readonly ConcurrentDictionary<string, (DateTimeOffset SavedAt, RequeueToGatewayResponse Response)> IdempotencyCache =
         new(StringComparer.OrdinalIgnoreCase);

@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using Unload.Api.ErrorHandling.Abstractions;
 
 namespace Unload.Api.ErrorHandling;
 
-public class ApiProblemDetailsFactory : IApiProblemDetailsFactory
+public class ApiProblemDetailsFactory
 {
     public ProblemDetails Create(
         HttpContext httpContext,
