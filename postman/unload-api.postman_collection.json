@@ -138,6 +138,140 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-dashboard"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Dashboard has required fields', function () {",
+                  "  pm.expect(body).to.have.property('presetState');",
+                  "  pm.expect(body).to.have.property('hasRunToday');",
+                  "  pm.expect(body).to.have.property('hasExtraToday');",
+                  "  pm.expect(body).to.have.property('todayHistory');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Workflow History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "postman-get-history"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/history?days=7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('History has required fields', function () {",
+                  "  pm.expect(body).to.have.property('fromDayInclusive');",
+                  "  pm.expect(body).to.have.property('toDayInclusive');",
+                  "  pm.expect(body).to.have.property('days');",
+                  "  pm.expect(body).to.have.property('runs');",
+                  "  pm.expect(body).to.have.property('taskHistory');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get Server Time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/system/time",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "time"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Time response has required fields', function () {",
+                  "  pm.expect(body).to.have.property('serverLocalTime');",
+                  "  pm.expect(body).to.have.property('serverUtcTime');",
+                  "  pm.expect(body).to.have.property('utcOffsetMinutes');",
+                  "  pm.expect(body).to.have.property('timeZoneId');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },
@@ -404,6 +538,42 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "Get Today Runs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "today"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Body is array', function () {",
+                  "  pm.expect(Array.isArray(body)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },
@@ -448,10 +618,51 @@
                   "    pm.expect(body).to.have.property('correlationId');",
                   "  });",
                   "} else {",
-                  "  pm.test('Conflict has PRESET_GATE_BLOCKED or SCRIPT_TASK_CONFLICT', function () {",
-                  "    pm.expect(['PRESET_GATE_BLOCKED', 'SCRIPT_TASK_CONFLICT']).to.include(body.errorCode);",
+                  "  pm.test('Conflict has expected errorCode', function () {",
+                  "    pm.expect(['PRESET_GATE_BLOCKED', 'TASK_ALREADY_RUNNING', 'TASK_DEPENDENCY_NOT_SATISFIED']).to.include(body.errorCode);",
                   "  });",
                   "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Run Preset With Admin Override",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adminOverride\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/runs/preset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "runs",
+                "preset"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 409', function () {",
+                  "  pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});"
                 ]
               }
             }
@@ -497,7 +708,7 @@
                   "  });",
                   "} else {",
                   "  pm.test('Conflict has expected errorCode', function () {",
-                  "    pm.expect(['PRESET_GATE_BLOCKED', 'SCRIPT_TASK_CONFLICT']).to.include(body.errorCode);",
+                  "    pm.expect(['PRESET_GATE_BLOCKED', 'TASK_ALREADY_RUNNING', 'TASK_DEPENDENCY_NOT_SATISFIED']).to.include(body.errorCode);",
                   "  });",
                   "}"
                 ]
@@ -554,7 +765,7 @@
                   "  pm.expect(body).to.have.property('errorCode');",
                   "});",
                   "pm.test('Error code is validation or gate-related', function () {",
-                  "  pm.expect(['VALIDATION_ERROR', 'PRESET_GATE_BLOCKED']).to.include(body.errorCode);",
+                  "  pm.expect(['VALIDATION_ERROR', 'PRESET_GATE_BLOCKED', 'TASK_DEPENDENCY_NOT_SATISFIED']).to.include(body.errorCode);",
                   "});"
                 ]
               }
@@ -602,7 +813,7 @@
                   "});",
                   "const body = pm.response.json();",
                   "pm.test('Unknown member or gate block returned', function () {",
-                  "  pm.expect(['UNKNOWN_MEMBER_CODES', 'PRESET_GATE_BLOCKED']).to.include(body.errorCode);",
+                  "  pm.expect(['UNKNOWN_MEMBER_CODES', 'PRESET_GATE_BLOCKED', 'TASK_DEPENDENCY_NOT_SATISFIED']).to.include(body.errorCode);",
                   "});"
                 ]
               }
@@ -682,6 +893,97 @@
                   "const body = pm.response.json();",
                   "pm.test('Error code is RUN_NOT_FOUND', function () {",
                   "  pm.expect(body.errorCode).to.eql('RUN_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - System",
+      "item": [
+        {
+          "name": "Post Sender Feedback - File Sent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correlationId\": \"{{correlationId}}\",\n  \"memberName\": \"TestMember\",\n  \"batchId\": \"batch-001\",\n  \"kind\": \"FILE_SENT\",\n  \"filePath\": \"/output/file.txt\",\n  \"message\": \"File dispatched\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/system/sender-feedback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "sender-feedback"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 or 400', function () {",
+                  "  pm.expect([202, 400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Post Sender Feedback - Invalid Kind",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correlationId\": \"{{correlationId}}\",\n  \"memberName\": \"TestMember\",\n  \"batchId\": \"batch-001\",\n  \"kind\": \"UNKNOWN_KIND\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/system/sender-feedback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "sender-feedback"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Error code is VALIDATION_ERROR', function () {",
+                  "  pm.expect(body.errorCode).to.eql('VALIDATION_ERROR');",
                   "});"
                 ]
               }

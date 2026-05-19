@@ -1,233 +1,154 @@
 # Unload Architecture
 
-Краткое и прикладное описание проекта для быстрого старта: `README.md`.
+Краткое и прикладное описание: `README.md`.
 
 ## Solution modules
 
 - `backend/Unload.Core`
-  - Общие контракты и модели домена.
-  - `Domain`: `RunRequest`, `ScriptDefinition`, `DatabaseRow`, `FileChunk`, `WrittenFile`, `RunnerEvent`, `RunnerStep`.
-  - `Abstractions`: интерфейсы `IRunner`, `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
+  - Общие контракты и модели домена. Меняется редко.
+  - `Domain`: `RunRequest`, `ScriptDefinition`, `DatabaseRow`, `FileChunk`, `WrittenFile`, `RunnerEvent`, `RunnerStep`, `SenderFileDispatchFeedback`, `SenderFeedbackKind`, `SenderBatchStatus`.
+  - `Abstractions`: `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IRequestHasher`, `IGatewayPublisher`, `IGatewayBatchSource`, `IGatewaySenderFeedbackSource`, `IGatewaySenderFeedbackConsumer`.
 
 - `backend/Unload.Catalog`
   - Читает `configs/catalog.json`.
   - Опциональная секция `bigScripts`: список `{memberId, groupId}` — target-выборки, чьи скрипты считаются «большими» и выполняются в n-1 потоках.
   - Понимает структуру `groups` + `members` (у `group` есть `folder` и `code`, у `member` есть `groups` и `file`) и строит target-код как `<GROUP_FOLDER>_<MEMBER_CODE>`.
   - Находит SQL-файлы в `scripts/<GROUP_FOLDER>` и отбирает скрипты target-выборки по формату имени `Y<member><group>_<type>_<codes>_<ext>.sql`.
-  - Значения `folder`, `code`, `file` используются как есть, без `trim`/приведения регистра.
-  - Проверки формата `group.folder`, `member.code`, `targetCode` отключены; защита от выхода за границы директории скриптов сохранена.
-  - Для поддержки читаемости разнесено по файлам: `JsonCatalogService` (оркестрация), `CatalogScriptPathHelper` (правила имен и сортировки скриптов).
-  - Построение `CatalogInfo` внутри `JsonCatalogService` декомпозировано на небольшие шаги (`BuildMemberGroupCodes`, `BuildTargets`, `BuildGroups`, `BuildMembers`) вместо длинных LINQ-цепочек.
+  - `JsonCatalogService` (оркестрация), `CatalogScriptPathHelper` (правила имен и сортировки).
 
 - `backend/Unload.DataBase`
   - Заглушка БД: `StubDatabaseClient`.
-  - Фабрика клиентов: `DatabaseClientFactory` (создает независимый клиент на каждый worker).
-  - `StubDatabaseClient` поддерживает конструктор `StubDatabaseClient(int timeout, string connectionString)`.
-  - Для probe-запроса с маркером `PRESET_READY_PROBE` заглушка возвращает случайный `0` или `1` с вероятностью 50/50.
-  - `connectionString` может быть:
-    - plain-text строкой подключения;
-    - строкой формата `dpapi:<base64>`, которая расшифровывается через Windows DPAPI (`CurrentUser`).
-  - Контракты БД: `IDatabaseClient` (`IsConnected`, `GetDataReaderAsync(...)`) и `IDatabaseClientFactory` (`CreateClient()`).
-  - В раннер передается `DbDataReader`, строки читаются потоково.
+  - Фабрика клиентов: `DatabaseClientFactory` (создаёт независимый клиент на каждый worker).
+  - `StubDatabaseClient` — для probe-запроса с маркером `PRESET_READY_PROBE` возвращает случайный `0` или `1`.
+  - `connectionString` может быть plain-text строкой или строкой формата `dpapi:<base64>`, расшифровываемой через Windows DPAPI (`CurrentUser`).
 
 - `backend/Unload.FileWriter`
-  - Запись чанков в файлы с расширением из имени SQL/`member.file` и разделителем `|`.
-  - На уровне writer используется пер-файловая блокировка (keyed lock): один и тот же целевой файл пишется строго одним потоком, разные файлы пишутся параллельно.
-  - Каждый файл открывается эксклюзивно (`FileMode.CreateNew`, `FileShare.None`), поэтому один конкретный файл всегда пишется только одним потоком.
-  - Первая строка файла — служебный заголовок: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
-  - Начиная со второй строки пишутся данные из БД через `|`.
+  - Запись чанков в файлы с разделителем `|`.
+  - Пер-файловая блокировка (keyed lock): один целевой файл пишется строго одним потоком, разные файлы пишутся параллельно.
+  - Первая строка файла: `#|{type}|{fileName}|2XMDR|{yyyy-MM-dd}|{rowsCount}|{firstCodeDigit}`.
   - Пишет в `output/<dd_MM_yyyy_HHmmss>/output-files/`.
-  - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}.{ext}` (без `_`).
-  - `chunkNumber` ведется сквозной нумерацией по мемберу в рамках запуска (между скриптами одного мембера).
+  - Формат имени файла: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}.{ext}`.
+  - `chunkNumber` — сквозная нумерация по мемберу в рамках запуска (между скриптами одного мембера).
 
-- `backend/Unload.MQ`
-  - Заглушка MQ: `InMemoryMqPublisher`.
-  - Сохраняет события раннера во внутреннюю очередь.
+- `backend/Unload.Gateway`
+  - FTP-based gateway: публикация файлов, sender-feedback, ручная загрузка.
+  - `FtpGatewayPublisher` — реализует `IGatewayPublisher`, `IGatewayBatchSource`, `IGatewaySenderFeedbackSource`.
+  - `FtpGatewayBackgroundService` — фоновый обработчик FTP.
+  - `GatewayUploadService` — обработка ручной загрузки файлов через `POST /api/system/gateway-upload`.
+  - Конфигурация через секцию `Gateway.Ftp` в appsettings (`Host`, `Port`, `Username`, `Password`, `RemoteDirectory`, `StagingDirectory`, `ConnectTimeoutMs`).
+  - Заменяет прежнюю in-memory MQ-заглушку (`Unload.MQ`).
 
 - `backend/Unload.Cryptography`
   - `Sha256RequestHasher` для формирования run hash.
 
-- `backend/Unload.Runner`
-  - `RunnerEngine` + `RunnerOptions`.
-  - N worker-потоков (настраиваемо через `WorkerCount`, по умолчанию 4), каждый с одним `IDatabaseClient`.
-  - Worker-задачи запускаются через `Task.Run`, чтобы стартовать параллельно даже при синхронно-блокирующих реализациях `IDatabaseClient`.
-  - **Большие скрипты** (из `catalog.json` → `bigScripts`): target-выборки (memberId+groupId) выполняются в n-1 потоках; 1 поток всегда для легких скриптов.
-- Внутренний `ScriptDistributor` хранит две очереди (`big`, `light`) и выдает следующий скрипт по простому правилу: worker запрашивает задачу с предпочтением (`big-first`/`light-first`), если в предпочтительной очереди пусто — сразу получает скрипт из второй.
-  - В событиях `QueryStarted`/`QueryCompleted` указывается `Worker #N`.
-  - Один MQ-публикатор: все worker-ы передают события в общий канал.
-  - Шаги: resolve target-кодов -> big/light очереди -> worker-ы (запросы БД, чанки, запись, MQ).
-  - Значения по умолчанию: `ChunkSizeBytes = 10MB`, `WorkerCount = 4`.
-  - Чтение всегда потоковое: буфер ограничен текущим чанком.
-  - После каждого шага создается `RunnerEvent`.
-  - Формирует CSV-отчет `run-report.csv` с полями: `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`.
-  - Для скриптов с `0` строк добавляет запись в отчет (`outputFileName` пустой, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`).
-  - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные — число.
-  - `mqStatus` фиксирует факт отправки в MQ; при ошибке MQ пайплайн продолжает выполнение.
-  - Внутренние детали: `RunnerEngine`, `RunnerEventEmitter` (Channel + Task), `RunnerEngineGuard`, `RunnerOutputDirectoryFactory`, `RunnerEngineDataReader`.
+- `backend/Unload.Store`
+  - Единое хранилище состояний и истории выполнения задач.
+  - `RunStateStore` — потокобезопасное in-memory хранилище `RunStatusInfo` по всем запускам `run`. JSON-персистентность в `output/_state/runs.json`. При рестарте незавершённые записи переводятся в `Cancelled`.
+    - Методы: `SetStarted`, `SetRunning`, `ApplyEvent`, `ApplySenderFeedback`, `SetFailed`, `SetCancellationRequested`, `SetCancelled`, `Get`, `List`, `PruneTerminalRuns`.
+  - `TaskExecutionHistoryStore` — история завершённых задач (`TaskRecord`). JSON-персистентность в `output/_state/task-history.json`.
+    - `HasRunToday(taskCode, day)` — используется `TaskWorkflow` для проверки `RequiresCompleted`.
+    - Методы: `Add`, `List(day)`, `ListRange`, `TryGetByCorrelationId`, `HasRunToday`, `Prune`.
+  - `TaskRecord` — запись завершённой задачи: `TaskCode`, `StartedAt`, `CompletedAt`, `CorrelationId`, `Message`, `ScriptsExecuted`, `FilesWritten`, `OutputPath`.
+  - `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move). Одна реализация на все хранилища.
+  - `GatewaySenderFeedbackConsumer` — реализует `IGatewaySenderFeedbackConsumer`, проецирует feedback в `RunStateStore`.
+  - `RequeueService` — повторная публикация результатов прошлых запусков в gateway.
+  - Run-модели: `RunStatusInfo`, `RunLifecycleStatus`, `MemberRunStatusInfo`, `MemberRunLifecycleStatus`, `RunWorkerStatusInfo`, `RunOutputArtifactInfo`, `SenderBatchStatusInfo`, `SenderFileDispatchStateInfo`.
 
-- `backend/Unload.Run.Application`
-  - Application-слой основного `run`.
-  - Контракты и orchestration: `IRunRequestFactory`, `IRunCoordinator`, `IRunStateStore`.
-  - Контракт и модели runtime-статусов: `RunStatusInfo`, `RunLifecycleStatus`, `MemberRunStatusInfo`, `RunWorkerStatusInfo`, `RunOutputArtifactInfo`.
-  - Нормализация target-кодов, формирование `RunRequest`, резервирование слота единственного активного запуска и создание стартового статуса выполняются в `StartRunWorkflowTaskDefinition` (в `Unload.TaskFlow`).
+- `backend/Unload.Tasks`
+  - Ядро задач: абстракция, контроллер, политика окна, вспомогательные модели.
+  - `UnloadTask` — абстрактный базовый класс. Свойства:
+    - `Code` (abstract) — уникальный код задачи;
+    - `RequiresCompleted` — коды задач, которые должны быть успешно завершены сегодня;
+    - `ConflictsWith` — коды задач, с которыми нельзя выполняться одновременно;
+    - `RequiresDailyWindowOpen` — должно ли быть открыто дневное окно.
+  - `TaskWorkflow` — единственный класс оркестрации. Без интерфейса. Последовательность `LaunchAsync`:
+    1. резолв задачи по коду (`_tasks[request.TaskCode]`);
+    2. проверки ограничений (если не `AdminOverride`): дневное окно, `CanRunPreset` для preset, `RequiresCompleted` через `TaskExecutionHistoryStore`, `ConflictsWith` через `_activeForegroundTaskCodes`, single-active через `RunActivationChannel`;
+    3. для foreground-задач: `BeginForeground` → `ExecuteAsync` → `EndForeground`;
+    4. для deferred-задачи `run`: только `ExecuteAsync` без foreground-маркировки.
+  - `DailyWindowPolicy` — policy дневного окна. Состояние: `PresetGateState`. Методы: `Get`, `StartPolling`, `RefreshDailyWindowState`, `ApplyProbeResult`, `MarkPresetCompleted`, `CanRunPreset(out reason)`, `IsOpen(now)`.
+  - `TaskLaunchRequest` — `(TaskCode, AdminOverride, PublishToGateway, Codes, SelectionMode)`.
+  - `TaskExecutionResult` — `(TaskCode, ExecutionId, Status, Message, ScriptsExecuted, FilesWritten, OutputPath)`.
+  - `TaskExecutionStatus` — `Accepted, Running, Completed, Failed, Cancelled, Blocked`.
+  - `TaskLaunchException` — `FailureKind` (`Validation`/`Conflict`), `ErrorCode`, `Extensions`.
+  - `TaskLaunchFailureKind` — `Validation`, `Conflict`.
+  - `TaskCodes` — константы `run`, `preset`, `extra`, `probe`.
+  - `RunActivationChannel` — in-memory канал single-active задачи `run`. Методы: `TryActivate`, `ReadActivationsAsync`, `Complete`, `GetActiveCorrelationId`, `TryCancel`.
+  - `RunActivation` — `(CorrelationId, Payload: RunRequest, CancellationToken)`.
+  - `RunSelectionMode` — `MemberCodes`, `TargetCodes`.
+  - `PresetGateOptions` — конфигурация polling (`Enabled`, `StartHour`, `StartMinute`, `PollIntervalSeconds`, `ProbeSql`).
+  - `PresetGateState` — DTO состояния для UI и SignalR (`Enabled`, `PollingStarted`, `RequiresPresetExecution`, `ReadyForPreset`, `PresetCompleted`, `LastProbeValue`, `LastProbeAt`, `Message`). Имя DTO сохранено: на него завязан SignalR-контракт `preset_state` и Angular.
+  - `ScriptTaskRunResult` — результат script-задачи для HTTP-ответа (`TaskName`, `CorrelationId`, `ScriptsExecuted`, `FilesWritten`, `OutputPath`, `Message`).
 
-- `backend/Unload.Run.Runtime`
-  - In-memory runtime реализации основного `run`.
-  - `InMemoryRunCoordinator` — один активный run без очереди ожидания, с токеном отмены конкретной активации.
-  - `InMemoryRunStateStore` — состояние запусков, мемберов, worker-ов и output-артефактов.
+- `backend/Unload.Tasks.MainUnload`
+  - `MainUnloadTask` — задача `run`. `RequiresCompleted: [preset]`, `ConflictsWith: [preset]`, `RequiresDailyWindowOpen: true`. Deferred: активирует `RunActivationChannel` и возвращает `Accepted`.
+  - `MainUnloadEngine` — движок выгрузки (переименование `RunnerEngine`). N worker-потоков, `ScriptDistributor` (big/light очереди), `RunnerEventEmitter` (Channel + Task), `RunnerEngineGuard`, `RunnerOutputDirectoryFactory`, `RunReportCsvWriter`.
+  - `RunRequestFactory` — создаёт `RunRequest` с корреляционным ID.
+  - `RunnerOptions` — `WorkerCount` (по умолчанию 4), `ChunkSizeBytes` (по умолчанию 10 МБ).
+  - `RunApplicationOptions` — options для запуска (`OutputDirectory`).
+  - `RunAlreadyInProgressException`.
 
-- `backend/Unload.TaskFlow`
-  - Orchestration-слой пользовательских задач и прозрачной настройки pipeline.
-  - Контракты task executor-ов: `IScriptTaskOrchestrator`, `ScriptTaskRunResult`.
-  - Централизованные workflow definitions для пользовательских задач:
-    - `StartRunWorkflowTaskDefinition`
-    - `RunPresetWorkflowTaskDefinition`
-    - `RunExtraWorkflowTaskDefinition`
-  - Общие коды задач и моделей workflow: `WorkflowTaskCodes`, `WorkflowStageCodes`, `StartRunTaskRequest`, `StartRunTaskResult`, `EmptyWorkflowTaskRequest`, `WorkflowTaskDispatchException`.
-  - Pipeline-конфигурация в одном месте:
-    - `TaskPipelineConfigurator` — единая декларация порядка, зависимостей, конфликтов и post-actions;
-    - `TaskPipelineBuilder` / `TaskPipeline` — fluent API и runtime-представление pipeline;
-    - `WorkflowTaskDependencyCatalog` — rule-каталог, собранный из pipeline-конфигурации.
-  - Подготовлен extension point для автопереходов после завершения задач:
-    - `IWorkflowTaskTransitionService` / `WorkflowTaskTransitionService`;
-    - `IWorkflowTaskTransitionHandler`;
-    - `WorkflowTaskCompletionContext`.
-  - Preset-gate use-case: `IPresetGateService` / `PresetGateService`, `PresetGateOptions`, `PresetGateState`.
-    - Хранит in-memory состояние, правила временного окна и требования ежедневного `preset`.
-    - Проверяет разрешение на запуск `preset`/`run`/`extra` и формирует причины блокировки.
+- `backend/Unload.Tasks.ExtraUnload`
+  - `ExtraUnloadTask` — задача `extra`. `RequiresCompleted: [preset]`, `ConflictsWith: [preset]`, `RequiresDailyWindowOpen: true`. Синхронная.
+  - `ExtraScriptExecutor` — выполняет один extra-скрипт с агрегацией строк по `NrBank`.
+  - `ExtraOutputWriter` — пишет агрегированные файлы.
+  - `ExtraScriptExecutionResult`, `ExtraOutputWriteResult` — модели результатов.
 
-- `backend/Unload.TaskFlow.Runtime`
-  - In-memory runtime реализации task orchestration.
-  - `IWorkflowTaskAccessService` / `InMemoryWorkflowTaskAccessService` — проверка порядка, таблицы конфликтов и фиксация completed tasks.
-  - `IWorkflowStageStateStore` / `InMemoryWorkflowStageStateStore` — состояние системных workflow-стадий.
-
-- `backend/Unload.ScriptTasks`
-  - Инфраструктурные реализации дополнительных задач `preset` и `extra`.
-  - Проект больше не маскируется под application namespace и явно выступает implementation-of-port для `Unload.TaskFlow`.
-  - `ScriptTaskOrchestrator` выполняет:
-    - `preset`: SQL-скрипты из `scripts/preset`;
-    - `extra`: SQL-скрипты из корня `scripts` (без подпапок), агрегацию по `NrBank`, запись `LineFile`.
-  - Декомпозиция по отдельным компонентам:
-    - `IPresetScriptExecutor` / `PresetScriptExecutor` — выполнение одного preset-скрипта;
-    - `IExtraScriptExecutor` / `ExtraScriptExecutor` — выполнение одного extra-скрипта с агрегацией строк;
-    - `IExtraOutputWriter` / `ExtraOutputWriter` — запись агрегированных файлов extra-задачи;
-    - `IScriptTaskEventPublisher` / `ScriptTaskEventPublisher` — публикация `RunnerEvent` для доп-задач.
+- `backend/Unload.Tasks.Preset`
+  - `ProbeTask` — задача `probe`. Без зависимостей и конфликтов, не требует дневного окна. Выполняет SQL из `PresetGateOptions.ProbeSql`, применяет результат к `DailyWindowPolicy`, фиксирует в `TaskExecutionHistoryStore`.
+  - `PresetTask` — задача `preset`. `RequiresCompleted: [probe]`, `ConflictsWith: [run, extra]`, `RequiresDailyWindowOpen: false` (особая проверка через `DailyWindowPolicy.CanRunPreset`). Выполняет SQL-скрипты из `scripts/preset`, вызывает `DailyWindowPolicy.MarkPresetCompleted()`.
+  - `PresetScriptExecutor` — выполняет один preset-скрипт.
+  - `PresetTaskOptions` — `ScriptsDirectory`.
 
 - `backend/Unload.Bootstrapper`
-  - DI-композиция runtime через `AddUnloadRuntime(UnloadRuntimePaths, DatabaseRuntimeSettings, RunnerOptions, PresetGateOptions)` для API и Console.
-  - Собирает вместе `Unload.Run.Application`, `Unload.Run.Runtime`, `Unload.TaskFlow`, `Unload.TaskFlow.Runtime`, `Unload.ScriptTasks`, `Unload.Workflow` и инфраструктурные проекты.
-  - Регистрация `IWorkflowTaskRegistry` и `IWorkflowTaskDispatcher`.
-  - Настройки БД валидируются при старте (`TimeoutSeconds > 0`, непустой `ConnectionString`), fallback-значения не используются.
-
-- `backend/Unload.Workflow`
-  - Глобальный single-active workflow pipeline для фоновых задач.
-  - Базовые контракты: `ISingleActiveWorkflow<TPayload>`, `WorkflowActivation<TPayload>`.
-  - In-memory реализация: `InMemorySingleActiveWorkflow<TPayload>`.
-  - Реестр и диспетчер задач верхнего уровня:
-    - `IWorkflowTaskDefinition`
-    - `IWorkflowTaskRegistry`
-    - `IWorkflowTaskDispatcher`
-    - `WorkflowTaskRegistry`
-    - `WorkflowTaskDispatcher`
+  - `AddUnloadRuntime(IServiceCollection, IConfiguration)` — единственная точка регистрации всех runtime-сервисов. Используется `Unload.Api/Program.cs` и `Unload.Console/Program.cs`.
+  - `UnloadConfiguration` — агрегат: `(Paths, Database, Runner, PresetGate, HistoryRetention)`.
+  - `UnloadConfigurationLoader.Load(IConfiguration)` — резолвит корень workspace (ищет `configs/catalog.json` + `scripts/` вверх по дереву), биндит все секции. Выбрасывает `DirectoryNotFoundException` если workspace не найден.
+  - `UnloadRuntimePaths` — `(CatalogPath, ScriptsDirectory, OutputDirectory)`.
+  - `DatabaseRuntimeSettings` — секция `Database` (`TimeoutSeconds`, `ConnectionString`). Обязательна.
+  - `HistoryRetentionOptions` — секция `HistoryRetention` (`RetentionDays`).
 
 - `backend/Unload.Api`
-  - ASP.NET Core API + SignalR.
-  - Тонкий транспортный слой: HTTP/SignalR, без бизнес-оркестрации запуска.
-  - Единый контракт ошибок через `ProblemDetails` + глобальный exception handler + `IApiProblemDetailsFactory`.
-  - Контроллер `RunsController` оставлен тонким; бизнес-ветки вынесены в use-case классы:
-    - `IStartRunUseCase` / `StartRunUseCase`;
-    - `IRunPresetUseCase` / `RunPresetUseCase`;
-    - `IRunExtraUseCase` / `RunExtraUseCase`.
-  - HTTP-эндпоинты вынесены в MVC-контроллеры: `CatalogController` (`/api/catalog`, `/api/members`), `RunsController` (`/api/runs*`) и `SystemController` (`/api/system/time`).
-  - Настройки БД читаются из секции `Database` (`TimeoutSeconds`, `ConnectionString`) в `appsettings.Development.json` / `appsettings.Production.json`; секция обязательна.
-  - `GET /api/catalog` — отдает структуру каталога (группы, участники, target-выборки), где:
-    - `group.name` отдается в формате `{имя (folder)}`;
-    - `member.name` отдается в формате `{имя (Y{memberCode}{groupCode}*.ext)}`.
-  - `GET /api/members` — отдает список мемберов для запуска (`code`, `name`, `targetCodes`) и, если есть активный запуск, текущий статус мембера (`activeRunCorrelationId`, `activeRunStatus`).
-  - `GET /api/system/time` — отдает локальное время backend-сервера и timezone metadata для UI-клиентов.
-  - `GET /api/system/download?path=...` — отдает файл из `output`, проверяя, что запрошенный путь не выходит за границы runtime output directory.
-  - `POST /api/runs` — запускает выгрузку для выбранных мемберов (`memberCodes`) и возвращает `correlationId`.
-  - `GET /api/runs/preset/state` — состояние preset-гейта (расписание, готовность, блокировка).
-  - `POST /api/runs/preset` — запускает preset-задачу.
-  - `POST /api/runs/extra` — запускает extra-задачу root-скриптов.
-  - Если запуск уже выполняется, `POST /api/runs` возвращает `409 Conflict` с `activeCorrelationId`.
-  - `POST /api/runs/{correlationId}/stop` — останавливает активный запуск по `correlationId`.
-  - `GET /api/runs` — список запусков и их статусы.
-  - `GET /api/runs/active` — текущий активный запуск; если его нет, endpoint возвращает `200 OK` с `correlationId = null`.
-  - `GET /api/runs/{correlationId}` — статус конкретного запуска, включая `memberStatuses`, `workerStatuses` и `outputArtifacts`.
-  - Запуски обрабатываются фоновым worker (`BackgroundService`) без очереди ожидания: одновременно выполняется только один запуск.
-  - System-stage `probe_preset_ready` выполняется через общий сервис `IPresetProbeService` (в `Unload.TaskFlow`); `PresetGateBackgroundService` отвечает только за расписание и публикацию состояния.
-  - SignalR Hub: `/hubs/status`, подписка на конкретный запуск через `SubscribeRun(correlationId)`.
-  - SignalR события:
-    - `status` — события раннера активного запуска для всех подключенных клиентов;
-    - `run_status` — обновления статуса запуска и мемберов для всех подключенных клиентов.
-    - `preset_state` — состояние preset-гейта для UI.
-  - Фоновый `PresetGateBackgroundService`:
-    - выполняет transport/infrastructure-роль: запускает probe SQL по расписанию и публикует `preset_state` в SignalR;
-    - бизнес-решения (окно времени, daily reset, блокировки запусков) делегированы в `Unload.TaskFlow` (`IPresetGateService`).
-  - `Program` оставлен как точка конфигурации DI/маршрутизации (`AddControllers`, `MapControllers`), резолв путей вынесен в `ApiWorkspacePathResolver`.
-  - Логи API пишутся через NLog:
-    - в CSV-файл `logs/api-<date>.csv` (колонки: `timestamp`, `level`, `traceId`, `logger`, `message`, `exception`);
-    - в консоль процесса API для live-наблюдения при локальном запуске.
-  - В логах фиксируются ключевые точки: запуск/конфликт/отмена run, запуск/блокировка/завершение preset и extra, переходы состояния preset-гейта.
+  - ASP.NET Core API + SignalR. Тонкий транспортный слой без бизнес-оркестрации.
+  - `RunsController` (`/api/runs*`) — запуск, остановка, статусы, история, dashboard, requeue. Вызывает `TaskWorkflow` напрямую.
+  - `CatalogController` (`/api/catalog`, `/api/members`) — каталог и список мемберов.
+  - `SystemController` (`/api/system/*`) — серверное время, скачивание файлов, gateway-upload, sender-feedback.
+  - `RunStatusHub` (`/hubs/status`) — SignalR hub.
+  - `MainUnloadHostedService` — читает `RunActivationChannel`, гоняет `MainUnloadEngine`, обновляет `RunStateStore`, публикует SignalR. Фиксирует завершение `run` в `TaskExecutionHistoryStore`.
+  - `ProbeSchedulerHostedService` — по расписанию вызывает `TaskWorkflow.LaunchAsync(probe)`, публикует `preset_state` в SignalR. Использует `PeriodicTimer`.
+  - `SenderFeedbackProjectionBackgroundService` — получает события от `IGatewaySenderFeedbackSource`, проецирует в `RunStateStore` через `IGatewaySenderFeedbackConsumer`, публикует `run_status`.
+  - `HistoryRetentionBackgroundService` — удаляет старые записи из хранилищ по расписанию.
+  - `OutputFilesService` — безопасный доступ к файлам output (проверяет выход за пределы директории).
+  - `GlobalExceptionHandler`, `ApiProblemDetailsFactory`, `ApiProblemException`, `TaskLaunchExceptions` — единый error handling.
+  - HTTP-контракты: `RunStartRequest`, `RunAcceptedResponse`, `AdminTaskRequest`, `MemberCatalogItem`, `WorkflowDashboardSnapshotResponse`, `WorkflowHistoryResponse`.
+  - Логи через NLog: CSV-файл `logs/api-<date>.csv` (колонки: `timestamp`, `level`, `traceId`, `logger`, `message`, `exception`) + консоль.
 
 - `console/Unload.Console`
-  - Точка входа.
-  - DI через `Microsoft.Extensions.DependencyInjection`.
-  - Регистрирует `AddLogging()` для корректной работы runtime-сервисов, зависящих от `ILogger<T>`.
-  - Переиспользует тот же runtime/use-case слой через `Unload.Bootstrapper`, что и API.
-  - Настройки БД читаются из `appsettings.{Environment}.json` (переменные окружения `DOTNET_ENVIRONMENT` / `ASPNETCORE_ENVIRONMENT`, по умолчанию `Production`); секция `Database` обязательна.
-  - По умолчанию работает как единая интерактивная сессия стадий (`probe -> preset -> run -> extra`) без перезапуска процесса между фазами.
-  - Экран stage-режима перерисовывается на каждом шаге, чтобы не раздувать консоль повторяющимися блоками таблиц.
-  - В stage-таблице показывает текущие локальные часы и `last_probe_time` (локальное время последней probe-проверки).
-  - В stage-таблице показывает `probe_pass_after` — ближайшее локальное время окна, после которого `probe=1` сможет пропустить на следующий шаг.
-  - Выбор действий в stage-режиме выполняется через `SelectionPrompt` (стрелки + Enter).
-- Для `probe` использует общий `IPresetProbeService`: выполняет `PresetGate.ProbeSql`, обновляет `IPresetGateService` и помечает стадию `probe_preset_ready` в `IWorkflowStageStateStore` при результате `1`.
-- Запуск `run` инициируется в `StartRunWorkflowTaskDefinition` через `IRunRequestFactory` + `IRunCoordinator` (single-active), без очереди ожидания.
-  - Отображение событий в терминале через `Spectre.Console`.
-  - После завершения запуска выводит общее время выгрузки (`Total export time`, формат `hh:mm:ss.fff`).
-  - Автоматически определяет корень workspace (ищет `configs/catalog.json` и папку `scripts` вверх по дереву директорий).
-- Если target-коды не переданы аргументами, интерактивно показывает target-выборки по группам/участникам через `ICatalogService.GetCatalogAsync()` из `backend/Unload.Catalog`; в мультиселекте все пункты выбраны по умолчанию.
-- Во время выполнения показывает live-таблицу по количеству worker-потоков (`Runner.WorkerCount`) с фиксированной шириной колонок и текущим состоянием каждого потока (`running <script>` / `idle`) плюс последнее событие раннера.
-  - Во время выполнения показывает live-таблицу worker-потоков и отдельный глобальный блок логов под таблицей на всю ширину (`последние 15 событий`).
-  - Поддерживает legacy one-shot режимы `--preset` и `--extra`.
-  - Код разнесен по сущностям: `Program` (точка входа), `WorkspacePathResolver` (пути runtime), `TargetCodePrompter` (интерактивный выбор на основе `CatalogInfo`).
+  - Локальный запуск через DI того же runtime (`AddUnloadRuntime`).
+  - По умолчанию интерактивная сессия стадий (`probe -> preset -> run -> extra`).
+  - One-shot режимы: `--preset`, `--extra`.
+  - С аргументами target-кодов: `dotnet run ... -- QQW,QQE` (запускает run по target-кодам).
+  - Ключевые типы из backend: `TaskWorkflow`, `TaskLaunchRequest`, `TaskCodes`, `RunActivationChannel`, `RunStateStore`, `MainUnloadEngine`, `RunActivation`, `RunnerOptions`, `DailyWindowPolicy`, `PresetGateOptions`, `PresetGateState`, `UnloadConfiguration`.
+  - Отображение через `Spectre.Console`: live-таблица worker-потоков + глобальные логи (последние 15 событий).
+  - После завершения выводит `Total export time` в формате `hh:mm:ss.fff`.
+  - `TargetCodePrompter` — интерактивный multi-select target-кодов по каталогу.
 
 - `console/Unload.WebConsole`
-  - Консольный клиент API (замена frontend для тестов).
-  - Использует общие модели backend-проектов (`Unload.Api`, `Unload.Run.Application`, `Unload.TaskFlow`, `Unload.Core`) вместо локальных DTO-дублей.
-  - Интерфейс построен на `Spectre.Console` (панель статуса + live-лента событий).
-  - Работает через HTTP (`/api/runs`, `/api/runs/active`, `/api/runs/{id}`) и SignalR (`/hubs/status`).
-  - Перед стартом проверяет `GET /api/runs/active`; если уже есть активный run, новый запуск из WebConsole блокируется, клиент переключается в режим наблюдения.
-  - Умеет стартовать запуск по `memberCodes`, обрабатывать `409 Conflict` при гонке состояний, останавливать активный запуск и подключаться к live-статусам.
-  - Показывает отдельную таблицу статусов мемберов (pending/running/completed/failed/cancelled).
-  - В live-режиме показывает индикаторы ожидания (спиннер в статусе и плейсхолдерах таблиц) пока не пришли события/статусы.
-  - Live-таблицы ограничены по размеру: показывают только последние события и верхние строки мемберов с обрезкой длинных сообщений, чтобы интерфейс помещался в экран.
-  - После завершения run live-рендер очищается и выводится отдельный финальный snapshot (`Run Finished`, `Final Members`, `Final Events`), чтобы исключить визуальную путаницу со «старой» динамической таблицей.
-  - Ожидание завершения run в клиенте реализовано через встроенный `PeriodicTimer` (.NET), без ручного цикла `Task.Delay`.
-  - Если `--members` не передан, показывает интерактивный multi-select мемберов из `GET /api/members`; пустой выбор включает режим наблюдения за активной выгрузкой.
-  - Поддерживает флаги `--preset` и `--extra` для запуска новых задач через API.
-  - Подписывается на `preset_state`, чтобы отображать готовность preset и блокировки.
+  - CLI-клиент к API через HTTP (`/api/runs`, `/api/members`, `/api/runs/active`, `/api/runs/{id}`) + SignalR (`/hubs/status`).
+  - Ссылается на backend-проекты `Unload.Api`, `Unload.Store`, `Unload.Tasks`, `Unload.Tasks.MainUnload` — переиспользует их модели/DTO вместо локальных дублей.
+  - Поддерживает `--preset`, `--extra`, `--members`.
+  - Типы: `AppOptions`, `RunApiClient`, `RunDashboardBuilder`, `UiState`, `WebConsoleRunner`.
+
+- `console/Unload.FtpServer`
+  - Вспомогательный FTP-сервер для разработки и тестирования gateway.
+  - Без project reference на backend-проекты.
+
+- `console/Unload.GatewayHandler`
+  - Обработчик файлов со стороны gateway.
+  - Без project reference на backend-проекты.
 
 - `web/webApp`
-  - Angular 21 standalone frontend поверх текущего `Unload.Api`.
-  - UI-стек: PrimeNG 21, Tailwind CSS 4, `@microsoft/signalr`.
-  - Стартовый экран показывает live-часы, синхронизированные с backend через `GET /api/system/time`, состояние `preset_state` и кнопку запуска `preset`, когда probe разрешает переход.
-  - После успешного `preset` экран плавно переключается на карточки `run` и `extra` без отдельной жидкой анимации-разделителя.
-  - Для `run`:
-    - читает `GET /api/catalog` и `GET /api/members`;
-    - группирует мемберов по catalog group;
-    - показывает компактные цветные карточки мемберов вместо больших строк;
-    - по клику на мембера открывает модальное окно деталей: target-коды, логи, пути файлов и ссылки на скачивание;
-    - по `run_status` отображает console-like live-таблицу worker-потоков (`Worker #n` + `running <script>` / `idle`) и список артефактов запуска;
-    - по событию `status` накапливает сокращенные логи для деталей выбранного мембера;
-    - при reload восстанавливает активный `run` через `GET /api/runs/active` и `GET /api/runs/{correlationId}`.
-  - Для `extra`:
-    - использует текущий `POST /api/runs/extra`;
-    - показывает локальную анимацию загрузки и таймер;
-    - после reload может восстановить только последнее локально известное состояние, так как в текущем API нет отдельного live-state контракта для extra.
-  - В dev-режиме использует `proxy.conf.json` для маршрутов `/api` и `/hubs`, чтобы работать с API без CORS-изменений backend.
-  - Ошибки UI обрабатываются в двух слоях: прикладные ошибки API в `WorkflowStore.errorMessage`, непойманные runtime-ошибки Angular — через глобальный `ErrorHandler` (`app.error-store.ts`) с выводом сообщения в верхней панели.
+  - Angular 21 standalone frontend. UI-стек: PrimeNG 21, Tailwind CSS 4, `@microsoft/signalr`.
 
 ## Module diagram
 
@@ -236,69 +157,63 @@ flowchart LR
     Console["console/Unload.Console"] --> Bootstrapper["backend/Unload.Bootstrapper"]
     Api["backend/Unload.Api"] --> Bootstrapper
 
-    Bootstrapper --> RunApp["backend/Unload.Run.Application"]
-    Bootstrapper --> RunRuntime["backend/Unload.Run.Runtime"]
-    Bootstrapper --> TaskFlow["backend/Unload.TaskFlow"]
-    Bootstrapper --> TaskRuntime["backend/Unload.TaskFlow.Runtime"]
-    Bootstrapper --> ScriptTasks["backend/Unload.ScriptTasks"]
-    Bootstrapper --> Workflow["backend/Unload.Workflow"]
-    Bootstrapper --> Runner["backend/Unload.Runner"]
+    Bootstrapper --> Tasks["backend/Unload.Tasks"]
+    Bootstrapper --> MainUnload["backend/Unload.Tasks.MainUnload"]
+    Bootstrapper --> ExtraUnload["backend/Unload.Tasks.ExtraUnload"]
+    Bootstrapper --> Preset["backend/Unload.Tasks.Preset"]
+    Bootstrapper --> Store["backend/Unload.Store"]
     Bootstrapper --> Catalog["backend/Unload.Catalog"]
     Bootstrapper --> Db["backend/Unload.DataBase"]
     Bootstrapper --> Writer["backend/Unload.FileWriter"]
-    Bootstrapper --> Mq["backend/Unload.MQ"]
+    Bootstrapper --> Gateway["backend/Unload.Gateway"]
     Bootstrapper --> Crypto["backend/Unload.Cryptography"]
-    RunApp --> Core["backend/Unload.Core"]
-    RunRuntime --> RunApp
-    RunRuntime --> Workflow
-    TaskFlow --> RunApp
-    TaskFlow --> Workflow
-    TaskRuntime --> TaskFlow
-    TaskRuntime --> RunApp
 
-    Runner --> Core
+    Tasks --> Store
+    Tasks --> Core["backend/Unload.Core"]
+    Store --> Core
+    MainUnload --> Tasks
+    MainUnload --> Store
+    MainUnload --> Catalog
+    MainUnload --> Db
+    MainUnload --> Writer
+    MainUnload --> Gateway
+    ExtraUnload --> Tasks
+    ExtraUnload --> Store
+    ExtraUnload --> Db
+    ExtraUnload --> Gateway
+    Preset --> Tasks
+    Preset --> Store
+    Preset --> Db
     Catalog --> Core
+    Gateway --> Core
     Db --> Core
     Writer --> Core
-    Mq --> Core
     Crypto --> Core
-    ScriptTasks --> TaskFlow
-    ScriptTasks --> Core
 ```
 
 ## Execution flow
 
-1. Консоль или API вызывает `IWorkflowTaskDispatcher` для пользовательского действия (`run`, `preset`, `extra`).
-2. Пользовательское действие маппится в workflow-задачу через `IWorkflowTaskDispatcher` (`run`, `preset`, `extra`), а конкретный сценарий выполнения описан в task definition.
-3. Перед выполнением definition проходит через `IWorkflowTaskAccessService`, который:
-   - проверяет зависимости из pipeline-конфигурации `TaskPipelineConfigurator` через `WorkflowTaskDependencyCatalog`;
-   - применяет таблицу конфликтов между задачами;
-   - запрещает `preset`, если уже выполняется `run` или `extra`;
-   - разрешает параллельный запуск `run` и `extra`;
-   - фиксирует успешное завершение задач для сценариев `before/after`.
-4. System-stage `probe_preset_ready` выполняется автоматически по расписанию через `PresetGateBackgroundService` -> `IPresetProbeService` и отмечается в `IWorkflowStageStateStore`.
-5. Для `run` definition подготавливает входные данные, формирует `RunRequest`, резервирует единственный слот выполнения и сохраняет начальный статус.
-6. `RunProcessingBackgroundService` в API принимает активированный запуск и запускает `RunnerEngine`.
-7. `RunnerEngine` эмитит `RequestAccepted`.
-8. `JsonCatalogService` возвращает скрипты для выбранных target-кодов.
-9. Big scripts (из `bigScripts`) приоритетно выполняются в n-1 потоках, остальные — в оставшихся потоках; каждый worker в цикле запрашивает следующий скрипт у `ScriptDistributor` (big-first/light-first), при пустой "своей" очереди сразу берет скрипты из другой. Для каждого скрипта:
-   - worker получает `DbDataReader` из БД и читает потоково;
-   - worker формирует чанки и сразу пишет их на диск;
-   - если скрипт вернул `0` строк, выходной файл не создается.
-10. На каждом шаге публикуется событие в MQ-заглушку и обновляется статус запуска/мембера.
-11. При `POST /api/runs/{correlationId}/stop` статус сначала становится `CancellationRequested`.
-12. После фактической остановки worker статус переходит в terminal `Cancelled` (поздние `Running`-ивенты игнорируются).
-13. После `PresetGate.StartHour:StartMinute` API раз в минуту запускает system-stage `probe_preset_ready`; `preset` становится доступен только после завершения этой стадии, а после успешного `preset` пользователь может запускать `run` и `extra`:
-   - `0` -> запуск preset пока недоступен;
-   - `1` -> мониторинг завершается, пользователю разрешено запускать preset;
-   - после успешного preset разблокируются обычный run и extra-задача;
-   - до `StartHour:StartMinute` и после `23:59` обычный run и extra-задача всегда заблокированы;
-   - после смены даты требуется новый preset для нового окна выгрузки.
-14. После успешного завершения `preset`, `extra` или `run` вызывается `IWorkflowTaskTransitionService`; если зарегистрированы transition handlers, они могут автоматически запускать следующие задачи (например, будущую `post_extra`).
+1. Console или API вызывают `TaskWorkflow.LaunchAsync(request)`.
+2. `TaskWorkflow` проверяет ограничения запуска в строгом порядке:
+   - задача резолвится по коду;
+   - если не `AdminOverride`: дневное окно, `CanRunPreset` для preset, `RequiresCompleted` через `TaskExecutionHistoryStore.HasRunToday`, `ConflictsWith` через `_activeForegroundTaskCodes`, single-active `run` через `RunActivationChannel`;
+   - при нарушении любого условия бросается `TaskLaunchException`.
+3. Для foreground-задач (`preset`, `extra`, `probe`) код задачи добавляется в `_activeForegroundTaskCodes` на время выполнения, удаляется после.
+4. `task.ExecuteAsync(request, ct)` вызывается.
+5. Для deferred-задачи `run`:
+   - `MainUnloadTask.ExecuteAsync` активирует `RunActivationChannel.TryActivate` и создаёт запись в `RunStateStore`;
+   - возвращает `TaskExecutionStatus.Accepted`;
+   - `MainUnloadHostedService` читает активацию из канала и запускает `MainUnloadEngine`.
+6. `MainUnloadEngine` эмитит `RunnerEvent` (через `Channel<RunnerEvent>` + `RunnerEventEmitter`).
+7. `MainUnloadHostedService` применяет события через `RunStateStore.ApplyEvent` и публикует `status` + `run_status` в SignalR.
+8. Big scripts (из `bigScripts`) выполняются в n-1 потоках, остальные — в оставшихся; каждый worker в цикле запрашивает следующий скрипт у `ScriptDistributor`.
+9. После завершения `MainUnloadEngine` файлы публикуются в FTP gateway; `SenderFeedbackProjectionBackgroundService` проецирует feedback в `RunStateStore.ApplySenderFeedback`, что запускает `TryPromoteToCompleted` для перехода в terminal-статус.
+10. `MainUnloadHostedService` записывает итог в `TaskExecutionHistoryStore`, освобождает `RunActivationChannel`.
+11. При `POST /api/runs/{correlationId}/stop` статус переходит в `CancellationRequested`; после фактической остановки — в terminal `Cancelled`.
 
 ## Каталог и bigScripts
 
-В `configs/catalog.json` опциональная секция `bigScripts` задает target-выборки (memberId+groupId), чьи скрипты считаются «большими»:
+В `configs/catalog.json` опциональная секция `bigScripts` задаёт target-выборки (memberId+groupId):
 
 ```json
 "bigScripts": [
@@ -317,29 +232,27 @@ flowchart LR
 - `<memberCode>` — код мембера (2-й символ имени).
 - `<groupCode>` — код группы из `catalog.json` (3-й символ имени).
 - `<type>` — тип выгрузки, используется в заголовке output-файла.
-- `<codes>` — один или несколько числовых кодов, разделенных `_` (например, `01` или `01_2_15`).
-- `<extension>` — расширение output-файла без точки (должно совпадать с `member.file` без `.`).
+- `<codes>` — один или несколько числовых кодов, разделённых `_` (например, `01` или `01_2_15`).
+- `<extension>` — расширение output-файла без точки.
 
 ### Формат выходного файла
 
 - Имя: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}.{extension}`
 - `chunkNumberBase36` — сквозной номер чанка для конкретного мембера в рамках запуска, в верхнем регистре base36 (`01`, `02`, ... `09`, `0A`, `0B`, ...).
-- При коллизии имени (например, параллельная запись двух файлов с одинаковым шаблоном) автоматически добавляется суффикс `_{NN}`: `{first3charsOfScript}{dayOfYear:D3}{chunkNumberBase36}_{NN}.{extension}`.
+- При коллизии имени добавляется суффикс `_{NN}`.
 - Первая строка:
   - `#|{type}|{outputFileName}|2XMDR|{yyyy-MM-dd}|{rowsCountWithoutHeader}|{firstDigitFromCodes}`
-- Остальные строки:
-  - данные из БД через `|`.
-  - символ `|` не экранируется обратным слешом.
+- Остальные строки: данные из БД через `|` без экранирования.
 
-### Структура output и CSV-отчета
+### Структура output и CSV-отчёта
 
 - Папка запуска: `output/<dd_MM_yyyy_HHmmss>/`
 - Выходные файлы чанков: `output/<dd_MM_yyyy_HHmmss>/output-files/`
-- CSV-отчет запуска: `output/<dd_MM_yyyy_HHmmss>/run-report.csv`
+- CSV-отчёт: `output/<dd_MM_yyyy_HHmmss>/run-report.csv`
 - Формат CSV:
   - `memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs`
   - `mqStatus`: `отправлен` / `не отправлен`
-  - `executionTimeMs`: время записи конкретного output-файла (чанка) в миллисекундах.
+  - `operation` маппится из `firstCodeDigit`: `0 -> предоставление`, `2 -> замена`, остальные — число.
   - Для скриптов без строк: `outputFileName=""`, `rowsCount=0`, `mqStatus=не отправлен`, `executionTimeMs=0`.
 
 ## Run sequence diagram
@@ -348,56 +261,99 @@ flowchart LR
 sequenceDiagram
     participant Client as Console/API Client
     participant Transport as API/Console Transport
-    participant TaskFlow as Unload.TaskFlow
-    participant RunApp as Unload.Run.Application
-    participant Coordinator as IRunCoordinator (single active run)
-    participant Worker as BackgroundService
-    participant Runner as RunnerEngine
-    participant Infra as Catalog/DB/FileWriter/MQ
-    participant State as IRunStateStore
+    participant Workflow as TaskWorkflow
+    participant Task as MainUnloadTask
+    participant Channel as RunActivationChannel
+    participant Store as RunStateStore
+    participant Worker as MainUnloadHostedService
+    participant Engine as MainUnloadEngine
+    participant Infra as Catalog/DB/FileWriter/Gateway
+    participant History as TaskExecutionHistoryStore
     participant SignalR as RunStatusHub
 
-    Client->>Transport: start run(targetCodes)
-    Transport->>TaskFlow: StartRunWorkflowTaskDefinition
-    TaskFlow->>TaskFlow: normalize + validate target codes
-    RunApp->>Coordinator: TryActivate(RunRequest)
-    RunApp->>State: SetStarted(...)
-    Transport-->>Client: correlationId
+    Client->>Transport: start run(memberCodes)
+    Transport->>Workflow: LaunchAsync(TaskLaunchRequest{run})
+    Workflow->>Workflow: EnsureCanLaunch (window, deps, conflicts, single-active)
+    Workflow->>Task: ExecuteAsync(request)
+    Task->>Infra: GetCatalogAsync (если MemberCodes)
+    Task->>Channel: TryActivate(correlationId, RunRequest)
+    Task->>Store: SetStarted(correlationId, ...)
+    Task-->>Workflow: TaskExecutionResult{Accepted}
+    Transport-->>Client: 202 Accepted + correlationId
 
-    Worker->>Coordinator: ReadActivationsAsync()
-    Worker->>State: SetRunning(correlationId)
-    Worker->>Runner: RunAsync(request)
-    Runner->>Infra: catalog/db/file/mq operations
-    Runner-->>Worker: RunnerEvent stream
-    Worker->>State: ApplyEvent(event)
+    Worker->>Channel: ReadActivationsAsync()
+    Worker->>Store: SetRunning(correlationId)
+    Worker->>SignalR: run_status
+    Worker->>Engine: RunAsync(request)
+    Engine->>Infra: catalog/db/file operations
+    Engine-->>Worker: RunnerEvent stream
+    Worker->>Store: ApplyEvent(event)
     Worker->>SignalR: status + run_status
+
+    Engine-->>Worker: (stream ends — RunnerStep.Completed)
+    Worker->>Worker: WaitForTerminalStateAsync (gateway feedback)
+    Worker->>History: Add(run, ...)
+    Worker->>Channel: Complete(correlationId)
 ```
+
+## API endpoints
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `POST` | `/api/runs` | Запуск `run`. Тело: `RunStartRequest{memberCodes, targetCodes?, adminOverride, publishToGateway}`. Ответ: `202 RunAcceptedResponse` или `409` |
+| `GET` | `/api/runs/preset/state` | Состояние дневного окна (`PresetGateState`) |
+| `POST` | `/api/runs/preset` | Запуск `preset`. Тело: `AdminTaskRequest?{adminOverride}`. Ответ: `200 ScriptTaskRunResult` |
+| `POST` | `/api/runs/extra` | Запуск `extra`. Тело: `AdminTaskRequest?{adminOverride, publishToGateway}`. Ответ: `200 ScriptTaskRunResult` |
+| `POST` | `/api/runs/requeue` | Повторная публикация результатов в gateway |
+| `GET` | `/api/runs` | Список всех запусков (`RunStatusInfo[]`) |
+| `GET` | `/api/runs/today` | Запуски `run` за текущий день |
+| `GET` | `/api/runs/dashboard` | Snapshot для UI (`WorkflowDashboardSnapshotResponse`) |
+| `GET` | `/api/runs/history` | История за N дней (`?days=N`). Ответ: `WorkflowHistoryResponse` |
+| `GET` | `/api/runs/active` | Активный `run` или `{correlationId: null}` |
+| `GET` | `/api/runs/{correlationId}` | Статус конкретного `run` |
+| `POST` | `/api/runs/{correlationId}/stop` | Запрос остановки `run`. Ответ: `202` или `404` |
+| `GET` | `/api/catalog` | Структура каталога |
+| `GET` | `/api/members` | Список мемберов с target-кодами и активным статусом |
+| `GET` | `/api/system/time` | Серверное время (`ServerTimeResponse`) |
+| `POST` | `/api/system/sender-feedback` | Ручная подача sender-feedback (`SenderFeedbackRequest`) |
+| `POST` | `/api/system/gateway-upload` | Загрузка файлов в gateway (`multipart/form-data`: files, memberName) |
+| `GET` | `/api/system/download?path=` | Скачивание файла из output |
+| `GET` | `/api/system/output-files?path=` | Листинг файлов в output-папке |
+| `GET` | `/api/system/download-archive?path=` | Скачивание ZIP-архива output-папки |
+
+SignalR hub: `/hubs/status`
+
+| Событие | Payload | Описание |
+|---|---|---|
+| `status` | `RunnerEvent` | Пошаговые события раннера для всех клиентов |
+| `run_status` | `RunStatusInfo` | Обновления агрегированного статуса запуска |
+| `preset_state` | `PresetGateState` | Состояние дневного окна |
+| `preset_replayed` | `ScriptTaskRunResult` | Результат повторного запуска уже выполненного preset |
+
+Формат ошибок (`application/problem+json`):
+- поля: `type`, `title`, `status`, `detail`, `instance`;
+- расширения: `errorCode`, `traceId`;
+- дополнительные расширения: `activeCorrelationId` (конфликт run), `requiredTaskCodes` (зависимость).
+- примеры `errorCode`: `RUN_ALREADY_IN_PROGRESS`, `VALIDATION_ERROR`, `PRESET_GATE_BLOCKED`, `TASK_DEPENDENCY_NOT_SATISFIED`, `TASK_ALREADY_RUNNING`, `RUN_NOT_FOUND`, `UNKNOWN_MEMBER_CODES`.
 
 ## Code documentation
 
 - Во всех ключевых классах и методах backend/console добавлены XML-комментарии.
-- В новых слоях `backend/Unload.Run.Application`, `backend/Unload.Run.Runtime`, `backend/Unload.TaskFlow` и `backend/Unload.TaskFlow.Runtime` XML-комментарии поддерживаются на тех же правилах, что и в старом `Unload.Application`.
-- В `console/Unload.WebConsole` добавлены XML-комментарии для типов `AppOptions`, `RunApiClient`, `RunDashboardBuilder`, `UiState`, `WebConsoleRunner` и DTO/enum-моделей из `Models.cs`.
-- `WebConsoleRunner` декомпозирован на небольшие шаги (`ConnectToHubAsync`, `ResolveTrackedRunAsync`, `RenderLiveDashboardAsync`, `RefreshFinalStateAsync`, `RenderFinalSummary`) для упрощения чтения и сопровождения.
-- `RunDashboardBuilder` избавлен от дублирования между live/final режимами через общие builder-методы (`BuildLayout`, `BuildInfoPanel`, `BuildMembersTable`, `BuildEventsTable`) и вынесенные мапперы цветов.
-- Комментарии описывают:
-  - где используется компонент;
-  - как работает метод или класс;
-  - входные параметры (`param`) и выход (`returns`) для методов.
-- Этот формат документации следует поддерживать при добавлении новых публичных и приватных методов core runtime.
-- Для run-моделей рекомендуется поддерживать синхронность API-контрактов: если меняется payload (`memberCodes`, `MemberStatuses`, `stop` endpoint), обновлять docs и WebConsole одновременно.
+- Комментарии описывают: где используется компонент; как работает метод или класс; `param` и `returns` для методов.
+- Поддерживать при добавлении новых публичных и приватных методов core runtime.
+- При изменении payload или событий синхронно обновлять `docs/ARCHITECTURE.md`, `README.md` и `postman/unload-api.postman_collection.json`.
 
 ## Extension contracts
 
-Чеклист для добавления новых API функций и фоновых задач без деградации поддерживаемости:
+Чеклист для добавления новых API функций без деградации поддерживаемости:
 
-1. Добавить use-case сервис в `backend/Unload.Api/UseCases` и держать контроллер тонким (только transport/mapping).
-2. Для бизнес-ошибок бросать `ApiProblemException`; не собирать `ProblemDetails` вручную в контроллерах.
-3. Новые `errorCode` фиксировать в docs и поддерживать в одном стиле (`UPPER_SNAKE_CASE`).
-4. Если нужен live-статус для UI, публиковать событие в `RunStatusHub` с именем в стиле существующих каналов (`status`, `run_status`, `preset_state`).
-5. Для run-статусов соблюдать переходы `Running -> CancellationRequested -> Cancelled` и terminal-статусы без обратного перехода.
-6. Для output-артефактов использовать отдельный writer-компонент, не смешивая SQL execution и файловую запись в одном классе.
-7. При изменении payload или событий синхронно обновлять `docs/ARCHITECTURE.md`, `README.md` и `postman/unload-api.postman_collection.json`.
+1. Новую задачу реализовывать как подкласс `UnloadTask`, декларируя ограничения на уровне свойств класса.
+2. Воркфлоу `TaskWorkflow` автоматически исполняет ограничения — задача не должна вызывать gate-проверки сама.
+3. Для бизнес-ошибок бросать `TaskLaunchException`; в контроллере — `ApiProblemException`. Не собирать `ProblemDetails` вручную.
+4. Новые `errorCode` фиксировать в docs в стиле `UPPER_SNAKE_CASE`.
+5. Если нужен live-статус для UI — публиковать событие в `RunStatusHub` с именем в стиле существующих (`status`, `run_status`, `preset_state`).
+6. Для run-статусов соблюдать переходы `Running -> CancellationRequested -> Cancelled` и terminal-статусы без обратного перехода.
+7. Для output-артефактов использовать отдельный writer-компонент, не смешивая SQL execution и файловую запись.
 
 ## API run
 
@@ -413,7 +369,7 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"memberCodes\":[\"M\"]}"
 ```
 
-Проверка состояния preset-гейта:
+Проверка состояния дневного окна:
 
 ```powershell
 curl http://localhost:5000/api/runs/preset/state
@@ -437,13 +393,13 @@ curl -X POST http://localhost:5000/api/runs/extra
 curl http://localhost:5000/api/members
 ```
 
-Проверка статусов запусков:
 Остановка активной выгрузки:
 
 ```powershell
 curl -X POST http://localhost:5000/api/runs/{correlationId}/stop
 ```
 
+Проверка статусов запусков:
 
 ```powershell
 curl http://localhost:5000/api/runs
@@ -455,19 +411,13 @@ curl http://localhost:5000/api/runs
 curl http://localhost:5000/api/runs/active
 ```
 
-Подписка клиента SignalR:
+SignalR — подключение:
 
 - Подключиться к `/hubs/status`.
-- Вызвать `SubscribeRun(correlationId)` (опционально для обратной совместимости).
-- Слушать событие `status` с payload `RunnerEvent` (событие отправляется всем подключенным клиентам).
-- Для общей ленты запусков слушать событие `run_status` с payload `RunStatusInfo`.
-- Для готовности preset слушать событие `preset_state` с payload `PresetGateState`.
-
-Формат ошибок API (`application/problem+json`):
-- поля: `type`, `title`, `status`, `detail`, `instance`;
-- расширения: `errorCode`, `traceId`;
-- дополнительные расширения при необходимости: например, `activeCorrelationId` для конфликтов запуска.
-- примеры `errorCode`: `RUN_ALREADY_IN_PROGRESS`, `VALIDATION_ERROR`, `PRESET_GATE_BLOCKED`, `SCRIPT_TASK_CONFLICT`, `RUN_NOT_FOUND`.
+- Вызвать `SubscribeRun(correlationId)` (опционально, для обратной совместимости).
+- Слушать `status` — `RunnerEvent` для всех клиентов.
+- Слушать `run_status` — `RunStatusInfo` для всех клиентов.
+- Слушать `preset_state` — `PresetGateState` для всех клиентов.
 
 ## Run
 

@@ -1,13 +1,12 @@
 # Unload
 
-Платформа выгрузки данных с явным workflow-пайплайном:
+Платформа выгрузки данных с явным пайплайном задач:
 
-- есть системная стадия готовности `probe_preset_ready`;
-- есть пользовательские задачи `preset`, `run`, `extra`;
-- есть правила порядка, конфликтов и будущих автопереходов;
-- есть API, Console, WebConsole и Angular WebApp для запуска и наблюдения.
+- четыре задачи: `probe`, `preset`, `run`, `extra`;
+- единственный контролёр запусков `TaskWorkflow` — проверяет все зависимости, конфликты и дневное окно;
+- API, Console, WebConsole и Angular WebApp для запуска и наблюдения.
 
-Этот `README.md` описывает прикладную логику проекта: как устроен бизнес-пайплайн, какие сервисы за что отвечают, как менять правила и куда добавлять новые задачи.
+Этот `README.md` описывает прикладную логику: как устроен бизнес-пайплайн, какие сервисы за что отвечают, как менять правила и куда добавлять новые задачи.
 
 ## Что делает приложение
 
@@ -18,7 +17,7 @@
 - читает данные из БД потоково;
 - режет результат на чанки;
 - пишет файлы в `output`;
-- публикует MQ-события готовности файлов и sender-feedback;
+- публикует файлы в gateway (FTP) и получает sender-feedback;
 - хранит и отдает live-статусы;
 - поддерживает отдельные задачи `preset` и `extra`.
 
@@ -26,128 +25,86 @@
 
 Текущая бизнес-логика такая:
 
-1. После `15:00` автоматически запускается системная стадия `probe_preset_ready`.
-2. Стадия выполняет SQL probe из настройки `PresetGate.ProbeSql`.
-3. Пока probe возвращает `0`, запуск `preset` запрещен.
-4. Когда probe возвращает `1`, стадия `probe_preset_ready` считается завершенной, и пользователь может запускать `preset`.
+1. После `StartHour:StartMinute` (настраивается, по умолчанию `11:25`) `ProbeSchedulerHostedService` начинает polling и автоматически запускает задачу `probe`.
+2. Задача `probe` выполняет SQL из настройки `PresetGate.ProbeSql`.
+3. Пока probe возвращает `0`, запуск `preset` запрещён.
+4. Когда probe возвращает `1`, `DailyWindowPolicy` отмечает готовность, и пользователь может запустить `preset`.
 5. Пользователь запускает `preset`.
-6. После успешного `preset` становятся доступны:
-   - `run`
-   - `extra`
-7. Пользователь может запустить `run` и `extra` параллельно.
-8. `preset` при этом не может выполняться одновременно с `run` и `extra`.
-9. После смены даты окно сбрасывается:
-   - стадия `probe_preset_ready` сбрасывается;
-   - выполненные задачи сбрасываются;
-   - нужен новый `preset` для нового дня.
+6. После успешного `preset` становятся доступны `run` и `extra` (требуется, чтобы дневное окно было открыто).
+7. `run` и `extra` могут выполняться параллельно.
+8. `preset` не может выполняться одновременно с `run` или `extra`.
+9. После смены даты `DailyWindowPolicy` сбрасывает состояние: нужен новый `probe` и `preset` для нового дня.
 
-## Как читать пайплайн
+## Задачи
 
-Пайплайн разделен на 3 уровня.
+| Задача | Код | Синхронная? | RequiresCompleted | ConflictsWith | Дневное окно |
+|---|---|---|---|---|---|
+| `ProbeTask` | `probe` | Да | — | — | Нет |
+| `PresetTask` | `preset` | Да | `probe` | `run`, `extra` | Особое (probe=1 + время) |
+| `MainUnloadTask` | `run` | Нет (deferred) | `preset` | `preset` | Да |
+| `ExtraUnloadTask` | `extra` | Да | `preset` | `preset` | Да |
 
-### 1. System stages
-
-Это автоматические стадии, которые не запускает пользователь напрямую.
-
-Сейчас есть одна стадия:
-
-- `probe_preset_ready`
-
-Назначение:
-
-- автоматически выполняется по расписанию;
-- проверяет готовность системы к запуску `preset`;
-- открывает следующий шаг пайплайна.
-
-### 2. User tasks
-
-Это задачи, которые запускает пользователь.
-
-Сейчас есть:
-
-- `preset`
-- `run`
-- `extra`
-
-### 3. Auto transitions
-
-Это будущий слой автоматических переходов после завершения задач.
-
-Сейчас инфраструктура уже подготовлена, но handlers еще не зарегистрированы:
-
-- после `preset`, `run` или `extra` вызывается `IWorkflowTaskTransitionService`;
-- в будущем можно будет подключить автоматическую задачу после `extra` через отдельный transition handler.
+Все задачи запускаются через единственный метод `TaskWorkflow.LaunchAsync`.
 
 ## Полный поток выполнения
 
 ### Поток `probe -> preset -> run/extra`
 
-1. `PresetGateBackgroundService` отслеживает локальное время.
-2. После `StartHour:StartMinute` он начинает polling.
-3. По расписанию вызывает общий `IPresetProbeService`.
-4. `IPresetProbeService` выполняет SQL probe и применяет результат в preset-gate + workflow-stage.
-5. Если probe вернул `1`, stage `probe_preset_ready` помечается completed.
+1. `ProbeSchedulerHostedService` отслеживает локальное время.
+2. После `StartHour:StartMinute` начинает polling (по умолчанию каждые 60 секунд).
+3. Вызывает `TaskWorkflow.LaunchAsync(probe)`.
+4. `ProbeTask` выполняет SQL probe, применяет результат в `DailyWindowPolicy`.
+5. Если probe вернул `1`, `DailyWindowPolicy.ReadyForPreset` становится `true`.
 6. Пользователь вызывает `preset` через API или Console.
-7. `IWorkflowTaskDispatcher` находит `RunPresetWorkflowTaskDefinition`.
-8. `IWorkflowTaskAccessService` проверяет:
-   - завершена ли `probe_preset_ready`;
-   - нет ли конфликтующей задачи;
-   - допускает ли `IPresetGateService` выполнение `preset`.
-9. `ScriptTaskOrchestrator` выполняет preset-скрипты из `scripts/preset`.
-10. После успешного `preset`:
-    - `PresetGateService` помечает preset completed;
-    - task `preset` помечается completed;
-    - открываются `run` и `extra`.
-11. Пользователь может запускать `run` и `extra` независимо.
-12. `run` и `extra` совместимы и могут выполняться одновременно.
+7. `TaskWorkflow` проверяет: probe пройден + время в пределах окна + нет конфликтов.
+8. `PresetTask` выполняет SQL-скрипты из `scripts/preset`.
+9. После успешного `preset`:
+   - `DailyWindowPolicy.MarkPresetCompleted()` вызывается внутри `PresetTask`;
+   - в `TaskExecutionHistoryStore` появляется запись с кодом `preset`;
+   - открывается дневное окно для `run` и `extra`.
+10. Пользователь может запускать `run` и `extra` независимо.
 
 ### Поток `run`
 
 1. Пользователь вызывает `POST /api/runs` или запускает Console.
-2. `IWorkflowTaskDispatcher` находит `StartRunWorkflowTaskDefinition`.
-3. Definition:
-   - валидирует входные данные;
-   - при запуске по `memberCodes` через `ICatalogService` переводит их в `targetCodes`;
-   - проверяет доступность задачи;
-   - запускает `run` (создает `RunRequest`, резервирует слот единственного активного `run`, создает стартовый статус).
-5. `RunProcessingBackgroundService` читает активацию из `IRunCoordinator`.
-6. `RunnerEngine` выполняет выгрузку.
-7. Статусы попадают в `IRunStateStore`.
-8. После завершения записи файлов по мемберам `RunnerEngine` публикует в MQ события `FileBatchReady` (по одному batch на мембера).
-9. `SenderStubMqBackgroundService` (в проекте `Unload.MQ`) читает batch-и и отправляет файлы с задержкой 1 секунда на файл.
-10. Sender публикует feedback (`FileSent`, `BatchCompleted`, `BatchFailed`) обратно в MQ.
-11. `SenderFeedbackProjectionBackgroundService` (в API) проецирует feedback в `IRunStateStore` и публикует обновленный `run_status` в SignalR.
-12. После завершения `run`:
-   - слот освобождается;
-   - задача `run` помечается completed;
-   - вызывается `IWorkflowTaskTransitionService`.
+2. `TaskWorkflow.LaunchAsync(run)` проверяет все ограничения.
+3. `MainUnloadTask`:
+   - нормализует входные коды;
+   - при режиме `MemberCodes` через `ICatalogService` переводит их в `targetCodes`;
+   - создает `RunRequest` через `RunRequestFactory`;
+   - резервирует слот в `RunActivationChannel` (single-active);
+   - создает стартовый статус в `RunStateStore`.
+4. Задача возвращает `TaskExecutionStatus.Accepted` — выполнение продолжается в фоне.
+5. `MainUnloadHostedService` читает активацию из `RunActivationChannel`.
+6. `MainUnloadEngine` выполняет выгрузку, эмитит `RunnerEvent`.
+7. Статусы накапливаются в `RunStateStore`.
+8. После завершения записи файлов `FtpGatewayPublisher` публикует batch-ready событие в FTP gateway.
+9. `SenderFeedbackProjectionBackgroundService` проецирует gateway-feedback в `RunStateStore` и публикует `run_status` в SignalR.
+10. Когда все batches получили feedback (или `PublishToGateway = false`), `TryPromoteToCompleted` переводит run в `Completed`.
+11. `MainUnloadHostedService` записывает в `TaskExecutionHistoryStore` и освобождает слот.
 
 ### Поток `extra`
 
-1. Пользователь вызывает `POST /api/runs/extra` или запускает Console/WebConsole с `--extra`.
-2. `IWorkflowTaskDispatcher` находит `RunExtraWorkflowTaskDefinition`.
-3. `IWorkflowTaskAccessService` проверяет:
-   - завершен ли `preset`;
-   - нет ли конфликта с `preset`.
-4. `ScriptTaskOrchestrator`:
-   - находит SQL-скрипты в корне `scripts`;
-   - выполняет их;
-   - группирует результат по `NrBank`;
-   - пишет файлы.
-5. После завершения:
-   - задача `extra` помечается completed;
-   - вызывается `IWorkflowTaskTransitionService`.
+1. Пользователь вызывает `POST /api/runs/extra` или Console/WebConsole с `--extra`.
+2. `TaskWorkflow.LaunchAsync(extra)` проверяет все ограничения.
+3. `ExtraUnloadTask`:
+   - находит SQL-скрипты в корне `scripts` (без подпапок);
+   - выполняет их параллельно;
+   - агрегирует результат по `NrBank`;
+   - пишет файлы через `ExtraOutputWriter`.
+4. Задача возвращает `TaskExecutionStatus.Completed` — выполнение синхронное.
+5. Запись результата в `TaskExecutionHistoryStore`.
 
 ## Кто за что отвечает
 
 ### `backend/Unload.Core`
 
-Базовый слой контракта runtime:
+Базовый слой контрактов:
 
-- модели домена и событий;
-- контракты `IRunner`, `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IMqPublisher`, `IRequestHasher`.
+- модели домена: `RunRequest`, `ScriptDefinition`, `DatabaseRow`, `FileChunk`, `WrittenFile`, `RunnerEvent`, `RunnerStep`;
+- контракты: `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IRequestHasher`.
 
-Меняется редко. Обычно сюда выносятся общие контракты и модели без orchestration.
+Меняется редко. Общие контракты без логики оркестрации.
 
 ### `backend/Unload.Catalog`
 
@@ -160,19 +117,16 @@
 - находит SQL-файлы;
 - определяет большие target-выборки через `bigScripts`.
 
-Если меняется логика выбора SQL-файлов, структура каталога или naming rule, смотреть сюда.
-
 ### `backend/Unload.DataBase`
 
 Отвечает за доступ к БД.
 
 Главное:
 
-- создает клиентов БД;
+- создает клиентов БД (`DatabaseClientFactory`);
 - выполняет SQL;
 - возвращает `DbDataReader` для потокового чтения.
-
-Если меняется драйвер БД, стратегия подключения или расшифровка connection string, смотреть сюда.
+- `connectionString` может быть plain-text строкой или строкой формата `dpapi:<base64>`, которая расшифровывается через Windows DPAPI (`CurrentUser`).
 
 ### `backend/Unload.FileWriter`
 
@@ -184,170 +138,114 @@
 - пишет заголовки;
 - гарантирует корректную параллельную запись по файлам.
 
-Если меняется формат выходного файла или правила именования output, смотреть сюда.
+### `backend/Unload.Gateway`
 
-### `backend/Unload.MQ`
+Отвечает за публикацию файлов через FTP gateway и получение sender-feedback.
 
-Отвечает за MQ-runtime логику.
+Главное:
 
-Сейчас это in-memory реализация с двумя потоками сообщений:
+- `FtpGatewayPublisher` — публикует файлы на FTP-сервер, отдаёт batch-ready события;
+- `FtpGatewayBackgroundService` — фоновый обработчик;
+- `GatewayUploadService` — обработка ручной загрузки файлов через API endpoint;
+- конфигурация через секцию `Gateway.Ftp` в appsettings.
 
-- `FileBatchReady` (готовые файлы на отправку по мемберу);
-- sender-feedback (`FileSent`, `BatchCompleted`, `BatchFailed`).
-
-Здесь же живет sender-stub:
-
-- `SenderStubMqBackgroundService` читает `FileBatchReady`;
-- отправляет файлы с задержкой 1 секунда на файл;
-- публикует sender-feedback в MQ.
-
-В `Core` остаются только контракты MQ, без runtime-логики.
+Заменяет in-memory MQ-заглушку из прежней архитектуры.
 
 ### `backend/Unload.Cryptography`
 
-Отвечает за хеширование запросов.
+Хеширование запросов: `Sha256RequestHasher`.
 
-### `backend/Unload.Runner`
+### `backend/Unload.Store`
 
-Исполняет основной pipeline выгрузки.
+Единое хранилище состояний и истории.
 
-Главные сервисы:
+Главное:
 
-- `RunnerEngine` — основной engine;
-- `ScriptDistributor` — раздает скрипты worker-потокам;
-- `RunnerEventEmitter` — публикует события;
-- `RunnerEngineDataReader` — читает строки и колонки;
-- `RunnerOutputDirectoryFactory` — создает output-директории;
-- `RunReportCsvWriter` — пишет итоговый CSV-отчет.
+- `RunStateStore` — потокобезопасное in-memory хранилище статусов запусков с JSON-персистентностью. Хранит `RunStatusInfo` (статус, members, workers, artifacts, sender batches). При рестарте незавершённые запуски переводятся в `Cancelled`.
+- `TaskExecutionHistoryStore` — история завершённых задач (`TaskRecord`). Используется воркфлоу для проверки `RequiresCompleted` (метод `HasRunToday`).
+- `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move).
+- `GatewaySenderFeedbackConsumer` — принимает sender-feedback из gateway.
+- `RequeueService` — повторная публикация результатов прошлых запусков в gateway.
 
-Если меняется параллельность, порядок обработки скриптов, чанки, отчет или правила формирования file-batch для sender, смотреть сюда.
+### `backend/Unload.Tasks`
 
-### `backend/Unload.Run.Application`
+Ядро задач — модели, контроллер и политика окна.
 
-Здесь живет прикладной слой основного `run`.
+Главное:
 
-Главные сервисы:
+- `UnloadTask` — абстрактный базовый класс. Каждая задача декларирует `Code`, `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen`.
+- `TaskWorkflow` — единственный класс оркестрации. Контролирует все ограничения запуска и вызывает `task.ExecuteAsync`. Без интерфейса — одна реализация.
+- `DailyWindowPolicy` — политика дневного окна (заменяет `PresetGateService`). Хранит in-memory состояние; без интерфейса.
+- `TaskLaunchRequest` / `TaskExecutionResult` — единые модели запроса и результата.
+- `TaskLaunchException` — единый тип бизнес-ошибки (заменяет `WorkflowTaskDispatchException`). Поля: `FailureKind`, `ErrorCode`, `Extensions`.
+- `TaskCodes` — константы `run`, `preset`, `extra`, `probe`.
+- `RunActivationChannel` — in-memory канал single-active задачи `run`.
+- `RunActivation` / `PresetGateOptions` / `PresetGateState` — вспомогательные модели.
 
-- `IRunRequestFactory` / `RunRequestFactory`
-- `IRunCoordinator`
-- `IRunStateStore`
-- `RunStatusInfo`
+### `backend/Unload.Tasks.MainUnload`
 
-Если меняется orchestration основного запуска, нормализация target-кодов, контракт статусов или бизнес-семантика одного активного `run`, смотреть в первую очередь сюда.
+Задача и движок основной выгрузки.
 
-### `backend/Unload.Run.Runtime`
+Главное:
 
-Здесь лежат in-memory runtime реализации для основного `run`.
+- `MainUnloadTask` — задача `run`. Deferred: активирует `RunActivationChannel` и возвращает `Accepted`.
+- `MainUnloadEngine` — движок выгрузки. N worker-потоков, `ScriptDistributor` (big/light очереди), `RunnerEventEmitter`.
+- `RunRequestFactory` — создаёт `RunRequest` с корреляционным ID.
+- `RunnerOptions` — `WorkerCount`, `ChunkSizeBytes`.
 
-Главные сервисы:
+### `backend/Unload.Tasks.ExtraUnload`
 
-- `InMemoryRunCoordinator`
-- `InMemoryRunStateStore`
+Задача дополнительной выгрузки.
 
-Если меняется process-local хранение статусов, активный слот запуска или runtime-механика `run`, смотреть сюда.
+Главное:
 
-### `backend/Unload.TaskFlow`
+- `ExtraUnloadTask` — задача `extra`. Синхронная.
+- `ExtraScriptExecutor` — выполняет один extra-скрипт с агрегацией строк.
+- `ExtraOutputWriter` — пишет агрегированные файлы.
 
-Здесь живет orchestration пользовательских задач и прозрачная конфигурация pipeline.
+### `backend/Unload.Tasks.Preset`
 
-Главные группы:
+Задачи probe и preset.
 
-- task models и codes:
-  - `WorkflowTaskCodes`
-  - `WorkflowStageCodes`
-  - `StartRunTaskRequest`
-  - `StartRunTaskResult`
-  - `EmptyWorkflowTaskRequest`
-  - `WorkflowTaskDispatchException`
+Главное:
 
-- workflow-task definitions:
-  - `StartRunWorkflowTaskDefinition`
-  - `RunPresetWorkflowTaskDefinition`
-  - `RunExtraWorkflowTaskDefinition`
-
-- pipeline configuration:
-  - `TaskPipelineConfigurator`
-  - `TaskPipelineBuilder`
-  - `TaskPipeline`
-
-- policy и transitions:
-  - `WorkflowTaskDependencyCatalog`
-  - `IWorkflowTaskTransitionService`
-  - `IWorkflowTaskTransitionHandler`
-
-- preset gate:
-  - `IPresetGateService`
-  - `PresetGateService`
-
-Если меняется порядок задач, зависимости, конфликты, post-actions или бизнес-правила окна `preset`, смотреть сюда.
-
-### `backend/Unload.TaskFlow.Runtime`
-
-Здесь лежат in-memory runtime реализации task orchestration.
-
-Главные сервисы:
-
-- `InMemoryWorkflowTaskAccessService`
-- `InMemoryWorkflowStageStateStore`
-
-Если меняется process-local состояние completed tasks/stages или enforcement правил запуска задач, смотреть сюда.
-
-### `backend/Unload.ScriptTasks`
-
-Здесь лежат инфраструктурные реализации дополнительных задач.
-
-Главные сервисы:
-
-- `ScriptTaskOrchestrator`
-- `PresetScriptExecutor`
-- `ExtraScriptExecutor`
-- `ExtraOutputWriter`
-- `ScriptTaskEventPublisher`
-
-Если меняется исполнение `preset` или `extra` через SQL, файловую систему и DB/MQ интеграцию, смотреть сюда.
+- `ProbeTask` — задача `probe`. Выполняет SQL probe, применяет результат к `DailyWindowPolicy`, фиксирует в `TaskExecutionHistoryStore`.
+- `PresetTask` — задача `preset`. Синхронная. Выполняет SQL-скрипты из `scripts/preset`, вызывает `DailyWindowPolicy.MarkPresetCompleted()`.
+- `PresetScriptExecutor` — выполняет один preset-скрипт.
 
 ### `backend/Unload.Bootstrapper`
 
-Единая DI-композиция runtime.
+Единая DI-композиция и вся работа с конфигурацией.
 
 Главное:
 
-- `AddUnloadRuntime(...)`
-
-Если добавляется новый проект runtime-слоя или меняется общая сборка зависимостей для API/Console, смотреть сюда. Регистрация самих task definitions теперь собирается через `TaskPipelineConfigurator`, а не вручную по одной строке.
-
-### `backend/Unload.Workflow`
-
-Низкоуровневый каркас workflow.
-
-Главное:
-
-- `ISingleActiveWorkflow<TPayload>` / `InMemorySingleActiveWorkflow<TPayload>`
-- `IWorkflowTaskRegistry`
-- `IWorkflowTaskDispatcher`
-
-Если меняется низкоуровневый runtime dispatch/activation, смотреть сюда.
+- `AddUnloadRuntime(IServiceCollection, IConfiguration)` — единственная точка регистрации всех сервисов. Используется API и Console.
+- `UnloadConfiguration` — агрегат всех настроек (`Paths`, `Database`, `Runner`, `PresetGate`, `HistoryRetention`).
+- `UnloadConfigurationLoader` — читает `IConfiguration`, резолвит корень workspace (ищет `configs/catalog.json` + `scripts/` вверх по дереву).
+- `UnloadRuntimePaths` — пути к каталогу, скриптам и output.
 
 ### `backend/Unload.Api`
 
-Транспортный слой.
+Транспортный слой (ASP.NET Core + SignalR).
 
 Главное:
 
-- контроллеры;
-- ProblemDetails и error handling;
-- SignalR hub;
-- background services;
-- системная стадия `probe_preset_ready` (реализована через общий `IPresetProbeService`);
-- проекция sender-feedback в `run_status` для web-клиента.
-
-Если меняются HTTP-контракты, события SignalR, transport-level background services или API-ошибки, смотреть сюда.
+- контроллеры (`RunsController`, `CatalogController`, `SystemController`) — тонкий transport, вызывают `TaskWorkflow` напрямую;
+- `RunStatusHub` — SignalR hub `/hubs/status`;
+- error handling: `GlobalExceptionHandler`, `ApiProblemDetailsFactory`, `ApiProblemException`;
+- фоновые сервисы:
+  - `MainUnloadHostedService` — читает активации из `RunActivationChannel`, гоняет `MainUnloadEngine`, публикует SignalR;
+  - `ProbeSchedulerHostedService` — по расписанию вызывает `TaskWorkflow.LaunchAsync(probe)`, публикует `preset_state` в SignalR;
+  - `SenderFeedbackProjectionBackgroundService` — проецирует gateway-feedback в `RunStateStore`;
+  - `HistoryRetentionBackgroundService` — удаляет старые записи из `TaskExecutionHistoryStore` и `RunStateStore`.
 
 ### `console/Unload.Console`
 
 Локальный запуск через DI того же runtime.
-По умолчанию работает как единая интерактивная сессия стадий `probe -> preset -> run -> extra` без перезапуска процесса.
-Для совместимости оставлены one-shot флаги `--preset` и `--extra`.
+По умолчанию работает как единая интерактивная сессия стадий (`probe -> preset -> run -> extra`) без перезапуска процесса.
+Поддерживает one-shot режимы `--preset` и `--extra`.
+
+Ключевые типы, используемые из backend: `TaskWorkflow`, `TaskLaunchRequest`, `TaskCodes`, `RunActivationChannel`, `RunStateStore`, `MainUnloadEngine`, `RunActivation`, `RunnerOptions`, `DailyWindowPolicy`, `PresetGateOptions`, `PresetGateState`, `UnloadConfiguration`.
 
 ### `console/Unload.WebConsole`
 
@@ -359,195 +257,135 @@ CLI-клиент к API через HTTP + SignalR.
 
 Главное:
 
-- главная страница состоит из 4 компактных этапов (`сервер`, `пресет`, `выгрузка`, `extra`) и правой выезжающей панели деталей;
-- часы синхронизируются через `GET /api/system/time` (backend-время), а не по локальному времени браузера;
-- статусы этапов унифицированы: красный крест (`не выполнено`), синий спин (`выполняется`), зеленая галочка (`выполнено`);
-- для этапов 2/3/4 есть отдельные панели деталей: `preset`, `run`, `extra` (этапы 2 и 4 разделены);
-- в деталях `run` выбор мемберов сделан как grid карточек (удобно для больших наборов);
-- в истории результатов доступны скачивание отдельных файлов и on-demand скачивание ZIP архива результата;
-- выбранные мемберы и часть UI-состояния сохраняются локально в браузере;
-- в UI есть `admin mode`, который передает `adminOverride` в backend для обхода gate-зависимостей.
+- главная страница показывает состояние 4 этапов (`сервер`, `пресет`, `выгрузка`, `extra`) и правую панель деталей;
+- часы синхронизируются через `GET /api/system/time`;
+- подписывается на SignalR: `status`, `run_status`, `preset_state`;
+- в `admin mode` передаёт `adminOverride` для обхода gate-зависимостей.
 
 ## Где управлять пайплайном
 
-Ниже краткая карта: что менять и в каком файле.
+### Изменить порядок задач и правила запуска
 
-### Изменить порядок задач
+Файлы — реализации `UnloadTask` в проектах задач:
 
-Файл:
+- `backend/Unload.Tasks.Preset/ProbeTask.cs`
+- `backend/Unload.Tasks.Preset/PresetTask.cs`
+- `backend/Unload.Tasks.MainUnload/MainUnloadTask.cs`
+- `backend/Unload.Tasks.ExtraUnload/ExtraUnloadTask.cs`
 
-- `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`
+Свойства `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen` на классе задачи — декларация ограничений. Воркфлоу `TaskWorkflow` их исполняет.
 
-Здесь задается:
-
-- какие задачи входят в pipeline;
-- какие задачи/стадии должны быть завершены до запуска другой задачи;
-- какие задачи конфликтуют друг с другом;
-- какие transition handlers запускать после completion.
-
-Примеры:
-
-- сделать `preset` зависимым от новой system-stage;
-- сделать новую задачу зависимой от `extra`;
-- запретить или разрешить параллельное выполнение задач.
-
-### Изменить бизнес-условия доступности
+### Изменить бизнес-условия дневного окна
 
 Файл:
 
-- `backend/Unload.TaskFlow/Services/PresetGateService.cs`
+- `backend/Unload.Tasks/DailyWindowPolicy.cs`
 
-Здесь задаются:
+Здесь задаются: время старта окна, daily reset, правила `CanRunPreset` и `IsOpen`.
 
-- окно времени;
-- daily reset;
-- правила `CanRunPreset`;
-- правила `CanRunMainAndExtra`.
-
-Если правило связано именно с бизнес-состоянием окна выгрузки, менять нужно здесь.
-
-### Изменить system-stage probe
+### Изменить расписание probe
 
 Файлы:
 
-- `backend/Unload.Api/Services/PresetGateBackgroundService.cs`
-- `backend/Unload.TaskFlow/Services/PresetProbeService.cs`
+- `backend/Unload.Api/Services/ProbeSchedulerHostedService.cs`
+- `backend/Unload.Tasks.Preset/ProbeTask.cs`
 
-Разделение такое:
-
-- `PresetGateBackgroundService` — только расписание и polling;
-- `IPresetProbeService` — выполнение probe SQL и применение результата в gate + stage-store.
+`ProbeSchedulerHostedService` — расписание и polling; `ProbeTask` — выполнение SQL probe и обновление `DailyWindowPolicy`.
 
 ### Изменить исполнение `run`
 
 Файлы:
 
-- `backend/Unload.TaskFlow/Definitions/StartRunWorkflowTaskDefinition.cs`
-- `backend/Unload.Run.Runtime/Services/InMemoryRunStateStore.cs`
-- `backend/Unload.Api/Services/RunProcessingBackgroundService.cs`
-- `backend/Unload.Runner/Services/RunnerEngine.cs`
+- `backend/Unload.Tasks.MainUnload/MainUnloadTask.cs`
+- `backend/Unload.Tasks.MainUnload/Services/MainUnloadEngine.cs`
+- `backend/Unload.Api/Services/MainUnloadHostedService.cs`
+- `backend/Unload.Store/RunStateStore.cs`
 
 ### Изменить исполнение `preset` или `extra`
 
 Файлы:
 
-- `backend/Unload.TaskFlow/Definitions/RunPresetWorkflowTaskDefinition.cs`
-- `backend/Unload.TaskFlow/Definitions/RunExtraWorkflowTaskDefinition.cs`
-- `backend/Unload.ScriptTasks/Services/ScriptTaskOrchestrator.cs`
-- связанные executors/writers внутри `backend/Unload.ScriptTasks`
-
-### Изменить автоматические переходы после завершения задач
-
-Файлы:
-
-- `backend/Unload.TaskFlow/Abstractions/IWorkflowTaskTransitionService.cs`
-- `backend/Unload.TaskFlow/Services/WorkflowTaskTransitionService.cs`
-- `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`
-
-Для новой автоматической реакции нужен новый `IWorkflowTaskTransitionHandler`.
+- `backend/Unload.Tasks.Preset/PresetTask.cs`
+- `backend/Unload.Tasks.Preset/PresetScriptExecutor.cs`
+- `backend/Unload.Tasks.ExtraUnload/ExtraUnloadTask.cs`
+- `backend/Unload.Tasks.ExtraUnload/ExtraScriptExecutor.cs`
+- `backend/Unload.Tasks.ExtraUnload/ExtraOutputWriter.cs`
 
 ## Как добавить новую задачу
 
-### Сценарий 1. Новая ручная задача, которую запускает пользователь
+### Сценарий: новая задача, запускаемая пользователем
 
 Что нужно сделать:
 
-1. Добавить новый код задачи в `backend/Unload.TaskFlow/Models/WorkflowTaskCodes.cs`.
-2. Создать request/result модели при необходимости.
-3. Создать новый `WorkflowTaskDefinition`.
-4. Добавить задачу в `backend/Unload.TaskFlow/Pipeline/TaskPipelineConfigurator.cs`.
-5. Если задача зависит от другой задачи или стадии, описать это в `TaskPipelineConfigurator`.
-6. Если задача конфликтует с другими задачами, тоже описать это в `TaskPipelineConfigurator`.
-7. Реализовать прикладной или инфраструктурный исполнитель:
-   - либо в `Unload.TaskFlow`,
-   - либо в `Unload.ScriptTasks`,
-   - либо в новом infra-проекте, если это отдельный большой поток.
-8. Если нужен transition handler, подключить его через `TaskPipelineConfigurator`.
-9. Добавить transport-вход:
-   - API endpoint/use-case;
-   - и/или Console/WebConsole режим.
-10. Обновить:
+1. Добавить новый код задачи в `backend/Unload.Tasks/TaskCodes.cs`.
+2. Создать новый класс-наследник `UnloadTask` (в существующем или новом проекте задачи).
+3. Объявить `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen` на классе.
+4. Реализовать `ExecuteAsync` — либо синхронно (как preset/extra), либо deferred (как run).
+5. Зарегистрировать задачу как `UnloadTask` в DI (добавить в `AddUnload*` метод проекта задачи).
+6. Если задача deferred — добавить фоновый воркер в `Unload.Api`.
+7. Добавить transport-вход: API endpoint и/или Console/WebConsole режим.
+8. Обновить:
    - `README.md`
    - `docs/ARCHITECTURE.md`
    - `postman/unload-api.postman_collection.json`, если это API-задача.
-
-### Сценарий 2. Новая автоматическая задача после `extra`
-
-Что нужно сделать:
-
-1. Добавить новый `TaskCode`.
-2. Создать новый `WorkflowTaskDefinition`.
-3. При необходимости описать зависимость в `TaskPipelineConfigurator`.
-4. Создать `IWorkflowTaskTransitionHandler`, например `PostExtraTransitionHandler`.
-5. В handler:
-   - указать `SourceTaskCode = WorkflowTaskCodes.Extra`;
-   - через `IWorkflowTaskDispatcher` запустить новую задачу.
-6. Подключить handler через `TaskPipelineConfigurator`.
-
-Важно:
-
-- текущая инфраструктура уже готова для такого расширения;
-- текущая бизнес-логика не изменится, пока handler не зарегистрирован.
-
-### Сценарий 3. Новая системная стадия до пользовательской задачи
-
-Что нужно сделать:
-
-1. Добавить новый stage code в `backend/Unload.TaskFlow/Models/WorkflowStageCodes.cs`.
-2. Реализовать stage executor, по аналогии с `IPresetProbeService`/`PresetProbeService`.
-3. Если нужен отдельный scheduler, добавить background service или встроить в существующий scheduler.
-4. Добавить зависимость нужной пользовательской задачи на новую stage в `TaskPipelineConfigurator`.
-5. Если stage должна сбрасываться по расписанию, сбрасывать ее через `IWorkflowStageStateStore`.
 
 ## API
 
 Основные endpoint'ы:
 
-- `POST /api/runs` — старт `run` по `memberCodes`
-- `GET /api/runs/preset/state` — состояние preset-гейта
+- `POST /api/runs` — старт `run` по `memberCodes` (или `targetCodes`)
+- `GET /api/runs/preset/state` — состояние дневного окна (`PresetGateState`)
 - `POST /api/runs/preset` — запуск `preset`
 - `POST /api/runs/extra` — запуск `extra`
 - `POST /api/runs/{correlationId}/stop` — остановка активного `run`
-- `GET /api/runs` — список запусков
+- `POST /api/runs/requeue` — повторная публикация результатов в gateway
+- `GET /api/runs` — список запусков (`RunStatusInfo[]`)
 - `GET /api/runs/today` — список запусков `run` за текущий день
-- `GET /api/runs/dashboard` — агрегированный snapshot для UI (preset-state, today flags/history, last completed timestamps)
-- `GET /api/runs/active` — активный `run`
-- `GET /api/runs/{correlationId}` — статус конкретного `run`, включая `workerStatuses` и `outputArtifacts`
-- `GET /api/system/download?path=...` — безопасная выдача файла из директории `output` для скачивания из UI
-- `GET /api/system/output-files?path=...` — безопасный листинг файлов в output-папке
-- `GET /api/system/download-archive?path=...` — on-demand сборка и скачивание ZIP архива всей output-папки
-- `POST /api/system/sender-feedback` — ручная подача sender-feedback в run-state (debug/интеграционный endpoint)
+- `GET /api/runs/dashboard` — snapshot для UI (preset-state, today flags, последние timestamps, история за день)
+- `GET /api/runs/history` — история запусков за N дней (`?days=N`, по умолчанию из настроек)
+- `GET /api/runs/active` — активный `run` (или `{ correlationId: null }`)
+- `GET /api/runs/{correlationId}` — статус конкретного `run`
+- `GET /api/catalog` — структура каталога
+- `GET /api/members` — список мемберов с target-кодами и активным статусом
+- `GET /api/system/time` — серверное время и timezone для синхронизации UI
+- `GET /api/system/download?path=...` — скачивание файла из output
+- `GET /api/system/output-files?path=...` — листинг файлов в output-папке
+- `GET /api/system/download-archive?path=...` — скачивание ZIP-архива output-папки
+- `POST /api/system/sender-feedback` — ручная подача sender-feedback (интеграционный endpoint)
+- `POST /api/system/gateway-upload` — загрузка файлов в gateway через API
 
 SignalR:
 
 - hub: `/hubs/status`
 - события:
-  - `status`
-  - `run_status`
-  - `preset_state`
+  - `status` — события раннера активного запуска (`RunnerEvent`)
+  - `run_status` — обновления статуса запуска (`RunStatusInfo`)
+  - `preset_state` — состояние дневного окна (`PresetGateState`)
+  - `preset_replayed` — результат повторного запуска уже выполненного preset (`ScriptTaskRunResult`)
 
 Формат ошибок API:
 
 - `application/problem+json`
 - поля: `type`, `title`, `status`, `detail`, `instance`
 - расширения: `errorCode`, `traceId`
-- дополнительные поля по ситуации, например `activeCorrelationId`
+- дополнительные поля по ситуации: например `activeCorrelationId`
+- примеры `errorCode`: `RUN_ALREADY_IN_PROGRESS`, `VALIDATION_ERROR`, `PRESET_GATE_BLOCKED`, `TASK_DEPENDENCY_NOT_SATISFIED`, `TASK_ALREADY_RUNNING`, `RUN_NOT_FOUND`, `UNKNOWN_MEMBER_CODES`
 
 ## Конфигурация
 
 ### `configs/catalog.json`
 
-- `bigScripts` — target-выборки, которые считаются большими и выполняются в `n-1` потоках
+- `bigScripts` — target-выборки (memberId+groupId), которые считаются большими и выполняются в `n-1` потоках
 
 ### `appsettings` -> `Database`
 
 - `TimeoutSeconds`
-- `ConnectionString`
+- `ConnectionString` (plain-text или `dpapi:<base64>`)
 
 ### `appsettings` -> `Runner`
 
-- `WorkerCount`
-- `ChunkSizeBytes`
+- `WorkerCount` (по умолчанию 4)
+- `ChunkSizeBytes` (по умолчанию 10 МБ)
 
 ### `appsettings` -> `PresetGate`
 
@@ -556,6 +394,16 @@ SignalR:
 - `StartMinute`
 - `PollIntervalSeconds`
 - `ProbeSql`
+
+### `appsettings` -> `HistoryRetention`
+
+- `RetentionDays`
+
+### `appsettings` -> `Gateway.Ftp`
+
+- `Host`, `Port`, `Username`, `Password`
+- `RemoteDirectory`, `StagingDirectory`
+- `ConnectTimeoutMs`
 
 ## Структура output
 
@@ -577,13 +425,11 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"memberCodes\":[\"M\"]}"
 ```
 
-Локальный Console:
+Локальный Console (интерактивная сессия `probe -> preset -> run -> extra`):
 
 ```powershell
 dotnet run --project .\console\Unload.Console\Unload.Console.csproj
 ```
-
-Эта команда открывает stage-меню и позволяет последовательно выполнить `probe`, `preset`, `run`, `extra` в одном процессе.
 
 Локальный `preset`:
 
@@ -627,10 +473,9 @@ npm start
 - Одновременно может выполняться только один активный `run`.
 - `run` и `extra` могут выполняться параллельно.
 - `preset` конфликтует с `run` и `extra`.
-- Состояние запусков и история задач сохраняются в файлы runtime-директории и восстанавливаются после рестарта backend.
-- Внутренний runtime enforcement зависимостей/стадий остается process-local, но UI-критичное состояние и история персистентны.
-- Реализации БД и MQ сейчас development-oriented.
-- Sender-stub in-memory и предназначен для локального контура; в production нужно заменить `Unload.MQ` на реальный транспорт.
+- Состояние запусков и история задач сохраняются в JSON-файлы в `output/_state/` и восстанавливаются после рестарта backend.
+- Незавершённые запуски при рестарте автоматически переводятся в `Cancelled`.
+- Gateway реализован через FTP; конфигурируется в секции `Gateway.Ftp`.
 
 ## Где смотреть подробнее
 
