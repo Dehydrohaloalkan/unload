@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Unload.Core;
 
@@ -11,9 +10,6 @@ namespace Unload.Gateway;
 /// </summary>
 public class FtpGatewayPublisher : IGatewayPublisher, IGatewayBatchSource, IGatewaySenderFeedbackSource
 {
-    private readonly ConcurrentQueue<SenderFileBatchReadyEvent> _batchReadyEvents = new();
-    private readonly ConcurrentQueue<SenderFileDispatchFeedback> _senderFeedbackEvents = new();
-
     private readonly Channel<SenderFileBatchReadyEvent> _batchReadyChannel =
         Channel.CreateUnbounded<SenderFileBatchReadyEvent>(new UnboundedChannelOptions
         {
@@ -31,7 +27,6 @@ public class FtpGatewayPublisher : IGatewayPublisher, IGatewayBatchSource, IGate
     public Task PublishFileBatchReadyAsync(SenderFileBatchReadyEvent @event, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _batchReadyEvents.Enqueue(@event);
         _batchReadyChannel.Writer.TryWrite(@event);
         return Task.CompletedTask;
     }
@@ -39,7 +34,6 @@ public class FtpGatewayPublisher : IGatewayPublisher, IGatewayBatchSource, IGate
     public Task PublishSenderFeedbackAsync(SenderFileDispatchFeedback feedback, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _senderFeedbackEvents.Enqueue(feedback);
         _senderFeedbackChannel.Writer.TryWrite(feedback);
         return Task.CompletedTask;
     }

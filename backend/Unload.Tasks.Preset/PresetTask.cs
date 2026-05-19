@@ -30,8 +30,11 @@ public class PresetTask(
 
     public override IReadOnlyCollection<string> ConflictsWith => [TaskCodes.Run, TaskCodes.Extra];
 
-    // RequiresDailyWindowOpen = false: особое окно проверяется воркфлоу через window.CanRunPreset.
+    // RequiresDailyWindowOpen = false: вместо общего дневного окна preset использует особое
+    // preset-окно (probe пройден + время), которое воркфлоу проверяет через RequiresPresetWindow.
     public override bool RequiresDailyWindowOpen => false;
+
+    public override bool RequiresPresetWindow => true;
 
     public override async Task<TaskExecutionResult> ExecuteAsync(
         TaskLaunchRequest request,
@@ -117,6 +120,6 @@ public class PresetTask(
 
     private static string BuildCorrelationId(string prefix)
     {
-        return $"{prefix}-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..43];
+        return TaskCorrelationId.Create(prefix);
     }
 }

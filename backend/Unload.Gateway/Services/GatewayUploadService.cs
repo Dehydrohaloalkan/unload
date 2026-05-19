@@ -9,6 +9,15 @@ public class GatewayUploadService(
     IGatewayPublisher gatewayPublisher,
     ILogger<GatewayUploadService> logger)
 {
+    /// <summary>Максимум файлов в одной загрузке.</summary>
+    private const int MaxFileCount = 20;
+
+    /// <summary>Максимальный размер одного файла (100 МБ).</summary>
+    private const long MaxFileSizeBytes = 100L * 1024 * 1024;
+
+    /// <summary>Длина усечённого GUID-токена в request-id и batch-id.</summary>
+    private const int IdTokenLength = 18;
+
     private readonly GatewayUploadOptions _options = options;
     private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
     private readonly ILogger<GatewayUploadService> _logger = logger;
@@ -23,15 +32,15 @@ public class GatewayUploadService(
             throw new ArgumentException("At least one file is required.");
         }
 
-        if (files.Count > 20)
+        if (files.Count > MaxFileCount)
         {
-            throw new ArgumentException("Too many files (max 20).");
+            throw new ArgumentException($"Too many files (max {MaxFileCount}).");
         }
 
         var safeMemberName = string.IsNullOrWhiteSpace(memberName) ? "manual" : memberName.Trim();
-        var requestId = $"upload-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..43];
+        var requestId = $"upload-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid().ToString("N")[..IdTokenLength]}";
         var correlationId = requestId;
-        var batchId = $"batch-{Guid.NewGuid():N}"[..24];
+        var batchId = $"batch-{Guid.NewGuid().ToString("N")[..IdTokenLength]}";
 
         var uploadRoot = Path.Combine(_options.UploadRootDirectory, requestId);
         Directory.CreateDirectory(uploadRoot);
@@ -56,14 +65,14 @@ public class GatewayUploadService(
                 continue;
             }
 
-            if (formFile.Length > 100 * 1024 * 1024)
+            if (formFile.Length > MaxFileSizeBytes)
             {
                 failed++;
                 results.Add(new GatewayUploadFileResult(
                     FileName: formFile.FileName ?? "unknown",
                     SizeBytes: formFile.Length,
                     Status: "failed",
-                    Message: "File too large (max 100MB)."));
+                    Message: $"File too large (max {MaxFileSizeBytes / (1024 * 1024)}MB)."));
                 continue;
             }
 
@@ -135,5 +144,42 @@ public class GatewayUploadService(
             AcceptedFiles: accepted,
             FailedFiles: failed,
             Files: results);
+    }
+
+    /// <summary>
+    /// Удаляет staging-каталоги загрузок старше дня хранения.
+    /// Каждая загрузка создаёт собственный каталог; без этой чистки они растут бесконечно.
+    /// Вызывается фоновой ретеншн-задачей по тому же расписанию, что и чистка истории.
+    /// </summary>
+    /// <param name="oldestDayToKeepInclusive">Самый ранний день, который ещё сохраняется.</param>
+    /// <returns>Количество удалённых каталогов.</returns>
+    public int PruneStagingDirectories(DateOnly oldestDayToKeepInclusive)
+    {
+        if (!Directory.Exists(_options.UploadRootDirectory))
+        {
+            return 0;
+        }
+
+        var removed = 0;
+        foreach (var directory in Directory.EnumerateDirectories(_options.UploadRootDirectory))
+        {
+            try
+            {
+                var lastWriteDay = DateOnly.FromDateTime(Directory.GetLastWriteTime(directory));
+                if (lastWriteDay >= oldestDayToKeepInclusive)
+                {
+                    continue;
+                }
+
+                Directory.Delete(directory, recursive: true);
+                removed++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to prune gateway upload staging directory '{Directory}'.", directory);
+            }
+        }
+
+        return removed;
     }
 }

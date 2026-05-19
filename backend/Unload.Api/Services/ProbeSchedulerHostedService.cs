@@ -13,6 +13,8 @@ public class ProbeSchedulerHostedService(
     IHubContext<RunStatusHub> hubContext,
     ILogger<ProbeSchedulerHostedService> logger) : BackgroundService
 {
+    private const int MinPollIntervalSeconds = 5;
+
     private readonly PresetGateOptions _options = options;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
@@ -27,16 +29,17 @@ public class ProbeSchedulerHostedService(
             _options.Enabled,
             Clamp(_options.StartHour, 0, 23),
             Clamp(_options.StartMinute, 0, 59),
-            Math.Max(5, _options.PollIntervalSeconds));
+            Math.Max(MinPollIntervalSeconds, _options.PollIntervalSeconds));
         await PublishStateAsync(stoppingToken);
 
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(Math.Max(5, _options.PollIntervalSeconds)));
+        var pollIntervalSeconds = Math.Max(MinPollIntervalSeconds, _options.PollIntervalSeconds);
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollIntervalSeconds));
         try
         {
-            await CheckAsync(stoppingToken);
+            await RunCheckSafelyAsync(stoppingToken);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                await CheckAsync(stoppingToken);
+                await RunCheckSafelyAsync(stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -46,6 +49,27 @@ public class ProbeSchedulerHostedService(
         finally
         {
             timer.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Выполняет одну итерацию проверки, изолируя нефатальные сбои:
+    /// одна неудачная итерация (например, ошибка SignalR-рассылки) не должна
+    /// останавливать весь шедулер навсегда.
+    /// </summary>
+    private async Task RunCheckSafelyAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await CheckAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Probe scheduler iteration failed; scheduler continues.");
         }
     }
 

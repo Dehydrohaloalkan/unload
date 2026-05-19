@@ -18,6 +18,9 @@ public class SystemController(
     IGatewaySenderFeedbackConsumer gatewaySenderFeedbackConsumer,
     ILogger<SystemController> logger) : ControllerBase
 {
+    /// <summary>Максимальный размер запроса загрузки файлов в gateway (200 МБ).</summary>
+    private const long MaxGatewayUploadRequestBytes = 200L * 1024 * 1024;
+
     private readonly GatewayUploadService _gatewayUploadService = gatewayUploadService;
     private readonly OutputFilesService _outputFilesService = outputFilesService;
     private readonly IGatewaySenderFeedbackConsumer _gatewaySenderFeedbackConsumer = gatewaySenderFeedbackConsumer;
@@ -86,7 +89,7 @@ public class SystemController(
     /// Загружает один или несколько файлов и публикует их как batch-ready событие в gateway.
     /// </summary>
     [HttpPost("gateway-upload")]
-    [RequestSizeLimit(200 * 1024 * 1024)]
+    [RequestSizeLimit(MaxGatewayUploadRequestBytes)]
     public async Task<IActionResult> UploadFilesToGateway(
         [FromForm(Name = "files")] List<IFormFile> files,
         [FromForm(Name = "memberName")] string? memberName,

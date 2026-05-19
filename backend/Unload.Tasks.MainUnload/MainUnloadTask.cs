@@ -34,6 +34,8 @@ public class MainUnloadTask(
 
     public override bool RequiresDailyWindowOpen => true;
 
+    public override bool IsDeferred => true;
+
     public override async Task<TaskExecutionResult> ExecuteAsync(
         TaskLaunchRequest request,
         CancellationToken cancellationToken)

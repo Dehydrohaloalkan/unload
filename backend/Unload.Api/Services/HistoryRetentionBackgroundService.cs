@@ -1,4 +1,5 @@
 using Unload.Bootstrapper;
+using Unload.Gateway;
 using Unload.Store;
 
 namespace Unload.Api.Services;
@@ -7,11 +8,13 @@ public sealed class HistoryRetentionBackgroundService(
     HistoryRetentionOptions options,
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
+    GatewayUploadService gatewayUploadService,
     ILogger<HistoryRetentionBackgroundService> logger) : BackgroundService
 {
     private readonly HistoryRetentionOptions _options = options;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
+    private readonly GatewayUploadService _gatewayUploadService = gatewayUploadService;
     private readonly ILogger<HistoryRetentionBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -48,14 +51,16 @@ public sealed class HistoryRetentionBackgroundService(
 
         var removedRuns = _runStateStore.PruneTerminalRuns(oldestDayToKeepInclusive);
         var removedTasks = _taskExecutionHistoryStore.Prune(oldestDayToKeepInclusive);
+        var removedUploads = _gatewayUploadService.PruneStagingDirectories(oldestDayToKeepInclusive);
 
-        if (removedRuns > 0 || removedTasks > 0)
+        if (removedRuns > 0 || removedTasks > 0 || removedUploads > 0)
         {
             _logger.LogInformation(
-                "History retention prune completed. OldestDayToKeepInclusive: {OldestDayToKeepInclusive}, RemovedRuns: {RemovedRuns}, RemovedTaskRecords: {RemovedTasks}",
+                "History retention prune completed. OldestDayToKeepInclusive: {OldestDayToKeepInclusive}, RemovedRuns: {RemovedRuns}, RemovedTaskRecords: {RemovedTasks}, RemovedUploadDirs: {RemovedUploads}",
                 oldestDayToKeepInclusive,
                 removedRuns,
-                removedTasks);
+                removedTasks,
+                removedUploads);
         }
 
         return Task.CompletedTask;

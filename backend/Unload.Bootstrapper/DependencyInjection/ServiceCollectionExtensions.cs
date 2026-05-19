@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Unload.Catalog;
 using Unload.Core;
 using Unload.Cryptography;
@@ -66,8 +67,13 @@ public static class ServiceCollectionExtensions
         var taskHistoryFilePath = Path.Combine(stateDirectory, "task-history.json");
 
         services.AddSingleton(config.Runner);
-        services.AddSingleton<RunStateStore>(_ => new RunStateStore(config.Runner.WorkerCount, runStateFilePath));
-        services.AddSingleton<TaskExecutionHistoryStore>(_ => new TaskExecutionHistoryStore(taskHistoryFilePath));
+        services.AddSingleton<RunStateStore>(sp => new RunStateStore(
+            config.Runner.WorkerCount,
+            runStateFilePath,
+            sp.GetService<ILogger<RunStateStore>>()));
+        services.AddSingleton<TaskExecutionHistoryStore>(sp => new TaskExecutionHistoryStore(
+            taskHistoryFilePath,
+            sp.GetService<ILogger<TaskExecutionHistoryStore>>()));
         services.AddSingleton<IGatewaySenderFeedbackConsumer, GatewaySenderFeedbackConsumer>();
         services.AddSingleton<RequeueService>();
 

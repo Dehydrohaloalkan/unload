@@ -146,7 +146,7 @@
 
 - `FtpGatewayPublisher` — публикует файлы на FTP-сервер, отдаёт batch-ready события;
 - `FtpGatewayBackgroundService` — фоновый обработчик;
-- `GatewayUploadService` — обработка ручной загрузки файлов через API endpoint;
+- `GatewayUploadService` — обработка ручной загрузки файлов через API endpoint; чистка staging-каталогов по retention;
 - конфигурация через секцию `Gateway.Ftp` в appsettings.
 
 Заменяет in-memory MQ-заглушку из прежней архитектуры.
@@ -163,7 +163,7 @@
 
 - `RunStateStore` — потокобезопасное in-memory хранилище статусов запусков с JSON-персистентностью. Хранит `RunStatusInfo` (статус, members, workers, artifacts, sender batches). При рестарте незавершённые запуски переводятся в `Cancelled`.
 - `TaskExecutionHistoryStore` — история завершённых задач (`TaskRecord`). Используется воркфлоу для проверки `RequiresCompleted` (метод `HasRunToday`).
-- `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move).
+- `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move). Сбой записи логируется как `Error`.
 - `GatewaySenderFeedbackConsumer` — принимает sender-feedback из gateway.
 - `RequeueService` — повторная публикация результатов прошлых запусков в gateway.
 
@@ -173,12 +173,14 @@
 
 Главное:
 
-- `UnloadTask` — абстрактный базовый класс. Каждая задача декларирует `Code`, `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen`.
-- `TaskWorkflow` — единственный класс оркестрации. Контролирует все ограничения запуска и вызывает `task.ExecuteAsync`. Без интерфейса — одна реализация.
+- `UnloadTask` — абстрактный базовый класс. Каждая задача декларирует `Code`, `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen`, `RequiresPresetWindow`, `IsDeferred` — воркфлоу их исполняет.
+- `TaskWorkflow` — единственный класс оркестрации. Контролирует все ограничения запуска и вызывает `task.ExecuteAsync`. Проверка конфликтов и захват foreground-слота атомарны (`ClaimSlot`). Без интерфейса — одна реализация.
 - `DailyWindowPolicy` — политика дневного окна (заменяет `PresetGateService`). Хранит in-memory состояние; без интерфейса.
+- `WorkflowQueryService` — агрегированные представления для UI (`today` / `dashboard` / `history`); выносит агрегацию из контроллеров API.
 - `TaskLaunchRequest` / `TaskExecutionResult` — единые модели запроса и результата.
 - `TaskLaunchException` — единый тип бизнес-ошибки (заменяет `WorkflowTaskDispatchException`). Поля: `FailureKind`, `ErrorCode`, `Extensions`.
 - `TaskCodes` — константы `run`, `preset`, `extra`, `probe`.
+- `TaskCorrelationId` — единая генерация корреляционных id исполнений задач.
 - `RunActivationChannel` — in-memory канал single-active задачи `run`.
 - `RunActivation` / `PresetGateOptions` / `PresetGateState` — вспомогательные модели.
 

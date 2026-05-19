@@ -104,6 +104,6 @@ public class ProbeTask(
 
     private static string BuildCorrelationId(string prefix)
     {
-        return $"{prefix}-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}"[..43];
+        return TaskCorrelationId.Create(prefix);
     }
 }

@@ -5,7 +5,9 @@ namespace Unload.Store;
 
 /// <summary>
 /// Универсальный хелпер атомарной JSON-персистентности (запись через temp-файл + File.Move).
-/// Безопасная загрузка: при ошибке чтения возвращает default(T).
+/// Загрузка: при ошибке/отсутствии файла возвращает default(T) с предупреждением в лог.
+/// Запись: сбой персистентности логируется как Error (молчаливая потеря состояния недопустима),
+/// поэтому хранилищам важно передавать реальный <see cref="ILogger"/>.
 /// </summary>
 /// <typeparam name="T">Тип сериализуемого снимка.</typeparam>
 public sealed class JsonFileStore<T>
@@ -70,7 +72,9 @@ public sealed class JsonFileStore<T>
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to save store to '{FilePath}'.", _filePath);
+            // Потеря состояния «источника правды» — это не warning: запуски/история
+            // не переживут рестарт. Логируем как Error, чтобы сбой был заметен в мониторинге.
+            _logger?.LogError(ex, "Failed to save store to '{FilePath}'.", _filePath);
         }
     }
 }

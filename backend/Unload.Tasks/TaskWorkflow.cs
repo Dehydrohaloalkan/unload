@@ -57,15 +57,14 @@ public class TaskWorkflow
             EnsureCanLaunch(task);
         }
 
+        // 3. Атомарно под одним локом: проверка конфликтов + захват foreground-слота.
+        //    Раздельные «проверить» и «занять» допускали гонку двух параллельных запусков.
+        //    Без AdminOverride конфликты енфорсятся; иначе слот просто занимается.
+        ClaimSlot(task, enforceConflicts: !request.AdminOverride);
+
         _logger.LogInformation("Launching task '{TaskCode}'.", task.Code);
 
-        // 3. Для foreground-задач отмечаем начало и конец в _activeForegroundTaskCodes.
-        var isDeferred = string.Equals(task.Code, TaskCodes.Run, StringComparison.OrdinalIgnoreCase);
-        if (!isDeferred)
-        {
-            BeginForeground(task.Code);
-        }
-
+        var isDeferred = task.IsDeferred;
         try
         {
             // 4. Выполнение задачи.
@@ -99,16 +98,13 @@ public class TaskWorkflow
                 "Complete preset first or wait for the window to open.");
         }
 
-        // Специальная проверка для preset: probe пройден + время окна.
-        if (string.Equals(task.Code, TaskCodes.Preset, StringComparison.OrdinalIgnoreCase))
+        // Особое preset-окно: probe пройден + время в пределах окна.
+        if (task.RequiresPresetWindow && !_window.CanRunPreset(out var presetReason))
         {
-            if (!_window.CanRunPreset(out var presetReason))
-            {
-                throw new TaskLaunchException(
-                    TaskLaunchFailureKind.Conflict,
-                    "PRESET_GATE_BLOCKED",
-                    presetReason);
-            }
+            throw new TaskLaunchException(
+                TaskLaunchFailureKind.Conflict,
+                "PRESET_GATE_BLOCKED",
+                presetReason);
         }
 
         var today = DateOnly.FromDateTime(now);
@@ -126,28 +122,11 @@ public class TaskWorkflow
                 new Dictionary<string, object?> { ["requiredTaskCodes"] = missingCodes });
         }
 
-        // ConflictsWith — ни одна конфликтующая задача не должна быть активна прямо сейчас.
-        lock (_sync)
-        {
-            var conflicting = _activeForegroundTaskCodes
-                .FirstOrDefault(activeCode =>
-                    task.ConflictsWith.Contains(activeCode, StringComparer.OrdinalIgnoreCase) ||
-                    (_tasks.TryGetValue(activeCode, out var activeTask) &&
-                     activeTask.ConflictsWith.Contains(task.Code, StringComparer.OrdinalIgnoreCase)));
-
-            if (conflicting is not null)
-            {
-                throw new TaskLaunchException(
-                    TaskLaunchFailureKind.Conflict,
-                    "TASK_ALREADY_RUNNING",
-                    $"Task '{conflicting}' is already running.");
-            }
-        }
+        // ConflictsWith — атомарно проверяется вместе с захватом слота в ClaimSlot.
 
         // Single-active для run: проверяем RunActivationChannel.
-        var isRunTask = string.Equals(task.Code, TaskCodes.Run, StringComparison.OrdinalIgnoreCase);
         var conflictsWithRun = task.ConflictsWith.Contains(TaskCodes.Run, StringComparer.OrdinalIgnoreCase);
-        if (isRunTask || conflictsWithRun)
+        if (task.IsDeferred || conflictsWithRun)
         {
             var activeRunId = _runWorkflow.GetActiveCorrelationId();
             if (!string.IsNullOrEmpty(activeRunId))
@@ -161,11 +140,37 @@ public class TaskWorkflow
         }
     }
 
-    private void BeginForeground(string taskCode)
+    /// <summary>
+    /// Атомарно (под одним локом) проверяет конфликты с активными foreground-задачами
+    /// и занимает foreground-слот. Объединение проверки и захвата исключает гонку,
+    /// когда два параллельных запуска оба проходят проверку до того, как кто-то занял слот.
+    /// </summary>
+    private void ClaimSlot(UnloadTask task, bool enforceConflicts)
     {
         lock (_sync)
         {
-            _activeForegroundTaskCodes.Add(taskCode);
+            if (enforceConflicts)
+            {
+                var conflicting = _activeForegroundTaskCodes
+                    .FirstOrDefault(activeCode =>
+                        task.ConflictsWith.Contains(activeCode, StringComparer.OrdinalIgnoreCase) ||
+                        (_tasks.TryGetValue(activeCode, out var activeTask) &&
+                         activeTask.ConflictsWith.Contains(task.Code, StringComparer.OrdinalIgnoreCase)));
+
+                if (conflicting is not null)
+                {
+                    throw new TaskLaunchException(
+                        TaskLaunchFailureKind.Conflict,
+                        "TASK_ALREADY_RUNNING",
+                        $"Task '{conflicting}' is already running.");
+                }
+            }
+
+            // Deferred-задача (run) живёт в RunActivationChannel и foreground-слот не занимает.
+            if (!task.IsDeferred)
+            {
+                _activeForegroundTaskCodes.Add(task.Code);
+            }
         }
     }
 

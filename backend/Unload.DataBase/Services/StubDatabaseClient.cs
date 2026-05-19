@@ -12,6 +12,15 @@ namespace Unload.DataBase;
 /// </summary>
 public class StubDatabaseClient : IDatabaseClient
 {
+    /// <summary>Количество синтетических строк в демонстрационном наборе данных.</summary>
+    private const int StubRowCount = 2_500;
+
+    /// <summary>Задержка на строку, имитирующая латентность БД, мс.</summary>
+    private const int StubRowDelayMs = 10;
+
+    /// <summary>Максимальная длина демонстрационного script-кода, выводимого из запроса.</summary>
+    private const int ScriptCodeMaxLength = 24;
+
     private readonly int _timeoutSeconds;
     private readonly string _connectionString;
 
@@ -64,9 +73,9 @@ public class StubDatabaseClient : IDatabaseClient
         var targetCode = "STUB";
         var scriptCode = string.IsNullOrWhiteSpace(query)
             ? "QUERY"
-            : query.Length <= 24
+            : query.Length <= ScriptCodeMaxLength
                 ? query
-                : query[..24];
+                : query[..ScriptCodeMaxLength];
 
         var table = new DataTable();
         table.Columns.Add("target_code", typeof(string));
@@ -76,8 +85,7 @@ public class StubDatabaseClient : IDatabaseClient
         table.Columns.Add("amount", typeof(decimal));
         table.Columns.Add("status", typeof(string));
 
-        var rowCount = 2_500;
-        for (var i = 1; i <= rowCount; i++)
+        for (var i = 1; i <= StubRowCount; i++)
         {
             table.Rows.Add(
                 targetCode,
@@ -86,7 +94,7 @@ public class StubDatabaseClient : IDatabaseClient
                 DateTime.UtcNow.ToString("O"),
                 Math.Round((i * 1.137m) % 995, 2),
                 i % 2 == 0 ? "ACTIVE" : "PENDING");
-            Thread.Sleep(10);
+            Thread.Sleep(StubRowDelayMs);
         }
 
         DbDataReader reader = table.CreateDataReader();

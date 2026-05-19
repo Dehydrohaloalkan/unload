@@ -52,12 +52,14 @@ public class OutputFilesService(UnloadRuntimePaths runtimePaths)
 
         return Directory
             .EnumerateFiles(fullPath, "*", SearchOption.AllDirectories)
-            .Select(static file =>
+            .Select(file =>
             {
                 var info = new FileInfo(file);
+                // Отдаём путь относительно output-корня: абсолютный путь раскрыл бы
+                // структуру ФС сервера. Эндпоинты download/* принимают относительный путь.
                 return new OutputFileInfo(
                     Path.GetFileName(file),
-                    file,
+                    Path.GetRelativePath(outputRoot, file),
                     info.LastWriteTimeUtc,
                     info.Length);
             })

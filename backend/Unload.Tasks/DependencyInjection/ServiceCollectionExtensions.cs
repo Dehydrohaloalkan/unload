@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RunActivationChannel>();
 
         services.AddSingleton<TaskWorkflow>();
+        services.AddSingleton<WorkflowQueryService>();
 
         return services;
     }

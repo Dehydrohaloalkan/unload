@@ -34,7 +34,7 @@
   - FTP-based gateway: публикация файлов, sender-feedback, ручная загрузка.
   - `FtpGatewayPublisher` — реализует `IGatewayPublisher`, `IGatewayBatchSource`, `IGatewaySenderFeedbackSource`.
   - `FtpGatewayBackgroundService` — фоновый обработчик FTP.
-  - `GatewayUploadService` — обработка ручной загрузки файлов через `POST /api/system/gateway-upload`.
+  - `GatewayUploadService` — обработка ручной загрузки файлов через `POST /api/system/gateway-upload`; `PruneStagingDirectories` чистит staging-каталоги старше дня хранения.
   - Конфигурация через секцию `Gateway.Ftp` в appsettings (`Host`, `Port`, `Username`, `Password`, `RemoteDirectory`, `StagingDirectory`, `ConnectTimeoutMs`).
   - Заменяет прежнюю in-memory MQ-заглушку (`Unload.MQ`).
 
@@ -49,23 +49,29 @@
     - `HasRunToday(taskCode, day)` — используется `TaskWorkflow` для проверки `RequiresCompleted`.
     - Методы: `Add`, `List(day)`, `ListRange`, `TryGetByCorrelationId`, `HasRunToday`, `Prune`.
   - `TaskRecord` — запись завершённой задачи: `TaskCode`, `StartedAt`, `CompletedAt`, `CorrelationId`, `Message`, `ScriptsExecuted`, `FilesWritten`, `OutputPath`.
-  - `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move). Одна реализация на все хранилища.
+  - `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move). Одна реализация на все хранилища. Сбой записи логируется как `Error` (молчаливая потеря состояния недопустима), поэтому хранилищам передаётся реальный `ILogger`.
   - `GatewaySenderFeedbackConsumer` — реализует `IGatewaySenderFeedbackConsumer`, проецирует feedback в `RunStateStore`.
   - `RequeueService` — повторная публикация результатов прошлых запусков в gateway.
   - Run-модели: `RunStatusInfo`, `RunLifecycleStatus`, `MemberRunStatusInfo`, `MemberRunLifecycleStatus`, `RunWorkerStatusInfo`, `RunOutputArtifactInfo`, `SenderBatchStatusInfo`, `SenderFileDispatchStateInfo`.
 
 - `backend/Unload.Tasks`
   - Ядро задач: абстракция, контроллер, политика окна, вспомогательные модели.
-  - `UnloadTask` — абстрактный базовый класс. Свойства:
+  - `UnloadTask` — абстрактный базовый класс. Свойства декларируют ограничения, енфорсит их воркфлоу:
     - `Code` (abstract) — уникальный код задачи;
     - `RequiresCompleted` — коды задач, которые должны быть успешно завершены сегодня;
     - `ConflictsWith` — коды задач, с которыми нельзя выполняться одновременно;
-    - `RequiresDailyWindowOpen` — должно ли быть открыто дневное окно.
+    - `RequiresDailyWindowOpen` — должно ли быть открыто дневное окно (`run`/`extra`);
+    - `RequiresPresetWindow` — нужно ли особое preset-окно (probe пройден + время); `true` только у `preset`;
+    - `IsDeferred` — задача только стартует фоновую обработку и возвращает `Accepted`; `true` только у `run`.
   - `TaskWorkflow` — единственный класс оркестрации. Без интерфейса. Последовательность `LaunchAsync`:
     1. резолв задачи по коду (`_tasks[request.TaskCode]`);
-    2. проверки ограничений (если не `AdminOverride`): дневное окно, `CanRunPreset` для preset, `RequiresCompleted` через `TaskExecutionHistoryStore`, `ConflictsWith` через `_activeForegroundTaskCodes`, single-active через `RunActivationChannel`;
-    3. для foreground-задач: `BeginForeground` → `ExecuteAsync` → `EndForeground`;
-    4. для deferred-задачи `run`: только `ExecuteAsync` без foreground-маркировки.
+    2. проверки ограничений (если не `AdminOverride`): дневное окно, особое preset-окно
+       (`RequiresPresetWindow`), `RequiresCompleted` через `TaskExecutionHistoryStore`,
+       single-active через `RunActivationChannel`;
+    3. `ClaimSlot` — атомарно (под одним локом) проверка `ConflictsWith` против активных
+       foreground-задач и захват foreground-слота; объединение проверки и захвата исключает гонку;
+    4. `ExecuteAsync`; для не-deferred задач foreground-слот освобождается в `finally`.
+       Deferred-задача (`run`) слот не занимает — её жизненным циклом управляет `RunActivationChannel`.
   - `DailyWindowPolicy` — policy дневного окна. Состояние: `PresetGateState`. Методы: `Get`, `StartPolling`, `RefreshDailyWindowState`, `ApplyProbeResult`, `MarkPresetCompleted`, `CanRunPreset(out reason)`, `IsOpen(now)`.
   - `TaskLaunchRequest` — `(TaskCode, AdminOverride, PublishToGateway, Codes, SelectionMode)`.
   - `TaskExecutionResult` — `(TaskCode, ExecutionId, Status, Message, ScriptsExecuted, FilesWritten, OutputPath)`.
@@ -79,6 +85,10 @@
   - `PresetGateOptions` — конфигурация polling (`Enabled`, `StartHour`, `StartMinute`, `PollIntervalSeconds`, `ProbeSql`).
   - `PresetGateState` — DTO состояния для UI и SignalR (`Enabled`, `PollingStarted`, `RequiresPresetExecution`, `ReadyForPreset`, `PresetCompleted`, `LastProbeValue`, `LastProbeAt`, `Message`). Имя DTO сохранено: на него завязан SignalR-контракт `preset_state` и Angular.
   - `ScriptTaskRunResult` — результат script-задачи для HTTP-ответа (`TaskName`, `CorrelationId`, `ScriptsExecuted`, `FilesWritten`, `OutputPath`, `Message`).
+  - `WorkflowQueryService` — доменные запросы агрегированных представлений (`GetTodayRuns`,
+    `GetDashboard`, `GetHistory`). Выносит агрегацию из тонких контроллеров API.
+  - `WorkflowDashboard` / `WorkflowHistory` — DTO агрегированных представлений для UI.
+  - `TaskCorrelationId` — единая генерация корреляционных id исполнений (`probe`/`preset`/`extra`).
 
 - `backend/Unload.Tasks.MainUnload`
   - `MainUnloadTask` — задача `run`. `RequiresCompleted: [preset]`, `ConflictsWith: [preset]`, `RequiresDailyWindowOpen: true`. Deferred: активирует `RunActivationChannel` и возвращает `Accepted`.
@@ -117,10 +127,10 @@
   - `MainUnloadHostedService` — читает `RunActivationChannel`, гоняет `MainUnloadEngine`, обновляет `RunStateStore`, публикует SignalR. Фиксирует завершение `run` в `TaskExecutionHistoryStore`.
   - `ProbeSchedulerHostedService` — по расписанию вызывает `TaskWorkflow.LaunchAsync(probe)`, публикует `preset_state` в SignalR. Использует `PeriodicTimer`.
   - `SenderFeedbackProjectionBackgroundService` — получает события от `IGatewaySenderFeedbackSource`, проецирует в `RunStateStore` через `IGatewaySenderFeedbackConsumer`, публикует `run_status`.
-  - `HistoryRetentionBackgroundService` — удаляет старые записи из хранилищ по расписанию.
-  - `OutputFilesService` — безопасный доступ к файлам output (проверяет выход за пределы директории).
+  - `HistoryRetentionBackgroundService` — по расписанию чистит старые записи запусков/истории и staging-каталоги загрузок (`GatewayUploadService.PruneStagingDirectories`).
+  - `OutputFilesService` — безопасный доступ к файлам output (проверяет выход за пределы директории; листинг отдаёт пути относительно output-корня, не абсолютные).
   - `GlobalExceptionHandler`, `ApiProblemDetailsFactory`, `ApiProblemException`, `TaskLaunchExceptions` — единый error handling.
-  - HTTP-контракты: `RunStartRequest`, `RunAcceptedResponse`, `AdminTaskRequest`, `MemberCatalogItem`, `WorkflowDashboardSnapshotResponse`, `WorkflowHistoryResponse`.
+  - HTTP-контракты: `RunStartRequest`, `RunAcceptedResponse`, `AdminTaskRequest`, `MemberCatalogItem`. Агрегаты дашборда/истории (`WorkflowDashboard`, `WorkflowHistory`) живут в `Unload.Tasks`.
   - Логи через NLog: CSV-файл `logs/api-<date>.csv` (колонки: `timestamp`, `level`, `traceId`, `logger`, `message`, `exception`) + консоль.
 
 - `console/Unload.Console`
@@ -196,9 +206,9 @@ flowchart LR
 1. Console или API вызывают `TaskWorkflow.LaunchAsync(request)`.
 2. `TaskWorkflow` проверяет ограничения запуска в строгом порядке:
    - задача резолвится по коду;
-   - если не `AdminOverride`: дневное окно, `CanRunPreset` для preset, `RequiresCompleted` через `TaskExecutionHistoryStore.HasRunToday`, `ConflictsWith` через `_activeForegroundTaskCodes`, single-active `run` через `RunActivationChannel`;
+   - если не `AdminOverride`: дневное окно, особое preset-окно (`RequiresPresetWindow`), `RequiresCompleted` через `TaskExecutionHistoryStore.HasRunToday`, single-active `run` через `RunActivationChannel`;
    - при нарушении любого условия бросается `TaskLaunchException`.
-3. Для foreground-задач (`preset`, `extra`, `probe`) код задачи добавляется в `_activeForegroundTaskCodes` на время выполнения, удаляется после.
+3. `ClaimSlot` атомарно (под одним локом) проверяет `ConflictsWith` против активных foreground-задач и занимает foreground-слот для не-deferred задач (`preset`, `extra`, `probe`). Слот освобождается после `ExecuteAsync`.
 4. `task.ExecuteAsync(request, ct)` вызывается.
 5. Для deferred-задачи `run`:
    - `MainUnloadTask.ExecuteAsync` активирует `RunActivationChannel.TryActivate` и создаёт запись в `RunStateStore`;
@@ -307,8 +317,8 @@ sequenceDiagram
 | `POST` | `/api/runs/requeue` | Повторная публикация результатов в gateway |
 | `GET` | `/api/runs` | Список всех запусков (`RunStatusInfo[]`) |
 | `GET` | `/api/runs/today` | Запуски `run` за текущий день |
-| `GET` | `/api/runs/dashboard` | Snapshot для UI (`WorkflowDashboardSnapshotResponse`) |
-| `GET` | `/api/runs/history` | История за N дней (`?days=N`). Ответ: `WorkflowHistoryResponse` |
+| `GET` | `/api/runs/dashboard` | Snapshot для UI (`WorkflowDashboard`) |
+| `GET` | `/api/runs/history` | История за N дней (`?days=N`). Ответ: `WorkflowHistory` |
 | `GET` | `/api/runs/active` | Активный `run` или `{correlationId: null}` |
 | `GET` | `/api/runs/{correlationId}` | Статус конкретного `run` |
 | `POST` | `/api/runs/{correlationId}/stop` | Запрос остановки `run`. Ответ: `202` или `404` |

@@ -25,6 +25,20 @@ public abstract class UnloadTask
     public virtual bool RequiresDailyWindowOpen => false;
 
     /// <summary>
+    /// Должно ли перед запуском выполняться особое preset-окно
+    /// (probe пройден + время в пределах окна, см. <see cref="DailyWindowPolicy.CanRunPreset"/>).
+    /// <c>true</c> только для preset-задачи.
+    /// </summary>
+    public virtual bool RequiresPresetWindow => false;
+
+    /// <summary>
+    /// Задача deferred: <see cref="ExecuteAsync"/> только стартует фоновую обработку и сразу
+    /// возвращает Accepted (main-выгрузка). Синхронные задачи (preset/extra/probe) — <c>false</c>.
+    /// Воркфлоу по этому признаку решает, занимать ли foreground-слот.
+    /// </summary>
+    public virtual bool IsDeferred => false;
+
+    /// <summary>
     /// Выполняет задачу. Для синхронных задач (preset/extra/probe) завершается полностью;
     /// для deferred (main-выгрузка) стартует фоновую обработку и сразу возвращает Accepted.
     /// </summary>
