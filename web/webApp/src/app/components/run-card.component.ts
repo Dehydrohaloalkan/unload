@@ -1,15 +1,14 @@
 import { CommonModule, formatDate } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { ConfirmationService } from 'primeng/api';
 import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
-import { ConfirmDialog } from 'primeng/confirmdialog';
 
 @Component({
   selector: 'app-run-card',
   standalone: true,
-  imports: [CommonModule, Button, Card, ConfirmDialog],
-  providers: [ConfirmationService],
+  imports: [CommonModule, Button, Card],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-card.component.html',
   styleUrl: './run-card.component.css',
 })

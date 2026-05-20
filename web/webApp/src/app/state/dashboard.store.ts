@@ -1,4 +1,11 @@
-import { Injectable, inject, isDevMode, signal } from '@angular/core';
+import { computed, inject, isDevMode } from '@angular/core';
+import {
+  signalStore,
+  withComputed,
+  withMethods,
+  withState,
+  patchState,
+} from '@ngrx/signals';
 import {
   RunLifecycleStatus,
   RunStatusInfo,
@@ -8,79 +15,112 @@ import {
 import { ApiClientService } from './api-client.service';
 import { OutputFilesStore } from './output-files.store';
 import { PresetStore } from './preset.store';
+import { byDescDate } from './utils/compare.util';
 import { isMainRunHistoryEntry } from './utils/run-status.util';
 
-@Injectable({ providedIn: 'root' })
-export class DashboardStore {
-  private readonly api = inject(ApiClientService);
-  private readonly outputFiles = inject(OutputFilesStore);
-  private readonly preset = inject(PresetStore);
-
-  readonly hasRunToday = signal(false);
-  readonly hasExtraToday = signal(false);
-  readonly runLastCompletedAt = signal<string | null>(null);
-  readonly extraLastCompletedAt = signal<string | null>(null);
-  readonly todayHistory = signal<TaskRecord[]>([]);
-  readonly todayRuns = signal<RunStatusInfo[]>([]);
-  /** All runs returned by the API today, unfiltered (includes extra runs). */
-  readonly allTodayRuns = signal<RunStatusInfo[]>([]);
-
-  applySnapshot(snapshot: WorkflowDashboardSnapshotResponse): void {
-    this.hasRunToday.set(Boolean(snapshot.hasRunToday));
-    this.hasExtraToday.set(Boolean(snapshot.hasExtraToday));
-    this.runLastCompletedAt.set(snapshot.runLastCompletedAt ?? null);
-    this.extraLastCompletedAt.set(snapshot.extraLastCompletedAt ?? null);
-    this.todayHistory.set(snapshot.todayHistory ?? []);
-
-    const nextPresetState = snapshot.presetState ?? this.preset.presetState();
-    this.preset.setPresetState(nextPresetState);
-  }
-
-  applyTodayRuns(runs: RunStatusInfo[]): void {
-    this.allTodayRuns.set(runs ?? []);
-    const filtered = runs.filter(isMainRunHistoryEntry);
-    this.todayRuns.set(filtered);
-    this.recalculateFromRuns(filtered);
-  }
-
-  markRunCompleted(run: RunStatusInfo): void {
-    this.hasRunToday.set(true);
-    if (run.status === RunLifecycleStatus.Completed) {
-      this.runLastCompletedAt.set(run.updatedAt);
-    }
-  }
-
-  async refreshDashboardAsync(): Promise<void> {
-    try {
-      const snapshot = await this.api.fetchDashboardSnapshot();
-      this.applySnapshot(snapshot);
-      await this.refreshTodayRunsAsync();
-      await this.outputFiles.refreshForHistory(snapshot.todayHistory ?? []);
-    } catch (error) {
-      if (isDevMode()) {
-        console.error(error);
-      }
-    }
-  }
-
-  async refreshTodayRunsAsync(): Promise<void> {
-    try {
-      const runs = await this.api.fetchTodayRuns();
-      this.applyTodayRuns(runs);
-    } catch (error) {
-      if (isDevMode()) {
-        console.error(error);
-      }
-    }
-  }
-
-  private recalculateFromRuns(runs: RunStatusInfo[]): void {
-    const sorted = [...runs].sort(
-      (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-    );
-
-    this.hasRunToday.set(sorted.length > 0);
-    const completedRun = sorted.find((run) => run.status === RunLifecycleStatus.Completed) ?? null;
-    this.runLastCompletedAt.set(completedRun?.updatedAt ?? null);
-  }
+interface DashboardState {
+  hasRunToday: boolean;
+  hasExtraToday: boolean;
+  runLastCompletedAt: string | null;
+  extraLastCompletedAt: string | null;
+  todayHistory: TaskRecord[];
+  todayRuns: RunStatusInfo[];
+  /** Все run-ы за сегодня (включая extra), как пришли с API. */
+  allTodayRuns: RunStatusInfo[];
 }
+
+const INITIAL: DashboardState = {
+  hasRunToday: false,
+  hasExtraToday: false,
+  runLastCompletedAt: null,
+  extraLastCompletedAt: null,
+  todayHistory: [],
+  todayRuns: [],
+  allTodayRuns: [],
+};
+
+export const DashboardStore = signalStore(
+  { providedIn: 'root' },
+  withState(INITIAL),
+  withComputed(({ todayRuns }) => ({
+    /** Самый свежий main-run за сегодня. */
+    latestTodayRun: computed<RunStatusInfo | null>(() => {
+      const runs = todayRuns();
+      if (runs.length === 0) {
+        return null;
+      }
+      return [...runs].sort(byDescDate<RunStatusInfo>((run) => run.createdAt))[0] ?? null;
+    }),
+  })),
+  withMethods((store) => {
+    const api = inject(ApiClientService);
+    const outputFiles = inject(OutputFilesStore);
+    const preset = inject(PresetStore);
+
+    const recalculateFromRuns = (runs: RunStatusInfo[]): void => {
+      const sorted = [...runs].sort(byDescDate<RunStatusInfo>((run) => run.createdAt));
+      const completedRun =
+        sorted.find((run) => run.status === RunLifecycleStatus.Completed) ?? null;
+      patchState(store, {
+        hasRunToday: sorted.length > 0,
+        runLastCompletedAt: completedRun?.updatedAt ?? null,
+      });
+    };
+
+    return {
+      applySnapshot(snapshot: WorkflowDashboardSnapshotResponse): void {
+        patchState(store, {
+          hasRunToday: Boolean(snapshot.hasRunToday),
+          hasExtraToday: Boolean(snapshot.hasExtraToday),
+          runLastCompletedAt: snapshot.runLastCompletedAt ?? null,
+          extraLastCompletedAt: snapshot.extraLastCompletedAt ?? null,
+          todayHistory: snapshot.todayHistory ?? [],
+        });
+        const nextPresetState = snapshot.presetState ?? preset.presetState();
+        preset.setPresetState(nextPresetState);
+      },
+
+      applyTodayRuns(runs: RunStatusInfo[]): void {
+        const all = runs ?? [];
+        const filtered = all.filter(isMainRunHistoryEntry);
+        patchState(store, { allTodayRuns: all, todayRuns: filtered });
+        recalculateFromRuns(filtered);
+      },
+
+      markRunCompleted(run: RunStatusInfo): void {
+        patchState(store, {
+          hasRunToday: true,
+          ...(run.status === RunLifecycleStatus.Completed
+            ? { runLastCompletedAt: run.updatedAt }
+            : {}),
+        });
+      },
+
+      async refreshDashboardAsync(): Promise<void> {
+        try {
+          const snapshot = await api.fetchDashboardSnapshot();
+          this.applySnapshot(snapshot);
+          await this.refreshTodayRunsAsync();
+          await outputFiles.refreshForHistory(snapshot.todayHistory ?? []);
+        } catch (error) {
+          if (isDevMode()) {
+            console.error(error);
+          }
+        }
+      },
+
+      async refreshTodayRunsAsync(): Promise<void> {
+        try {
+          const runs = await api.fetchTodayRuns();
+          this.applyTodayRuns(runs);
+        } catch (error) {
+          if (isDevMode()) {
+            console.error(error);
+          }
+        }
+      },
+    };
+  }),
+);
+
+export type DashboardStore = InstanceType<typeof DashboardStore>;

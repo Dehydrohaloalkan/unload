@@ -22,7 +22,3 @@ export function writeJson<T>(storage: Storage | null, key: string, value: T): vo
     /* ignore quota or serialization errors */
   }
 }
-
-export function browserStorage(isBrowser: boolean): Storage | null {
-  return isBrowser ? window.localStorage : null;
-}

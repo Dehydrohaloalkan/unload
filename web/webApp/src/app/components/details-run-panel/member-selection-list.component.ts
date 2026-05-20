@@ -1,17 +1,20 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Button } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
 import { MemberGroupViewModel, MemberViewModel } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
+import { byDescDate } from '../../state/utils/compare.util';
 import { resolveMemberCardBorderClass } from '../../state/utils/member-card-style.util';
+import { memberKey } from '../../state/utils/member-index.util';
 import { formatTimestamp, isTodayDate } from '../../state/utils/time.util';
 
 @Component({
   selector: 'app-member-selection-list',
   standalone: true,
   imports: [CommonModule, FormsModule, Checkbox, Button],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './member-selection-list.component.html',
   styleUrls: ['./details-shared.css', './member-selection-list.component.css'],
 })
@@ -54,27 +57,24 @@ export class MemberSelectionListComponent {
   }
 
   memberCardBorderClass(member: MemberViewModel): string {
-    return resolveMemberCardBorderClass(member, this.latestTodayRun());
+    return resolveMemberCardBorderClass(member, this.store.latestTodayRun());
   }
 
   memberLastUploadToday(member: MemberViewModel): string | null {
-    const run = this.latestTodayRun();
+    const run = this.store.latestTodayRun();
     if (!run) {
       return null;
     }
 
-    const key = member.name.toLowerCase();
+    const key = memberKey(member.name);
     const todays = (run.outputArtifacts ?? [])
       .filter(
-        (a) =>
-          a.occurredAt &&
-          (a.memberName ?? '').toLowerCase() === key &&
-          isTodayDate(a.occurredAt),
+        (artifact) =>
+          artifact.occurredAt &&
+          memberKey(artifact.memberName) === key &&
+          isTodayDate(artifact.occurredAt),
       )
-      .sort(
-        (left, right) =>
-          new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
-      );
+      .sort(byDescDate((artifact) => artifact.occurredAt));
 
     return todays[0]?.occurredAt ?? null;
   }
@@ -110,16 +110,4 @@ export class MemberSelectionListComponent {
   }
 
   formatTimestamp = formatTimestamp;
-
-  private latestTodayRun() {
-    const runs = this.store.todayRuns() ?? [];
-    if (runs.length === 0) {
-      return null;
-    }
-    return (
-      [...runs].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )[0] ?? null
-    );
-  }
 }

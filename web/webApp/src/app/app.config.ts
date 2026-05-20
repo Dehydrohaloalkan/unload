@@ -2,11 +2,13 @@ import {
   ApplicationConfig,
   ErrorHandler,
   LOCALE_ID,
+  inject,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
-import { provideHttpClient, withFetch } from '@angular/common/http';
-import { withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
+import { ConfirmationService } from 'primeng/api';
 import { providePrimeNG } from 'primeng/config';
 import { definePreset } from '@primeuix/themes';
 import Material from '@primeuix/themes/material';
@@ -14,22 +16,12 @@ import Material from '@primeuix/themes/material';
 import { routes } from './app.routes';
 import { GlobalAppErrorHandler } from './app.error-store';
 import { httpLoggingInterceptor } from './http-logging.interceptor';
+import { WorkflowStore } from './state/workflow.facade';
+import { PRIMARY_PALETTE } from './theme/primary-palette';
 
 const UnloadTheme = definePreset(Material, {
   semantic: {
-    primary: {
-      50: '#eff6ff',
-      100: '#dbeafe',
-      200: '#bfdbfe',
-      300: '#93c5fd',
-      400: '#60a5fa',
-      500: '#3b82f6',
-      600: '#2563eb',
-      700: '#1d4ed8',
-      800: '#1e40af',
-      900: '#1e3a8a',
-      950: '#172554',
-    },
+    primary: PRIMARY_PALETTE,
   },
 });
 
@@ -48,6 +40,10 @@ export const appConfig: ApplicationConfig = {
           darkModeSelector: false,
         },
       },
+    }),
+    ConfirmationService,
+    provideAppInitializer(() => {
+      inject(WorkflowStore).init();
     }),
   ],
 };

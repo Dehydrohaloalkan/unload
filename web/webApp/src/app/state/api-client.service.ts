@@ -15,6 +15,7 @@ import {
   WorkflowDashboardSnapshotResponse,
 } from '../app.models';
 import { API_BASE_URL } from './api-base-url.token';
+import { ID_GENERATOR } from './id-generator.token';
 import { joinApiUrl } from './utils/api-url.util';
 
 export interface ActiveRunPayload {
@@ -27,6 +28,7 @@ export interface ActiveRunPayload {
 export class ApiClientService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = inject(API_BASE_URL);
+  private readonly newId = inject(ID_GENERATOR);
 
   url(path: string): string {
     return joinApiUrl(this.baseUrl, path);
@@ -141,7 +143,7 @@ export class ApiClientService {
   requeueToGateway(items: RequeueItem[]): Promise<RequeueToGatewayResponse> {
     return firstValueFrom(
       this.http.post<RequeueToGatewayResponse>(this.url('/api/runs/requeue'), {
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: this.newId(),
         items,
         dryRun: false,
       }),

@@ -1,11 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import {
-  Injectable,
-  PLATFORM_ID,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { RequeueItem } from '../app.models';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
@@ -23,10 +17,8 @@ import { toErrorMessage } from './utils/error-message.util';
 import { buildMemberGroups } from './utils/member-projections.util';
 
 /**
- * Thin orchestrator that composes focused stores/services and exposes the
- * single API surface consumed by the UI. Heavy lifting lives in the stores
- * — this class just bootstraps, wires cross-store reactions, and re-exports
- * signals so templates can read everything from one place.
+ * Фасад поверх signalStore'ов: оркестрирует bootstrap, прокидывает удобные
+ * computed-сигналы в шаблоны и реализует кросс-сторовые действия.
  */
 @Injectable({ providedIn: 'root' })
 export class WorkflowStore {
@@ -86,6 +78,7 @@ export class WorkflowStore {
   readonly todayHistory = this.dashboardStore.todayHistory;
   readonly todayRuns = this.dashboardStore.todayRuns;
   readonly allTodayRuns = this.dashboardStore.allTodayRuns;
+  readonly latestTodayRun = this.dashboardStore.latestTodayRun;
 
   readonly buildSystemDownloadUrl = this.api.buildDownloadUrl;
   readonly buildSystemArchiveUrl = this.api.buildArchiveUrl;
@@ -139,7 +132,6 @@ export class WorkflowStore {
       this.extraStore.restore();
     }
 
-    this.runStore.init();
     void this.hub.connect();
     void this.bootstrapAsync();
   }
@@ -173,18 +165,22 @@ export class WorkflowStore {
     this.adminStore.setAdminMode(enabled);
   }
 
-  runPresetAsync(): Promise<void> {
-    return this.presetStore
-      .runPresetAsync(this.adminStore.adminMode())
-      .then(() => this.dashboardStore.refreshDashboardAsync())
-      .catch(() => undefined);
+  async runPresetAsync(): Promise<void> {
+    try {
+      await this.presetStore.runPresetAsync(this.adminStore.adminMode());
+    } catch {
+      return;
+    }
+    await this.dashboardStore.refreshDashboardAsync();
   }
 
-  runExtraAsync(): Promise<void> {
-    return this.extraStore
-      .runExtraAsync()
-      .then(() => this.dashboardStore.refreshDashboardAsync())
-      .catch(() => undefined);
+  async runExtraAsync(): Promise<void> {
+    try {
+      await this.extraStore.runExtraAsync();
+    } catch {
+      return;
+    }
+    await this.dashboardStore.refreshDashboardAsync();
   }
 
   startRunAsync(): Promise<void> {
@@ -204,23 +200,16 @@ export class WorkflowStore {
     this.errorStore.clear();
 
     try {
-      const [
-        catalog,
-        members,
-        presetState,
-        activeRunPayload,
-        serverTime,
-        dashboard,
-        runsToday,
-      ] = await Promise.all([
-        this.api.fetchCatalog(),
-        this.api.fetchMembers(),
-        this.api.fetchPresetState(),
-        this.api.fetchActiveRun(),
-        this.api.fetchServerTime(),
-        this.api.fetchDashboardSnapshot(),
-        this.api.fetchTodayRuns(),
-      ]);
+      const [catalog, members, presetState, activeRunPayload, serverTime, dashboard, runsToday] =
+        await Promise.all([
+          this.api.fetchCatalog(),
+          this.api.fetchMembers(),
+          this.api.fetchPresetState(),
+          this.api.fetchActiveRun(),
+          this.api.fetchServerTime(),
+          this.api.fetchDashboardSnapshot(),
+          this.api.fetchTodayRuns(),
+        ]);
 
       this.clock.applyFromResponse(serverTime.serverLocalTime, serverTime.timeZoneId);
       this.catalogStore.setCatalog(catalog);

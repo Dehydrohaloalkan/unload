@@ -16,28 +16,28 @@
           <div class="details-item__message">{{ activeRun.message }}</div>
         }
 
-        @if (activeMemberNames(activeRun).length === 0) {
+        @if (activeMemberNames().length === 0) {
           <div class="details-empty">Деталей по мемберам пока нет.</div>
         } @else {
           <div class="active-members">
-            @for (memberName of activeMemberNames(activeRun); track memberName) {
+            @for (memberName of activeMemberNames(); track memberName) {
               <details class="active-member">
                 <summary class="active-member__summary">
                   <span class="active-member__name">{{ memberName }}</span>
                   <span class="active-member__status">
-                    @if (memberStatus(activeRun, memberName); as status) {
-                      {{ resolveMemberEffectiveStatusLabel(activeRun, status) }}
+                    @if (memberStatus(memberName); as status) {
+                      {{ resolveMemberEffectiveStatusLabel(status) }}
                     } @else {
                       —
                     }
-                    @if (senderBatchForMember(activeRun, memberName); as batch) {
+                    @if (senderBatchForMember(memberName); as batch) {
                       · Шлюз: {{ resolveSenderStatusLabel(batch.status) }}
                     }
                   </span>
                 </summary>
 
                 <div class="active-member__body">
-                  @if (memberStatus(activeRun, memberName); as status) {
+                  @if (memberStatus(memberName); as status) {
                     <div class="details-item__row">
                       <span class="details-item__label">Шаг</span>
                       <span class="details-item__value">{{
@@ -49,10 +49,10 @@
                     }
                   }
 
-                  @if (memberWorkers(activeRun, memberName).length > 0) {
+                  @if (memberWorkers(memberName).length > 0) {
                     <div class="active-subtitle">Скрипты / worker</div>
                     <div class="details-worker-list">
-                      @for (worker of memberWorkers(activeRun, memberName); track worker.workerId) {
+                      @for (worker of memberWorkers(memberName); track worker.workerId) {
                         <div class="details-worker-item">
                           Worker #{{ worker.workerId }}: {{ worker.state }}
                           @if (worker.scriptCode) {
@@ -64,12 +64,12 @@
                   }
 
                   <div class="active-subtitle">Файлы выгрузки</div>
-                  @if (memberArtifacts(activeRun, memberName).length === 0) {
+                  @if (memberArtifacts(memberName).length === 0) {
                     <div class="details-empty">Файлы для мембера пока не найдены.</div>
                   } @else {
                     <div class="active-files">
                       @for (
-                        artifact of memberArtifacts(activeRun, memberName);
+                        artifact of memberArtifacts(memberName);
                         track artifact.filePath
                       ) {
                         <div class="active-file">
@@ -81,7 +81,7 @@
                           >
                             {{ artifact.fileName }}
                           </a>
-                          @if (senderBatchForMember(activeRun, memberName); as batch) {
+                          @if (senderBatchForMember(memberName); as batch) {
                             @if (isFileSentToGateway(artifact.filePath, batch.sentFiles)) {
                               <span class="active-file__badge active-file__badge--sent"
                                 >Шлюз: отправлено</span
@@ -101,7 +101,7 @@
                     </div>
                   }
 
-                  @if (senderBatchForMember(activeRun, memberName); as batch) {
+                  @if (senderBatchForMember(memberName); as batch) {
                     @if (batch.message) {
                       <div class="details-item__message">{{ batch.message }}</div>
                     }

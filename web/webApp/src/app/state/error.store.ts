@@ -1,14 +1,16 @@
-import { Injectable, signal } from '@angular/core';
+import { signalStore, withMethods, withState, patchState } from '@ngrx/signals';
 
-@Injectable({ providedIn: 'root' })
-export class WorkflowErrorStore {
-  readonly errorMessage = signal<string | null>(null);
+export const WorkflowErrorStore = signalStore(
+  { providedIn: 'root' },
+  withState<{ errorMessage: string | null }>({ errorMessage: null }),
+  withMethods((store) => ({
+    setError(message: string | null): void {
+      patchState(store, { errorMessage: message });
+    },
+    clear(): void {
+      patchState(store, { errorMessage: null });
+    },
+  })),
+);
 
-  setError(message: string | null): void {
-    this.errorMessage.set(message);
-  }
-
-  clear(): void {
-    this.errorMessage.set(null);
-  }
-}
+export type WorkflowErrorStore = InstanceType<typeof WorkflowErrorStore>;

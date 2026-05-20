@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { TaskRecord, TaskUiState } from '../app.models';
 import { WorkflowStore } from '../app.store';
 import { DownloadHintStore } from '../download-hint.store';
+import { byDescDate } from '../state/utils/compare.util';
 import { formatTimestamp } from '../state/utils/time.util';
 
 export type DetailsTaskKind = 'preset' | 'extra';
@@ -36,6 +37,7 @@ const COPY: Record<DetailsTaskKind, TaskKindCopy> = {
   selector: 'app-details-task-panel',
   standalone: true,
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './details-task-panel.component.html',
   styleUrl: './details-task-panel.component.css',
 })
@@ -55,10 +57,7 @@ export class DetailsTaskPanelComponent {
     return this.store
       .todayHistory()
       .filter((record) => record.taskCode === taskCode)
-      .sort(
-        (left, right) =>
-          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
-      );
+      .sort(byDescDate<TaskRecord>((record) => record.completedAt));
   });
 
   formatTimestamp = formatTimestamp;

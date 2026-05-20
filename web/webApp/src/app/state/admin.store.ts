@@ -1,10 +1,13 @@
-import { Injectable, signal } from '@angular/core';
+import { signalStore, withMethods, withState, patchState } from '@ngrx/signals';
 
-@Injectable({ providedIn: 'root' })
-export class AdminStore {
-  readonly adminMode = signal(false);
+export const AdminStore = signalStore(
+  { providedIn: 'root' },
+  withState({ adminMode: false }),
+  withMethods((store) => ({
+    setAdminMode(enabled: boolean): void {
+      patchState(store, { adminMode: enabled });
+    },
+  })),
+);
 
-  setAdminMode(enabled: boolean): void {
-    this.adminMode.set(enabled);
-  }
-}
+export type AdminStore = InstanceType<typeof AdminStore>;

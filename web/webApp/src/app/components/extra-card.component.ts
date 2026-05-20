@@ -1,16 +1,15 @@
 import { CommonModule, formatDate } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { ConfirmationService } from 'primeng/api';
 import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
-import { ConfirmDialog } from 'primeng/confirmdialog';
 import { TaskUiState } from '../app.models';
 
 @Component({
   selector: 'app-extra-card',
   standalone: true,
-  imports: [CommonModule, Button, Card, ConfirmDialog],
-  providers: [ConfirmationService],
+  imports: [CommonModule, Button, Card],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './extra-card.component.html',
   styleUrl: './extra-card.component.css',
 })

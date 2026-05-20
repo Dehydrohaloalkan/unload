@@ -1,13 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Button } from 'primeng/button';
+import { ConfirmDialog } from 'primeng/confirmdialog';
 import { Dialog } from 'primeng/dialog';
 import { InputText } from 'primeng/inputtext';
 import { Message } from 'primeng/message';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { AppErrorStore } from './app.error-store';
 import { WorkflowStore } from './app.store';
+import { byDescDate } from './state/utils/compare.util';
 import { DetailsRunPanelComponent } from './components/details-run-panel/details-run-panel.component';
 import { DetailsTaskPanelComponent } from './components/details-task-panel.component';
 import { DownloadHintToastComponent } from './components/download-hint-toast.component';
@@ -16,8 +18,6 @@ import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
 
-type DrawerStage = 'run' | 'preset' | 'extra';
-
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -25,6 +25,7 @@ type DrawerStage = 'run' | 'preset' | 'extra';
     CommonModule,
     FormsModule,
     Button,
+    ConfirmDialog,
     Dialog,
     InputText,
     Message,
@@ -37,6 +38,7 @@ type DrawerStage = 'run' | 'preset' | 'extra';
     PresetStageComponent,
     RunCardComponent,
   ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -47,9 +49,9 @@ export class App {
   readonly detailsPanelOpen = signal(false);
   readonly detailsPanelStage = signal<DrawerStage>('run');
 
-  adminDialogVisible = false;
-  adminPassword = '';
-  adminError: string | null = null;
+  readonly adminDialogVisible = signal(false);
+  readonly adminPassword = signal('');
+  readonly adminError = signal<string | null>(null);
 
   readonly probeCompleted = computed(() => {
     const preset = this.store.presetState();
@@ -65,10 +67,7 @@ export class App {
     const sorted = this.store
       .todayHistory()
       .filter((record) => record.taskCode === 'preset')
-      .sort(
-        (left, right) =>
-          new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
-      );
+      .sort(byDescDate((record) => record.completedAt));
     return sorted[0]?.completedAt ?? null;
   });
 
@@ -89,36 +88,32 @@ export class App {
     return 'Ожидается начало дневного окна.';
   });
 
-  constructor() {
-    this.store.init();
-  }
-
   toggleAdminMode(): void {
     if (this.store.adminMode()) {
       this.store.setAdminMode(false);
-      this.adminDialogVisible = false;
-      this.adminPassword = '';
-      this.adminError = null;
+      this.adminDialogVisible.set(false);
+      this.adminPassword.set('');
+      this.adminError.set(null);
       return;
     }
 
-    this.adminDialogVisible = true;
-    this.adminPassword = '';
-    this.adminError = null;
+    this.adminDialogVisible.set(true);
+    this.adminPassword.set('');
+    this.adminError.set(null);
   }
 
   confirmAdminMode(): void {
     const now = new Date();
     const expected = `${pad2(now.getHours())}${pad2(now.getMinutes())}`;
-    if (this.adminPassword !== expected) {
-      this.adminError = 'Неверный пароль.';
+    if (this.adminPassword() !== expected) {
+      this.adminError.set('Неверный пароль.');
       return;
     }
 
     this.store.setAdminMode(true);
-    this.adminDialogVisible = false;
-    this.adminPassword = '';
-    this.adminError = null;
+    this.adminDialogVisible.set(false);
+    this.adminPassword.set('');
+    this.adminError.set(null);
   }
 
   openDetails(stage: DrawerStage): void {
@@ -141,6 +136,8 @@ export class App {
     void this.store.runExtraAsync();
   }
 }
+
+type DrawerStage = 'run' | 'preset' | 'extra';
 
 function pad2(value: number): string {
   return value.toString().padStart(2, '0');

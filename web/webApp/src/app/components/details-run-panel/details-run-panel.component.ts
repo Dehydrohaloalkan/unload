@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TabsModule } from 'primeng/tabs';
 import { ActiveRunViewComponent } from './active-run-view.component';
 import { MemberSelectionListComponent } from './member-selection-list.component';
@@ -13,6 +13,7 @@ import { RunHistoryListComponent } from './run-history-list.component';
     ActiveRunViewComponent,
     RunHistoryListComponent,
   ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './details-run-panel.component.html',
   styleUrl: './details-run-panel.component.css',
 })

@@ -100,13 +100,25 @@
       <div class="details-drawer__body">
         @switch (detailsPanelStage()) {
           @case ('run') {
-            <app-details-run-panel />
+            @defer (when detailsPanelOpen()) {
+              <app-details-run-panel />
+            } @loading (minimum 100ms) {
+              <p-progress-spinner strokeWidth="4" />
+            }
           }
           @case ('preset') {
-            <app-details-task-panel kind="preset" />
+            @defer (when detailsPanelOpen()) {
+              <app-details-task-panel kind="preset" />
+            } @loading (minimum 100ms) {
+              <p-progress-spinner strokeWidth="4" />
+            }
           }
           @default {
-            <app-details-task-panel kind="extra" />
+            @defer (when detailsPanelOpen()) {
+              <app-details-task-panel kind="extra" />
+            } @loading (minimum 100ms) {
+              <p-progress-spinner strokeWidth="4" />
+            }
           }
         }
       </div>
@@ -114,13 +126,13 @@
   </aside>
 
   <p-dialog
-    [visible]="adminDialogVisible"
+    [visible]="adminDialogVisible()"
     [modal]="true"
     [draggable]="false"
     [resizable]="false"
     header="Вход в admin mode"
     [style]="{ width: '26rem', maxWidth: '92vw' }"
-    (onHide)="adminDialogVisible = false"
+    (onHide)="adminDialogVisible.set(false)"
   >
     <div class="admin-dialog">
       <label class="admin-dialog__label" for="admin-password">Пароль (4 цифры HHmm)</label>
@@ -129,20 +141,23 @@
         type="password"
         maxlength="4"
         pInputText
-        [(ngModel)]="adminPassword"
+        [ngModel]="adminPassword()"
+        (ngModelChange)="adminPassword.set($event)"
         class="w-full"
       />
-      @if (adminError; as error) {
+      @if (adminError(); as error) {
         <p-message severity="error" [text]="error" />
       }
       <div class="admin-dialog__actions">
         <p-button
           label="Войти"
           icon="app-icon app-icon--check"
-          [disabled]="adminPassword.length !== 4"
+          [disabled]="adminPassword().length !== 4"
           (onClick)="confirmAdminMode()"
         />
       </div>
     </div>
   </p-dialog>
+
+  <p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }" />
 </main>

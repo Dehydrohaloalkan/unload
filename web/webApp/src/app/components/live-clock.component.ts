@@ -1,5 +1,5 @@
 import { CommonModule, formatDate } from '@angular/common';
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { Tooltip } from 'primeng/tooltip';
 import { Card } from 'primeng/card';
 
@@ -7,6 +7,7 @@ import { Card } from 'primeng/card';
   selector: 'app-live-clock',
   standalone: true,
   imports: [CommonModule, Card, Tooltip],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './live-clock.component.html',
   styleUrl: './live-clock.component.css',
 })

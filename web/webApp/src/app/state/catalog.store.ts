@@ -1,21 +1,29 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { computed } from '@angular/core';
+import { signalStore, withComputed, withMethods, withState, patchState } from '@ngrx/signals';
 import { CatalogInfo, MemberCatalogItem } from '../app.models';
 import { buildHistoryMemberNames } from './utils/member-projections.util';
 
-@Injectable({ providedIn: 'root' })
-export class CatalogStore {
-  readonly catalog = signal<CatalogInfo | null>(null);
-  readonly members = signal<MemberCatalogItem[]>([]);
-
-  readonly historyMemberNames = computed(() =>
-    buildHistoryMemberNames(this.catalog(), this.members()),
-  );
-
-  setCatalog(value: CatalogInfo): void {
-    this.catalog.set(value);
-  }
-
-  setMembers(value: MemberCatalogItem[]): void {
-    this.members.set(value);
-  }
+interface CatalogState {
+  catalog: CatalogInfo | null;
+  members: MemberCatalogItem[];
 }
+
+const INITIAL: CatalogState = { catalog: null, members: [] };
+
+export const CatalogStore = signalStore(
+  { providedIn: 'root' },
+  withState(INITIAL),
+  withComputed(({ catalog, members }) => ({
+    historyMemberNames: computed(() => buildHistoryMemberNames(catalog(), members())),
+  })),
+  withMethods((store) => ({
+    setCatalog(value: CatalogInfo): void {
+      patchState(store, { catalog: value });
+    },
+    setMembers(value: MemberCatalogItem[]): void {
+      patchState(store, { members: value });
+    },
+  })),
+);
+
+export type CatalogStore = InstanceType<typeof CatalogStore>;

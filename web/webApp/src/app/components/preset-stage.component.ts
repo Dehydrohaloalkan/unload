@@ -1,8 +1,7 @@
 import { CommonModule, formatDate } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
-import { ConfirmDialog } from 'primeng/confirmdialog';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { ConfirmationService } from 'primeng/api';
 import { PresetGateState, TaskUiState } from '../app.models';
@@ -10,8 +9,8 @@ import { PresetGateState, TaskUiState } from '../app.models';
 @Component({
   selector: 'app-preset-stage',
   standalone: true,
-  imports: [CommonModule, Button, Card, ConfirmDialog, ProgressSpinner],
-  providers: [ConfirmationService],
+  imports: [CommonModule, Button, Card, ProgressSpinner],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preset-stage.component.html',
   styleUrl: './preset-stage.component.css',
 })
@@ -24,25 +23,22 @@ export class PresetStageComponent {
   readonly openDetails = output<void>();
   private readonly confirmationService = inject(ConfirmationService);
 
-  formatMoment(value: string | null | undefined): string {
-    if (!value) {
-      return '...';
-    }
-
-    return formatDate(value, 'HH:mm:ss', 'ru-RU');
-  }
-
-  statusIconClass(): string {
+  readonly statusIconClass = computed(() => {
     const task = this.presetTask();
     if (task.running) {
       return 'app-icon app-icon--spinner app-icon--spin stage-icon stage-icon--spin';
     }
-
     if (this.completedAt()) {
       return 'app-icon app-icon--check-circle stage-icon stage-icon--success';
     }
-
     return 'app-icon app-icon--cancel stage-icon stage-icon--danger';
+  });
+
+  formatMoment(value: string | null | undefined): string {
+    if (!value) {
+      return '...';
+    }
+    return formatDate(value, 'HH:mm:ss', 'ru-RU');
   }
 
   onStartClick(): void {
