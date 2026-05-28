@@ -18,6 +18,7 @@ import {
   RunStatusInfo,
   RunnerEvent,
 } from '../app.models';
+import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
 import { CatalogStore } from './catalog.store';
@@ -116,9 +117,7 @@ export const RunStore = signalStore(
       if (details.activeCorrelationId) {
         await adoptCorrelationId(details.activeCorrelationId);
       }
-      errorStore.setError(
-        details.detail ?? 'Уже выполняется другой run. Переключаюсь в режим наблюдения.',
-      );
+      errorStore.setError(details.detail ?? t('errors.activeRunConflict'));
     };
 
     return {
@@ -169,7 +168,7 @@ export const RunStore = signalStore(
             await handleConflict(error);
             return;
           }
-          errorStore.setError(toErrorMessage(error, 'Не удалось запустить run.'));
+          errorStore.setError(toErrorMessage(error, t('errors.runStartFailed')));
         }
       },
 
@@ -182,9 +181,7 @@ export const RunStore = signalStore(
         try {
           await api.stopRun(correlationId);
         } catch (error) {
-          errorStore.setError(
-            toErrorMessage(error, 'Не удалось отправить запрос на остановку.'),
-          );
+          errorStore.setError(toErrorMessage(error, t('errors.runStopFailed')));
         }
       },
 
@@ -199,7 +196,7 @@ export const RunStore = signalStore(
           patchState(store, { requeueResult: response ?? null });
           await dashboard.refreshDashboardAsync();
         } catch (error) {
-          errorStore.setError(toErrorMessage(error, 'Не удалось отправить выбранное в шлюз.'));
+          errorStore.setError(toErrorMessage(error, t('errors.requeueFailed')));
         } finally {
           patchState(store, { requeueRunning: false });
         }

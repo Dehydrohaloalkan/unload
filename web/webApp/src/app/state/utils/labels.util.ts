@@ -4,6 +4,7 @@ import {
   RunnerStep,
   SenderBatchStatus,
 } from '../../app.models';
+import { t } from '../../i18n/i18n';
 
 const RUN_STATUS_LABELS: Record<RunLifecycleStatus, string> = {
   [RunLifecycleStatus.Running]: 'Running',
@@ -38,7 +39,7 @@ const RUNNER_STEP_LABELS: Record<RunnerStep, string> = {
   [RunnerStep.ChunkCreated]: 'Chunk created',
   [RunnerStep.FileWritten]: 'File written',
   [RunnerStep.ScriptCompleted]: 'Script completed',
-  [RunnerStep.PublishedToGateway]: 'Опубликован в шлюз',
+  [RunnerStep.PublishedToGateway]: t('runner.steps.publishedToGateway'),
   [RunnerStep.Completed]: 'Completed',
   [RunnerStep.Failed]: 'Failed',
 };

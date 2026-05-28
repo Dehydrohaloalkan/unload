@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { t } from './i18n/i18n';
 
 @Injectable({ providedIn: 'root' })
 export class DownloadHintStore {
@@ -9,7 +10,7 @@ export class DownloadHintStore {
   private readonly exitMs = 200;
 
   notifyDownloadStarted(): void {
-    this.message.set('Скачивание началось. Загрузка начнется через пару секунд.');
+    this.message.set(t('downloadHint.started'));
     this.visible.set(false);
     setTimeout(() => {
       this.visible.set(true);

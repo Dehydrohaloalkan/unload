@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { TaskRecord, TaskUiState } from '../app.models';
 import { WorkflowStore } from '../app.store';
 import { DownloadHintStore } from '../download-hint.store';
+import { TPipe, t } from '../i18n/i18n';
 import { byDescDate } from '../state/utils/compare.util';
 import { formatTimestamp } from '../state/utils/time.util';
 
@@ -16,27 +17,31 @@ interface TaskKindCopy {
   fallbackCorrelationId: string;
 }
 
-const COPY: Record<DetailsTaskKind, TaskKindCopy> = {
-  preset: {
-    emptyHistory: 'Скрипты этапа 2 пока не запускались.',
-    emptyRecentRun: 'Файлы для этого запуска не найдены.',
-    noRunsToday: 'Сегодня запусков пока не было.',
-    archivePrefix: 'preset-result-',
-    fallbackCorrelationId: 'preset-run',
-  },
-  extra: {
-    emptyHistory: 'Скрипты этапа 4 пока не запускались.',
-    emptyRecentRun: 'Файлы для этой выгрузки не найдены.',
-    noRunsToday: 'Сегодня запусков пока не было.',
-    archivePrefix: 'extra-result-',
-    fallbackCorrelationId: 'extra-run',
-  },
-};
+function buildCopy(): Record<DetailsTaskKind, TaskKindCopy> {
+  return {
+    preset: {
+      emptyHistory: t('details.task.emptyHistoryPreset'),
+      emptyRecentRun: t('details.task.emptyRecentPreset'),
+      noRunsToday: t('details.task.noRunsToday'),
+      archivePrefix: 'preset-result-',
+      fallbackCorrelationId: 'preset-run',
+    },
+    extra: {
+      emptyHistory: t('details.task.emptyHistoryExtra'),
+      emptyRecentRun: t('details.task.emptyRecentExtra'),
+      noRunsToday: t('details.task.noRunsToday'),
+      archivePrefix: 'extra-result-',
+      fallbackCorrelationId: 'extra-run',
+    },
+  };
+}
+
+const COPY = buildCopy();
 
 @Component({
   selector: 'app-details-task-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './details-task-panel.component.html',
   styleUrl: './details-task-panel.component.css',

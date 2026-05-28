@@ -1,15 +1,15 @@
 <div class="details-section">
-  <div class="details-section__title">Активная выгрузка</div>
+  <div class="details-section__title">{{ 'activeRun.sectionTitle' | t }}</div>
 
   @if (run(); as activeRun) {
     @if (isRunActive()) {
       <div class="details-item active-run">
         <div class="details-item__row">
-          <span class="details-item__label">Correlation</span>
+          <span class="details-item__label">{{ 'activeRun.correlation' | t }}</span>
           <span class="details-item__value">{{ activeRun.correlationId }}</span>
         </div>
         <div class="details-item__row">
-          <span class="details-item__label">Статус</span>
+          <span class="details-item__label">{{ 'activeRun.status' | t }}</span>
           <span class="details-item__value">{{ resolveRunStatusLabel(activeRun.status) }}</span>
         </div>
         @if (activeRun.message) {
@@ -17,7 +17,7 @@
         }
 
         @if (activeMemberNames().length === 0) {
-          <div class="details-empty">Деталей по мемберам пока нет.</div>
+          <div class="details-empty">{{ 'activeRun.noMemberDetails' | t }}</div>
         } @else {
           <div class="active-members">
             @for (memberName of activeMemberNames(); track memberName) {
@@ -31,7 +31,7 @@
                       —
                     }
                     @if (senderBatchForMember(memberName); as batch) {
-                      · Шлюз: {{ resolveSenderStatusLabel(batch.status) }}
+                      {{ 'activeRun.gatewayInline' | t }} {{ resolveSenderStatusLabel(batch.status) }}
                     }
                   </span>
                 </summary>
@@ -39,7 +39,7 @@
                 <div class="active-member__body">
                   @if (memberStatus(memberName); as status) {
                     <div class="details-item__row">
-                      <span class="details-item__label">Шаг</span>
+                      <span class="details-item__label">{{ 'activeRun.step' | t }}</span>
                       <span class="details-item__value">{{
                         resolveRunnerStepLabel(status.lastStep)
                       }}</span>
@@ -50,7 +50,7 @@
                   }
 
                   @if (memberWorkers(memberName).length > 0) {
-                    <div class="active-subtitle">Скрипты / worker</div>
+                    <div class="active-subtitle">{{ 'activeRun.workers' | t }}</div>
                     <div class="details-worker-list">
                       @for (worker of memberWorkers(memberName); track worker.workerId) {
                         <div class="details-worker-item">
@@ -63,9 +63,9 @@
                     </div>
                   }
 
-                  <div class="active-subtitle">Файлы выгрузки</div>
+                  <div class="active-subtitle">{{ 'activeRun.files' | t }}</div>
                   @if (memberArtifacts(memberName).length === 0) {
-                    <div class="details-empty">Файлы для мембера пока не найдены.</div>
+                    <div class="details-empty">{{ 'activeRun.noFilesForMember' | t }}</div>
                   } @else {
                     <div class="active-files">
                       @for (
@@ -83,18 +83,18 @@
                           </a>
                           @if (senderBatchForMember(memberName); as batch) {
                             @if (isFileSentToGateway(artifact.filePath, batch.sentFiles)) {
-                              <span class="active-file__badge active-file__badge--sent"
-                                >Шлюз: отправлено</span
-                              >
+                              <span class="active-file__badge active-file__badge--sent">{{
+                                'activeRun.gatewaySent' | t
+                              }}</span>
                             } @else {
-                              <span class="active-file__badge active-file__badge--pending"
-                                >Шлюз: не отправлено</span
-                              >
+                              <span class="active-file__badge active-file__badge--pending">{{
+                                'activeRun.gatewayPending' | t
+                              }}</span>
                             }
                           } @else {
-                            <span class="active-file__badge active-file__badge--pending"
-                              >Шлюз: н/д</span
-                            >
+                            <span class="active-file__badge active-file__badge--pending">{{
+                              'activeRun.gatewayUnknown' | t
+                            }}</span>
                           }
                         </div>
                       }
@@ -113,7 +113,7 @@
         }
 
         <p-button
-          label="Остановить выгрузку"
+          [label]="'activeRun.stop' | t"
           icon="app-icon app-icon--stop"
           severity="secondary"
           [outlined]="true"
@@ -122,9 +122,9 @@
         />
       </div>
     } @else {
-      <div class="details-empty">Активной выгрузки сейчас нет.</div>
+      <div class="details-empty">{{ 'activeRun.noActive' | t }}</div>
     }
   } @else {
-    <div class="details-empty">Активной выгрузки сейчас нет.</div>
+    <div class="details-empty">{{ 'activeRun.noActive' | t }}</div>
   }
 </div>

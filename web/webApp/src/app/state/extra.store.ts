@@ -6,6 +6,7 @@ import {
   patchState,
 } from '@ngrx/signals';
 import { TaskUiState } from '../app.models';
+import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
 import { WorkflowErrorStore } from './error.store';
@@ -59,7 +60,7 @@ export const ExtraStore = signalStore(
             storageKey: EXTRA_TASK_STORAGE_KEY,
           },
           () => api.runExtra(admin.adminMode(), store.publishExtraToGateway()),
-          'Не удалось запустить extra-задачу.',
+          t('errors.extraFailed'),
         );
       },
     };

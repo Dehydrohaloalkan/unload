@@ -1,27 +1,27 @@
 <div class="details-section">
-  <div class="details-section__title">Повторная отправка в шлюз</div>
+  <div class="details-section__title">{{ 'history.sectionTitle' | t }}</div>
 
   @if (historyNodes().length === 0) {
-    <div class="details-empty">История выгрузок пуста.</div>
+    <div class="details-empty">{{ 'history.empty' | t }}</div>
   } @else {
     <div class="history-runs">
       @for (node of historyNodes(); track node.key) {
         <details class="history-run" (toggle)="onHistoryRunToggle($event, node.key)">
           <summary class="history-run__summary">
             <span class="history-run__title">
-              {{ node.taskCode === 'run' ? 'Выгрузка' : 'Доп. выгрузка' }} ·
+              {{ node.taskCode === 'run' ? ('history.runLabel' | t) : ('history.extraLabel' | t) }} ·
               {{ node.correlationId }}
               <span
                 class="history-run__gateway-badge"
                 [class.history-run__gateway-badge--on]="node.publishToGateway"
                 [class.history-run__gateway-badge--off]="!node.publishToGateway"
-                >{{ node.publishToGateway ? 'Шлюз' : 'без шлюза' }}</span
+                >{{ node.publishToGateway ? ('history.gatewayOn' | t) : ('history.gatewayOff' | t) }}</span
               >
             </span>
             <span class="history-run__meta">
               <span>{{ node.status }}</span>
-              <span>Начало: {{ formatTimestamp(node.startedAt) }}</span>
-              <span>Окончание: {{ formatTimestamp(node.completedAt) }}</span>
+              <span>{{ 'history.startedAt' | t }} {{ formatTimestamp(node.startedAt) }}</span>
+              <span>{{ 'history.completedAt' | t }} {{ formatTimestamp(node.completedAt) }}</span>
             </span>
           </summary>
 
@@ -40,7 +40,7 @@
                     @if (isHistoryMemberOpen(member.key)) {
                       <div class="history-member__body">
                         @if (member.files.length === 0) {
-                          <div class="details-empty">0 файлов.</div>
+                          <div class="details-empty">{{ 'history.emptyFiles' | t }}</div>
                         } @else {
                           @for (file of member.files; track file.key) {
                             <label class="history-member-file">
@@ -60,9 +60,17 @@
                                 <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
                               }
                               @if (file.sentToGateway) {
-                                <span class="history-file__gateway history-file__gateway--sent" title="Отправлено в шлюз">Шлюз ✓</span>
+                                <span
+                                  class="history-file__gateway history-file__gateway--sent"
+                                  [title]="'history.gatewaySentTitle' | t"
+                                  >{{ 'history.gatewaySent' | t }}</span
+                                >
                               } @else {
-                                <span class="history-file__gateway history-file__gateway--pending" title="Не отправлено в шлюз">Шлюз —</span>
+                                <span
+                                  class="history-file__gateway history-file__gateway--pending"
+                                  [title]="'history.gatewayPendingTitle' | t"
+                                  >{{ 'history.gatewayPending' | t }}</span
+                                >
                               }
                             </label>
                           }
@@ -80,7 +88,7 @@
   }
 
   <p-button
-    label="Отправить выбранные в шлюз"
+    [label]="'history.sendSelected' | t"
     icon="app-icon app-icon--play"
     [fluid]="true"
     [loading]="store.requeueRunning()"
@@ -91,8 +99,16 @@
   @if (store.requeueResult(); as result) {
     <div class="details-item__message">
       @if (requeueFileSummary(result); as summary) {
-        Шлюз: отправлено файлов {{ summary.sent }} из {{ summary.total }}, не отправлено
-        {{ summary.notSent }} (requestId: {{ result.requestId }})
+        {{
+          'history.requeueSummary'
+            | t
+              : {
+                  sent: summary.sent,
+                  total: summary.total,
+                  notSent: summary.notSent,
+                  requestId: result.requestId
+                }
+        }}
       }
     </div>
     @for (item of result.results; track item.correlationId) {

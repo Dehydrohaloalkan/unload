@@ -7,6 +7,7 @@ import {
   patchState,
 } from '@ngrx/signals';
 import { PresetGateState, TaskUiState } from '../app.models';
+import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
 import { WorkflowErrorStore } from './error.store';
@@ -83,7 +84,7 @@ export const PresetStore = signalStore(
             onSuccess: refreshState,
           },
           () => api.runPreset(adminMode || admin.adminMode()),
-          'Не удалось запустить preset-задачу.',
+          t('errors.presetFailed'),
         );
       },
     };

@@ -4,12 +4,12 @@
   <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen()">
     <div class="app-header">
       <div>
-        <h1 class="app-title">Панель выгрузки</h1>
+        <h1 class="app-title">{{ 'app.title' | t }}</h1>
       </div>
 
       <div class="app-header__actions">
         <p-button
-          [label]="store.adminMode() ? 'Admin mode: ON' : 'Admin mode'"
+          [label]="store.adminMode() ? ('app.adminModeOn' | t) : ('app.adminMode' | t)"
           [severity]="store.adminMode() ? 'danger' : 'secondary'"
           [outlined]="!store.adminMode()"
           icon="app-icon app-icon--shield"
@@ -29,8 +29,8 @@
       <div class="loading-state">
         <p-progress-spinner strokeWidth="4" />
         <div class="loading-state__text">
-          <div class="font-medium text-slate-800">Загружаю состояние API</div>
-          <div class="text-sm text-slate-500">Каталог, активный run, preset-гейт и live-канал.</div>
+          <div class="font-medium text-slate-800">{{ 'app.loading.title' | t }}</div>
+          <div class="text-sm text-slate-500">{{ 'app.loading.subtitle' | t }}</div>
         </div>
       </div>
     } @else {
@@ -78,13 +78,13 @@
       <div class="details-drawer__title">
         @switch (detailsPanelStage()) {
           @case ('run') {
-            Детали этапа 3 (выгрузка)
+            {{ 'app.drawer.runTitle' | t }}
           }
           @case ('preset') {
-            Детали этапа 2 (пресет)
+            {{ 'app.drawer.presetTitle' | t }}
           }
           @default {
-            Детали этапа 4 (extra)
+            {{ 'app.drawer.extraTitle' | t }}
           }
         }
       </div>
@@ -130,12 +130,12 @@
     [modal]="true"
     [draggable]="false"
     [resizable]="false"
-    header="Вход в admin mode"
+    [header]="'app.admin.dialogHeader' | t"
     [style]="{ width: '26rem', maxWidth: '92vw' }"
     (onHide)="adminDialogVisible.set(false)"
   >
     <div class="admin-dialog">
-      <label class="admin-dialog__label" for="admin-password">Пароль (4 цифры HHmm)</label>
+      <label class="admin-dialog__label" for="admin-password">{{ 'app.admin.passwordLabel' | t }}</label>
       <input
         id="admin-password"
         type="password"
@@ -150,7 +150,7 @@
       }
       <div class="admin-dialog__actions">
         <p-button
-          label="Войти"
+          [label]="'app.admin.submit' | t"
           icon="app-icon app-icon--check"
           [disabled]="adminPassword().length !== 4"
           (onClick)="confirmAdminMode()"

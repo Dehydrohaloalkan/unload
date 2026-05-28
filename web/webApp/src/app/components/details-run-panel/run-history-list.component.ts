@@ -7,6 +7,7 @@ import { Checkbox } from 'primeng/checkbox';
 import { RequeueItem } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
+import { TPipe, t } from '../../i18n/i18n';
 import {
   HistoryFileRow,
   HistoryRunNode,
@@ -21,7 +22,7 @@ import { formatTimestamp } from '../../state/utils/time.util';
 @Component({
   selector: 'app-run-history-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button],
+  imports: [CommonModule, FormsModule, Checkbox, Button, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-history-list.component.html',
   styleUrls: ['./details-shared.css', './run-history-list.component.css'],
@@ -129,10 +130,10 @@ export class RunHistoryListComponent {
     }
 
     this.confirmationService.confirm({
-      header: 'Подтверждение',
-      message: 'Отправить выбранные результаты в шлюз?',
-      acceptLabel: 'Отправить',
-      rejectLabel: 'Отмена',
+      header: t('confirm.header'),
+      message: t('history.confirmMessage'),
+      acceptLabel: t('history.confirmAccept'),
+      rejectLabel: t('confirm.reject'),
       accept: () => this.emitRequeue(),
     });
   }

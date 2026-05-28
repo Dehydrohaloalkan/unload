@@ -2,11 +2,11 @@
   <ng-template #header>
     <div class="stage-head">
       <div>
-        <h2 class="stage-title">4. Extra</h2>
+        <h2 class="stage-title">{{ 'extraStage.title' | t }}</h2>
       </div>
       @if (lastCompletedAt()) {
         <div class="stage-completed">
-          Выполнено<br />
+          {{ 'extraStage.done' | t }}<br />
           <span>{{ completedLabel() }}</span>
         </div>
       }
@@ -27,7 +27,7 @@
     <div class="stage-actions">
       <div class="stage-main-action">
       <p-button
-        label="Запустить extra"
+        [label]="'extraStage.runButton' | t"
         icon="app-icon app-icon--bolt"
         size="small"
         [fluid]="true"
@@ -41,7 +41,7 @@
         [rounded]="true"
         [outlined]="true"
         severity="secondary"
-        [attr.aria-label]="'Подробнее'"
+        [attr.aria-label]="'app.more' | t"
         (onClick)="openDetails.emit()"
       />
     </div>

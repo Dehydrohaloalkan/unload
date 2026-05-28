@@ -1,0 +1,141 @@
+/**
+ * Единая точка правды для всех UI-строк фронта. Если нужно поменять текст —
+ * правится здесь, а не в шаблонах/коде компонентов. Ключи плоские, в формате
+ * dot.notation, чтобы можно было быстро найти место использования.
+ */
+export const RU = {
+  'app.title': 'Панель выгрузки',
+  'app.adminMode': 'Admin mode',
+  'app.adminModeOn': 'Admin mode: ON',
+  'app.more': 'Подробнее',
+
+  'app.loading.title': 'Загружаю состояние API',
+  'app.loading.subtitle': 'Каталог, активный run, preset-гейт и live-канал.',
+
+  'app.drawer.runTitle': 'Детали этапа 3 (выгрузка)',
+  'app.drawer.presetTitle': 'Детали этапа 2 (пресет)',
+  'app.drawer.extraTitle': 'Детали этапа 4 (extra)',
+
+  'app.admin.dialogHeader': 'Вход в admin mode',
+  'app.admin.passwordLabel': 'Пароль (4 цифры HHmm)',
+  'app.admin.submit': 'Войти',
+  'app.admin.wrongPassword': 'Неверный пароль.',
+
+  'dayWindow.waiting': 'Ожидание данных дневного окна.',
+  'dayWindow.active': 'Дневное окно активно: preset выполнен, этапы 2-4 доступны.',
+  'dayWindow.readyForPreset': 'Проба успешна: можно запускать preset.',
+  'dayWindow.polling': 'Идет проверка проб.',
+  'dayWindow.notStarted': 'Ожидается начало дневного окна.',
+  'dayWindow.default': 'Ожидание дневного окна.',
+
+  'errors.unexpected': 'Произошла непредвиденная ошибка. Обновите страницу и повторите действие.',
+  'errors.bootstrapFailed': 'Не удалось загрузить состояние приложения.',
+  'errors.extraFailed': 'Не удалось запустить extra-задачу.',
+  'errors.presetFailed': 'Не удалось запустить preset-задачу.',
+  'errors.runStartFailed': 'Не удалось запустить run.',
+  'errors.runStopFailed': 'Не удалось отправить запрос на остановку.',
+  'errors.requeueFailed': 'Не удалось отправить выбранное в шлюз.',
+  'errors.activeRunConflict': 'Уже выполняется другой run. Переключаюсь в режим наблюдения.',
+
+  'downloadHint.started': 'Скачивание началось. Загрузка начнется через пару секунд.',
+  'downloadHint.close': 'Закрыть',
+
+  'liveClock.title': '1. Сервер',
+  'liveClock.tooltipConnected': 'Подключение к серверу активно.',
+  'liveClock.tooltipOffline': 'Нет подключения к серверу.',
+
+  'preset.title': '2. Пресет',
+  'preset.done': 'Выполнено',
+  'preset.running': 'Выполняется...',
+  'preset.runButton': 'Выполнить пресет',
+  'preset.confirmRerun': 'Пресет уже выполнялся. Точно запустить повторно?',
+
+  'runStage.title': '3. Выгрузка',
+  'runStage.runButton': 'Запустить выгрузку',
+  'runStage.done': 'Выполнено',
+
+  'extraStage.title': '4. Extra',
+  'extraStage.runButton': 'Запустить extra',
+  'extraStage.done': 'Выполнено',
+
+  'confirm.header': 'Подтверждение',
+  'confirm.runPrompt': 'Точно запустить выгрузку?',
+  'confirm.accept': 'Запустить',
+  'confirm.reject': 'Отмена',
+
+  'details.tabs.run': 'Запуск',
+  'details.tabs.history': 'История',
+
+  'details.task.sectionScripts': 'Скрипты и статусы',
+  'details.task.status': 'Статус',
+  'details.task.statusRunning': 'Выполняется',
+  'details.task.statusCompleted': 'Завершено',
+  'details.task.start': 'Старт',
+  'details.task.finish': 'Финиш',
+  'details.task.scripts': 'Скриптов',
+  'details.task.files': 'Файлов',
+  'details.task.executingPreset': 'Идет выполнение preset-скриптов.',
+  'details.task.executingExtra': 'Идет выполнение extra-скриптов.',
+  'details.task.historyPreset': 'История пресета за сегодня',
+  'details.task.historyExtra': 'История extra за сегодня',
+  'details.task.resultFiles': 'Файлы результата',
+  'details.task.downloadArchive': 'Скачать архив результата (.zip)',
+  'details.task.emptyHistoryPreset': 'Скрипты этапа 2 пока не запускались.',
+  'details.task.emptyHistoryExtra': 'Скрипты этапа 4 пока не запускались.',
+  'details.task.emptyRecentPreset': 'Файлы для этого запуска не найдены.',
+  'details.task.emptyRecentExtra': 'Файлы для этой выгрузки не найдены.',
+  'details.task.noRunsToday': 'Сегодня запусков пока не было.',
+
+  'activeRun.sectionTitle': 'Активная выгрузка',
+  'activeRun.correlation': 'Correlation',
+  'activeRun.status': 'Статус',
+  'activeRun.step': 'Шаг',
+  'activeRun.noMemberDetails': 'Деталей по мемберам пока нет.',
+  'activeRun.workers': 'Скрипты / worker',
+  'activeRun.files': 'Файлы выгрузки',
+  'activeRun.noFilesForMember': 'Файлы для мембера пока не найдены.',
+  'activeRun.gatewayInline': '· Шлюз:',
+  'activeRun.gatewaySent': 'Шлюз: отправлено',
+  'activeRun.gatewayPending': 'Шлюз: не отправлено',
+  'activeRun.gatewayUnknown': 'Шлюз: н/д',
+  'activeRun.publishing': 'Публикация в шлюз',
+  'activeRun.stop': 'Остановить выгрузку',
+  'activeRun.noActive': 'Активной выгрузки сейчас нет.',
+
+  'memberSelection.sectionTitle': 'Мемберы для выгрузки',
+  'memberSelection.publishToGateway': 'Отправлять в шлюз',
+  'memberSelection.selectAll': 'Выбрать все',
+  'memberSelection.metaCode': 'Код',
+  'memberSelection.metaExtension': 'Расширение',
+  'memberSelection.metaLastUploadToday': 'Последняя выгрузка сегодня',
+  'memberSelection.runSelected': 'Выгрузить выбранное',
+
+  'history.sectionTitle': 'Повторная отправка в шлюз',
+  'history.empty': 'История выгрузок пуста.',
+  'history.runLabel': 'Выгрузка',
+  'history.extraLabel': 'Доп. выгрузка',
+  'history.gatewayOn': 'Шлюз',
+  'history.gatewayOff': 'без шлюза',
+  'history.startedAt': 'Начало:',
+  'history.completedAt': 'Окончание:',
+  'history.emptyFiles': '0 файлов.',
+  'history.gatewaySent': 'Шлюз ✓',
+  'history.gatewayPending': 'Шлюз —',
+  'history.gatewaySentTitle': 'Отправлено в шлюз',
+  'history.gatewayPendingTitle': 'Не отправлено в шлюз',
+  'history.sendSelected': 'Отправить выбранные в шлюз',
+  'history.confirmMessage': 'Отправить выбранные результаты в шлюз?',
+  'history.confirmAccept': 'Отправить',
+  'history.requeueSummary':
+    'Шлюз: отправлено файлов {sent} из {total}, не отправлено {notSent} (requestId: {requestId})',
+
+  'runner.statusUpdated': 'Статус обновлен.',
+  'runner.readyToStart': 'Готов к запуску.',
+  'runner.steps.publishedToGateway': 'Опубликован в шлюз',
+
+  'files.one': 'файл',
+  'files.few': 'файла',
+  'files.many': 'файлов',
+} as const;
+
+export type I18nKey = keyof typeof RU;

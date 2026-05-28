@@ -1,5 +1,5 @@
 <div class="details-section">
-  <div class="details-section__title">Мемберы для выгрузки</div>
+  <div class="details-section__title">{{ 'memberSelection.sectionTitle' | t }}</div>
 
   <label class="details-check-row">
     <p-checkbox
@@ -7,7 +7,7 @@
       [ngModel]="store.publishRunToGateway()"
       (onChange)="setPublishToGateway($event.checked)"
     />
-    <span>Отправлять в шлюз</span>
+    <span>{{ 'memberSelection.publishToGateway' | t }}</span>
   </label>
 
   <label class="details-check-row">
@@ -17,7 +17,7 @@
       [indeterminate]="allMembersPartial()"
       (onChange)="toggleAll($event.checked)"
     />
-    <span>Выбрать все</span>
+    <span>{{ 'memberSelection.selectAll' | t }}</span>
   </label>
 
   @for (group of store.memberGroups(); track group.id) {
@@ -57,18 +57,20 @@
             @if (selectedMemberKey() === member.key) {
               <div class="member-card__details">
                 <div class="member-card__meta">
-                  <span class="member-card__meta-label">Код</span>
+                  <span class="member-card__meta-label">{{ 'memberSelection.metaCode' | t }}</span>
                   <span class="member-card__meta-value">{{ member.memberCode }}</span>
                 </div>
                 <div class="member-card__meta">
-                  <span class="member-card__meta-label">Расширение</span>
+                  <span class="member-card__meta-label">{{ 'memberSelection.metaExtension' | t }}</span>
                   <span class="member-card__meta-value">{{
                     member.memberFileExtension || '—'
                   }}</span>
                 </div>
                 @if (memberLastUploadToday(member); as lastUpload) {
                   <div class="member-card__meta">
-                    <span class="member-card__meta-label">Последняя выгрузка сегодня</span>
+                    <span class="member-card__meta-label">{{
+                      'memberSelection.metaLastUploadToday' | t
+                    }}</span>
                     <span class="member-card__meta-value">{{ formatTimestamp(lastUpload) }}</span>
                   </div>
                 }
@@ -86,7 +88,7 @@
   }
 
   <p-button
-    label="Выгрузить выбранное"
+    [label]="'memberSelection.runSelected' | t"
     icon="app-icon app-icon--play"
     [fluid]="true"
     [disabled]="!store.canStartRun()"

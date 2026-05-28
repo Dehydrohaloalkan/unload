@@ -5,11 +5,12 @@ import { Card } from 'primeng/card';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { ConfirmationService } from 'primeng/api';
 import { PresetGateState, TaskUiState } from '../app.models';
+import { TPipe, t } from '../i18n/i18n';
 
 @Component({
   selector: 'app-preset-stage',
   standalone: true,
-  imports: [CommonModule, Button, Card, ProgressSpinner],
+  imports: [CommonModule, Button, Card, ProgressSpinner, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preset-stage.component.html',
   styleUrl: './preset-stage.component.css',
@@ -44,10 +45,10 @@ export class PresetStageComponent {
   onStartClick(): void {
     if (this.completedAt()) {
       this.confirmationService.confirm({
-        message: 'Пресет уже выполнялся. Точно запустить повторно?',
-        header: 'Подтверждение',
-        acceptLabel: 'Запустить',
-        rejectLabel: 'Отмена',
+        message: t('preset.confirmRerun'),
+        header: t('confirm.header'),
+        acceptLabel: t('confirm.accept'),
+        rejectLabel: t('confirm.reject'),
         accept: () => this.startPreset.emit(),
       });
       return;

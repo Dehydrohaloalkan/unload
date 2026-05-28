@@ -12,7 +12,7 @@
     type="button"
     class="download-toast__close"
     (click)="close()"
-    aria-label="Закрыть"
+    [attr.aria-label]="'downloadHint.close' | t"
     [disabled]="!msg"
   >
     ×

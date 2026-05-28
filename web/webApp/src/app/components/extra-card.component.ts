@@ -4,11 +4,12 @@ import { ConfirmationService } from 'primeng/api';
 import { Button } from 'primeng/button';
 import { Card } from 'primeng/card';
 import { TaskUiState } from '../app.models';
+import { TPipe, t } from '../i18n/i18n';
 
 @Component({
   selector: 'app-extra-card',
   standalone: true,
-  imports: [CommonModule, Button, Card],
+  imports: [CommonModule, Button, Card, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './extra-card.component.html',
   styleUrl: './extra-card.component.css',
@@ -36,10 +37,10 @@ export class ExtraCardComponent {
     }
 
     this.confirmationService.confirm({
-      message: 'Точно запустить выгрузку?',
-      header: 'Подтверждение',
-      acceptLabel: 'Запустить',
-      rejectLabel: 'Отмена',
+      message: t('confirm.runPrompt'),
+      header: t('confirm.header'),
+      acceptLabel: t('confirm.accept'),
+      rejectLabel: t('confirm.reject'),
       accept: () => this.start.emit(),
     });
   }

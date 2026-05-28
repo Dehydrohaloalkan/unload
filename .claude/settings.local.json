@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Run.Application\\\\Models\\\\RunStatusModels.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Run.Application\\\\Abstractions\\\\IRunStateStore.cs\" -Force)",
+      "Bash(git worktree *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Workflow\" -Filter \"*.cs\")",
+      "Bash(Select-Object FullName)",
+      "Bash(git *)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\\\\Services\\\\ScriptTasks\\\\ExtraScriptExecutor.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\\\\Services\\\\ScriptTasks\\\\ExtraOutputWriter.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\\\\Abstractions\\\\IExtraScriptExecutor.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\\\\Abstractions\\\\IExtraOutputWriter.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\\\\Models\\\\ExtraScriptExecutionResult.cs\" -Force)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.ScriptTasks\" | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Tasks\" | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Services\" | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\console\" | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName)",
+      "PowerShell(New-Item *)",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\UseCases\\\\RequeueToGatewayUseCase.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\UseCases\\\\StartRunUseCase.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\UseCases\\\\RunPresetUseCase.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\UseCases\\\\RunExtraUseCase.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\UseCases\\\\GetServerTimeUseCase.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Services\\\\WorkflowInMemoryStateRestorer.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Services\\\\WorkflowStateRestoreHostedService.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Services\\\\RunProcessingBackgroundService.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Services\\\\PresetGateBackgroundService.cs\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\alexb\\\\OneDrive\\\\Рабочий стол\\\\unload\\\\backend\\\\Unload.Api\\\\Abstractions\\\\IWorkflowInMemoryStateRestorer.cs\")",
+      "PowerShell(dotnet build *)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('postman/unload-api.postman_collection.json',encoding='utf-8'\\)\\); print\\('valid JSON, items:', len\\(d.get\\('item',[]\\)\\)\\)\")"
+    ]
+  }
+}

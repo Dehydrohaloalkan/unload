@@ -9,6 +9,7 @@ import { Message } from 'primeng/message';
 import { ProgressSpinner } from 'primeng/progressspinner';
 import { AppErrorStore } from './app.error-store';
 import { WorkflowStore } from './app.store';
+import { TPipe, t } from './i18n/i18n';
 import { byDescDate } from './state/utils/compare.util';
 import { DetailsRunPanelComponent } from './components/details-run-panel/details-run-panel.component';
 import { DetailsTaskPanelComponent } from './components/details-task-panel.component';
@@ -30,6 +31,7 @@ import { RunCardComponent } from './components/run-card.component';
     InputText,
     Message,
     ProgressSpinner,
+    TPipe,
     DetailsRunPanelComponent,
     DetailsTaskPanelComponent,
     DownloadHintToastComponent,
@@ -74,18 +76,18 @@ export class App {
   readonly dayWindowSummary = computed(() => {
     const preset = this.store.presetState();
     if (!preset) {
-      return 'Ожидание данных дневного окна.';
+      return t('dayWindow.waiting');
     }
     if (preset.presetCompleted) {
-      return 'Дневное окно активно: preset выполнен, этапы 2-4 доступны.';
+      return t('dayWindow.active');
     }
     if (preset.readyForPreset) {
-      return 'Проба успешна: можно запускать preset.';
+      return t('dayWindow.readyForPreset');
     }
     if (preset.pollingStarted) {
-      return 'Идет проверка проб.';
+      return t('dayWindow.polling');
     }
-    return 'Ожидается начало дневного окна.';
+    return t('dayWindow.notStarted');
   });
 
   toggleAdminMode(): void {
@@ -106,7 +108,7 @@ export class App {
     const now = new Date();
     const expected = `${pad2(now.getHours())}${pad2(now.getMinutes())}`;
     if (this.adminPassword() !== expected) {
-      this.adminError.set('Неверный пароль.');
+      this.adminError.set(t('app.admin.wrongPassword'));
       return;
     }
 

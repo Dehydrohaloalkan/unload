@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TabsModule } from 'primeng/tabs';
+import { TPipe } from '../../i18n/i18n';
 import { ActiveRunViewComponent } from './active-run-view.component';
 import { MemberSelectionListComponent } from './member-selection-list.component';
 import { RunHistoryListComponent } from './run-history-list.component';
@@ -9,6 +10,7 @@ import { RunHistoryListComponent } from './run-history-list.component';
   standalone: true,
   imports: [
     TabsModule,
+    TPipe,
     MemberSelectionListComponent,
     ActiveRunViewComponent,
     RunHistoryListComponent,

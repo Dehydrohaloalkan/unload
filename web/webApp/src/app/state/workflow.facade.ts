@@ -1,6 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { RequeueItem } from '../app.models';
+import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
 import { CatalogStore } from './catalog.store';
@@ -227,9 +228,7 @@ export class WorkflowStore {
 
       this.ready.set(true);
     } catch (error) {
-      this.errorStore.setError(
-        toErrorMessage(error, 'Не удалось загрузить состояние приложения.'),
-      );
+      this.errorStore.setError(toErrorMessage(error, t('errors.bootstrapFailed')));
     } finally {
       this.loading.set(false);
     }

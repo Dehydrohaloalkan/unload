@@ -1,12 +1,12 @@
 <p-card
   [styleClass]="connected() ? 'clock-card clock-card--online' : 'clock-card clock-card--offline'"
-  [pTooltip]="connected() ? 'Подключение к серверу активно.' : 'Нет подключения к серверу.'"
+  [pTooltip]="connected() ? ('liveClock.tooltipConnected' | t) : ('liveClock.tooltipOffline' | t)"
   tooltipPosition="top"
 >
   <ng-template #header>
     <div class="clock-head">
       <div>
-        <h2 class="clock-title">1. Сервер</h2>
+        <h2 class="clock-title">{{ 'liveClock.title' | t }}</h2>
       </div>
       <div class="clock-status">
         @if (completedAt()) {

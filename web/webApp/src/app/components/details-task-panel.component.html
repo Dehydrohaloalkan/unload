@@ -1,32 +1,31 @@
 <div class="details-section">
-  <div class="details-section__title">Скрипты и статусы</div>
+  <div class="details-section__title">{{ 'details.task.sectionScripts' | t }}</div>
   @if (task().running) {
     <div class="details-item">
       <div class="details-item__row">
-        <span class="details-item__label">Статус</span>
-        <span class="details-item__value">Выполняется</span>
+        <span class="details-item__label">{{ 'details.task.status' | t }}</span>
+        <span class="details-item__value">{{ 'details.task.statusRunning' | t }}</span>
       </div>
       <div class="details-item__row">
-        <span class="details-item__label">Старт</span>
+        <span class="details-item__label">{{ 'details.task.start' | t }}</span>
         <span class="details-item__value">{{ formatTimestamp(task().startedAt!) }}</span>
       </div>
       <div class="details-item__message">
-        Идет выполнение
-        {{ kind() === 'preset' ? 'preset' : 'extra' }}-скриптов.
+        {{ kind() === 'preset' ? ('details.task.executingPreset' | t) : ('details.task.executingExtra' | t) }}
       </div>
     </div>
   } @else if (task().result; as result) {
     <div class="details-item">
       <div class="details-item__row">
-        <span class="details-item__label">Статус</span>
-        <span class="details-item__value">Завершено</span>
+        <span class="details-item__label">{{ 'details.task.status' | t }}</span>
+        <span class="details-item__value">{{ 'details.task.statusCompleted' | t }}</span>
       </div>
       <div class="details-item__row">
-        <span class="details-item__label">Скриптов</span>
+        <span class="details-item__label">{{ 'details.task.scripts' | t }}</span>
         <span class="details-item__value">{{ result.scriptsExecuted }}</span>
       </div>
       <div class="details-item__row">
-        <span class="details-item__label">Файлов</span>
+        <span class="details-item__label">{{ 'details.task.files' | t }}</span>
         <span class="details-item__value">{{ result.filesWritten }}</span>
       </div>
       @if (result.message) {
@@ -40,7 +39,7 @@
 
 <div class="details-section">
   <div class="details-section__title">
-    История {{ kind() === 'preset' ? 'пресета' : 'extra' }} за сегодня
+    {{ kind() === 'preset' ? ('details.task.historyPreset' | t) : ('details.task.historyExtra' | t) }}
   </div>
   @if (records().length === 0) {
     <div class="details-empty">{{ copy().noRunsToday }}</div>
@@ -53,19 +52,19 @@
         </summary>
         <div class="history-run__body">
           <div class="details-item__row">
-            <span class="details-item__label">Старт</span>
+            <span class="details-item__label">{{ 'details.task.start' | t }}</span>
             <span class="details-item__value">{{ formatTimestamp(record.startedAt) }}</span>
           </div>
           <div class="details-item__row">
-            <span class="details-item__label">Финиш</span>
+            <span class="details-item__label">{{ 'details.task.finish' | t }}</span>
             <span class="details-item__value">{{ formatTimestamp(record.completedAt) }}</span>
           </div>
           <div class="details-item__row">
-            <span class="details-item__label">Скриптов</span>
+            <span class="details-item__label">{{ 'details.task.scripts' | t }}</span>
             <span class="details-item__value">{{ record.scriptsExecuted ?? '-' }}</span>
           </div>
           <div class="details-item__row">
-            <span class="details-item__label">Файлов</span>
+            <span class="details-item__label">{{ 'details.task.files' | t }}</span>
             <span class="details-item__value">{{ record.filesWritten ?? '-' }}</span>
           </div>
           @if (record.message) {
@@ -73,7 +72,7 @@
           }
 
           <div class="history-files">
-            <div class="history-files__title">Файлы результата</div>
+            <div class="history-files__title">{{ 'details.task.resultFiles' | t }}</div>
             @if (recordFiles(record).length === 0) {
               <div class="details-empty">{{ copy().emptyRecentRun }}</div>
             } @else {
@@ -96,7 +95,7 @@
               [attr.download]="archiveDownloadName(record)"
               (click)="onDownloadClick()"
             >
-              Скачать архив результата (.zip)
+              {{ 'details.task.downloadArchive' | t }}
             </a>
           }
         </div>

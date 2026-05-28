@@ -5,6 +5,7 @@ import { Button } from 'primeng/button';
 import { Checkbox } from 'primeng/checkbox';
 import { MemberGroupViewModel, MemberViewModel } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
+import { TPipe } from '../../i18n/i18n';
 import { byDescDate } from '../../state/utils/compare.util';
 import { resolveMemberCardBorderClass } from '../../state/utils/member-card-style.util';
 import { memberKey } from '../../state/utils/member-index.util';
@@ -13,7 +14,7 @@ import { formatTimestamp, isTodayDate } from '../../state/utils/time.util';
 @Component({
   selector: 'app-member-selection-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button],
+  imports: [CommonModule, FormsModule, Checkbox, Button, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './member-selection-list.component.html',
   styleUrls: ['./details-shared.css', './member-selection-list.component.css'],

@@ -13,6 +13,7 @@ import {
 } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
+import { TPipe, t } from '../../i18n/i18n';
 import {
   resolveMemberStatusLabel,
   resolveRunStatusLabel,
@@ -29,7 +30,7 @@ import { isTerminalRunStatus } from '../../state/utils/run-status.util';
 @Component({
   selector: 'app-active-run-view',
   standalone: true,
-  imports: [CommonModule, Button],
+  imports: [CommonModule, Button, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './active-run-view.component.html',
   styleUrls: ['./details-shared.css', './active-run-view.component.css'],
@@ -105,7 +106,7 @@ export class ActiveRunViewComponent {
       return member.status === MemberRunLifecycleStatus.Failed ||
         member.status === MemberRunLifecycleStatus.Cancelled
         ? resolveMemberStatusLabel(member.status)
-        : 'Публикация в шлюз';
+        : t('activeRun.publishing');
     }
 
     return resolveMemberStatusLabel(member.status);

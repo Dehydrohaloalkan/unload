@@ -1,5 +1,6 @@
 import { Injectable, isDevMode, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { t } from './i18n/i18n';
 
 @Injectable({ providedIn: 'root' })
 export class AppErrorStore {
@@ -29,7 +30,7 @@ export class AppErrorStore {
       return error.message;
     }
 
-    return 'Произошла непредвиденная ошибка. Обновите страницу и повторите действие.';
+    return t('errors.unexpected');
   }
 }
 

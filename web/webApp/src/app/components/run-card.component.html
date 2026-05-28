@@ -2,11 +2,11 @@
   <ng-template #header>
     <div class="stage-head">
       <div>
-        <h2 class="stage-title">3. Выгрузка</h2>
+        <h2 class="stage-title">{{ 'runStage.title' | t }}</h2>
       </div>
       @if (lastCompletedAt()) {
         <div class="stage-completed">
-          Выполнено<br />
+          {{ 'runStage.done' | t }}<br />
           <span>{{ formatMoment(lastCompletedAt()!) }}</span>
         </div>
       }
@@ -27,7 +27,7 @@
     <div class="stage-actions">
       <div class="stage-main-action">
       <p-button
-        label="Запустить выгрузку"
+        [label]="'runStage.runButton' | t"
         icon="app-icon app-icon--play"
         size="small"
         [fluid]="true"
@@ -42,7 +42,7 @@
         [rounded]="true"
         [outlined]="true"
         severity="secondary"
-        [attr.aria-label]="'Подробнее'"
+        [attr.aria-label]="'app.more' | t"
         (onClick)="openDetails.emit()"
       />
     </div>

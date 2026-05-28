@@ -11,6 +11,7 @@ import {
   RunOutputArtifactInfo,
   RunStatusInfo,
 } from '../../app.models';
+import { t } from '../../i18n/i18n';
 import { sortCodes, sortNames } from './sort.util';
 
 const MEMBER_LOG_LIMIT = 6;
@@ -160,7 +161,7 @@ function resolveMemberStatus(
   return {
     status: MemberRunLifecycleStatus.Pending,
     lastStep: null,
-    message: 'Готов к запуску.',
+    message: t('runner.readyToStart'),
     updatedAt: null,
   };
 }
@@ -177,7 +178,7 @@ function buildMemberLogs(
         {
           time: member.updatedAt,
           step: member.lastStep ?? RunnerStep.RequestAccepted,
-          message: member.message ?? 'Статус обновлен.',
+          message: member.message ?? t('runner.statusUpdated'),
         },
       ]);
     }
