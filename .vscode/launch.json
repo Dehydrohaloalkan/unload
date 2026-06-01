@@ -49,6 +49,35 @@
             }
         },
         {
+            "name": "FTP Server (Unload.FtpServer)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "ftp:build",
+            "program": "${workspaceFolder}/console/Unload.FtpServer/bin/Debug/net10.0/Unload.FtpServer.dll",
+            "args": [
+                "--port",
+                "21",
+                "--root",
+                "${workspaceFolder}/ftp-root"
+            ],
+            "cwd": "${workspaceFolder}/console/Unload.FtpServer",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "FTP Handler (Unload.GatewayHandler)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "handler:build",
+            "program": "${workspaceFolder}/console/Unload.GatewayHandler/bin/Debug/net10.0/Unload.GatewayHandler.dll",
+            "args": [
+                "${workspaceFolder}/ftp-root"
+            ],
+            "cwd": "${workspaceFolder}/console/Unload.GatewayHandler",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Web: Debug (Edge)",
             "type": "pwa-msedge",
             "request": "launch",
@@ -62,6 +91,16 @@
         {
             "name": "Full stack: Debug (API + Web)",
             "configurations": [
+                "API: Debug (Unload.Api)",
+                "Web: Debug (Edge)"
+            ],
+            "stopAll": true
+        },
+        {
+            "name": "Run All (FTP Server + Handler + API + Web)",
+            "configurations": [
+                "FTP Server (Unload.FtpServer)",
+                "FTP Handler (Unload.GatewayHandler)",
                 "API: Debug (Unload.Api)",
                 "Web: Debug (Edge)"
             ],
