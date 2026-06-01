@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   CatalogInfo,
+  ExtraBankInfo,
   MemberCatalogItem,
   OutputFileInfo,
   PresetGateState,
@@ -131,11 +132,23 @@ export class ApiClientService {
     );
   }
 
-  runExtra(adminOverride: boolean, publishToGateway: boolean): Promise<ScriptTaskRunResult> {
+  async fetchExtraBanks(): Promise<ExtraBankInfo[]> {
+    const banks = await firstValueFrom(
+      this.http.get<ExtraBankInfo[]>(this.url('/api/runs/extra/banks')),
+    );
+    return banks ?? [];
+  }
+
+  runExtra(
+    adminOverride: boolean,
+    publishToGateway: boolean,
+    selectedBanks: string[] | null,
+  ): Promise<ScriptTaskRunResult> {
     return firstValueFrom(
       this.http.post<ScriptTaskRunResult>(this.url('/api/runs/extra'), {
         adminOverride,
         publishToGateway,
+        selectedBanks,
       }),
     );
   }

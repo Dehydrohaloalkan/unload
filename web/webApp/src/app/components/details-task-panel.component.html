@@ -1,3 +1,36 @@
+@if (isExtra()) {
+  <div class="details-section">
+    <div class="details-section__title">{{ 'details.task.sectionBanks' | t }}</div>
+    @if (banksLoading()) {
+      <div class="details-empty">{{ 'details.task.banksLoading' | t }}</div>
+    } @else if (banks().length === 0) {
+      <div class="details-empty">{{ 'details.task.banksEmpty' | t }}</div>
+    } @else {
+      <div class="details-item__message">
+        {{ allBanksSelected() ? ('details.task.banksAllSelected' | t) : ('details.task.banksSubset' | t) }}
+      </div>
+      <div class="bank-list">
+        @for (bank of banks(); track bank.nrBank) {
+          <label class="bank-item">
+            <p-checkbox
+              binary="true"
+              [ngModel]="isBankSelected(bank.nrBank)"
+              (onChange)="toggleBank(bank.nrBank, $event.checked)"
+            />
+            <span class="bank-item__name">{{ bank.bankName }}</span>
+            <span class="bank-item__code">{{ bank.nrBank }}</span>
+          </label>
+        }
+      </div>
+      @if (!allBanksSelected()) {
+        <button type="button" class="bank-reset" (click)="selectAllBanks()">
+          {{ 'details.task.banksSelectAll' | t }}
+        </button>
+      }
+    }
+  </div>
+}
+
 <div class="details-section">
   <div class="details-section__title">{{ 'details.task.sectionScripts' | t }}</div>
   @if (task().running) {

@@ -10,7 +10,7 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Регистрирует <see cref="ExtraUnloadOptions"/>, <see cref="ExtraScriptExecutor"/>,
-    /// <see cref="ExtraOutputWriter"/> и <see cref="ExtraUnloadTask"/>.
+    /// <see cref="ExtraOutputWriter"/>, <see cref="ExtraBanksService"/> и <see cref="ExtraUnloadTask"/>.
     /// </summary>
     public static IServiceCollection AddUnloadExtraUnload(
         this IServiceCollection services,
@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new ExtraUnloadOptions(scriptsDirectory, outputDirectory));
         services.AddSingleton<ExtraScriptExecutor>();
         services.AddSingleton<ExtraOutputWriter>();
+        services.AddSingleton<ExtraBanksService>();
         services.AddSingleton<ExtraUnloadTask>();
         services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<ExtraUnloadTask>());
         return services;

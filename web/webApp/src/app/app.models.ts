@@ -228,6 +228,11 @@ export interface OutputFileInfo {
   sizeBytes: number;
 }
 
+export interface ExtraBankInfo {
+  nrBank: string;
+  bankName: string;
+}
+
 export interface WorkflowDashboardSnapshotResponse {
   presetState: PresetGateState;
   hasRunToday: boolean;

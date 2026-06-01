@@ -52,4 +52,12 @@ public record MemberCatalogItem(
 /// Контракт запроса запуска задачи с опциональным admin override.
 /// </summary>
 /// <param name="AdminOverride">Признак обхода стандартных gate/dependency проверок.</param>
-public record AdminTaskRequest(bool AdminOverride = false, bool PublishToGateway = true);
+/// <param name="PublishToGateway">Публиковать ли результат в Gateway.</param>
+/// <param name="SelectedBanks">
+/// Выбранные банки для extra-выгрузки. Пусто/<c>null</c> — все банки (базовые скрипты);
+/// непустой набор — atomic-скрипты, отфильтрованные по этим банкам.
+/// </param>
+public record AdminTaskRequest(
+    bool AdminOverride = false,
+    bool PublishToGateway = true,
+    IReadOnlyCollection<string>? SelectedBanks = null);

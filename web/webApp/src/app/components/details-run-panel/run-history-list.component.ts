@@ -11,6 +11,7 @@ import { TPipe, t } from '../../i18n/i18n';
 import {
   HistoryFileRow,
   HistoryRunNode,
+  HistoryScriptNode,
   buildConfirmedSentPaths,
   buildHistoryNodes,
   summarizeRequeue,
@@ -55,6 +56,9 @@ export class RunHistoryListComponent {
 
   private readonly openHistoryRuns = signal(new Set<string>());
   private readonly openHistoryMembers = signal(new Set<string>());
+  // Раскрытие уровней extra: скрипт и банк (для дерева выгрузка → скрипт → банк → файлы).
+  private readonly openHistoryScripts = signal(new Set<string>());
+  private readonly openHistoryBanks = signal(new Set<string>());
 
   formatTimestamp = formatTimestamp;
   formatFileCount = formatFileCount;
@@ -118,6 +122,48 @@ export class RunHistoryListComponent {
       memberName,
       files: node.memberFiles[memberName] ?? [],
     }));
+  }
+
+  historyScripts(node: HistoryRunNode): HistoryScriptNode[] {
+    return node.scripts ?? [];
+  }
+
+  scriptKey(node: HistoryRunNode, script: HistoryScriptNode): string {
+    return `${node.key}|script|${script.scriptCode.toLowerCase()}`;
+  }
+
+  bankKey(node: HistoryRunNode, script: HistoryScriptNode, bankName: string): string {
+    return `${node.key}|script|${script.scriptCode.toLowerCase()}|bank|${bankName.toLowerCase()}`;
+  }
+
+  isHistoryScriptOpen(key: string): boolean {
+    return this.openHistoryScripts().has(key);
+  }
+
+  onHistoryScriptToggle(event: Event, scriptKey: string): void {
+    const opened = (event.target as HTMLDetailsElement).open;
+    const scripts = new Set(this.openHistoryScripts());
+    if (opened) {
+      scripts.add(scriptKey);
+    } else {
+      scripts.delete(scriptKey);
+    }
+    this.openHistoryScripts.set(scripts);
+  }
+
+  isHistoryBankOpen(key: string): boolean {
+    return this.openHistoryBanks().has(key);
+  }
+
+  onHistoryBankToggle(event: Event, bankKey: string): void {
+    const opened = (event.target as HTMLDetailsElement).open;
+    const banks = new Set(this.openHistoryBanks());
+    if (opened) {
+      banks.add(bankKey);
+    } else {
+      banks.delete(bankKey);
+    }
+    this.openHistoryBanks.set(banks);
   }
 
   buildDownloadUrl(path: string): string {

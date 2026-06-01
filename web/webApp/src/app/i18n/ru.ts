@@ -85,6 +85,12 @@ export const RU = {
   'details.task.emptyRecentPreset': 'Файлы для этого запуска не найдены.',
   'details.task.emptyRecentExtra': 'Файлы для этой выгрузки не найдены.',
   'details.task.noRunsToday': 'Сегодня запусков пока не было.',
+  'details.task.sectionBanks': 'Банки для выгрузки',
+  'details.task.banksLoading': 'Загрузка списка банков…',
+  'details.task.banksEmpty': 'Список банков пуст.',
+  'details.task.banksAllSelected': 'Выбраны все банки — будут выполнены базовые скрипты.',
+  'details.task.banksSubset': 'Выбрано подмножество банков — будут выполнены atomic-скрипты с фильтром.',
+  'details.task.banksSelectAll': 'Выбрать все банки',
 
   'activeRun.sectionTitle': 'Активная выгрузка',
   'activeRun.correlation': 'Correlation',

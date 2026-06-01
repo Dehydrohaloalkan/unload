@@ -63,6 +63,8 @@ export class WorkflowStore {
   readonly presetTask = this.presetStore.presetTask;
   readonly extraTask = this.extraStore.extraTask;
   readonly publishExtraToGateway = this.extraStore.publishExtraToGateway;
+  readonly extraBanks = this.extraStore.banks;
+  readonly extraBanksLoading = this.extraStore.banksLoading;
 
   readonly activeRun = this.runStore.activeRun;
   readonly trackedCorrelationId = this.runStore.trackedCorrelationId;
@@ -160,6 +162,26 @@ export class WorkflowStore {
 
   setPublishExtraToGateway(enabled: boolean): void {
     this.extraStore.setPublishExtraToGateway(enabled);
+  }
+
+  loadExtraBanksAsync(force = false): Promise<void> {
+    return this.extraStore.loadBanksAsync(force);
+  }
+
+  isExtraBankSelected(code: string): boolean {
+    return this.extraStore.isBankSelected(code);
+  }
+
+  allExtraBanksSelected(): boolean {
+    return this.extraStore.allBanksSelected();
+  }
+
+  toggleExtraBank(code: string, selected: boolean): void {
+    this.extraStore.toggleBank(code, selected);
+  }
+
+  selectAllExtraBanks(): void {
+    this.extraStore.selectAllBanks();
   }
 
   setAdminMode(enabled: boolean): void {

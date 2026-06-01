@@ -107,3 +107,47 @@
   margin-top: 0.15rem;
   font-weight: 600;
 }
+
+.bank-list {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.bank-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.6rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.bank-item__name {
+  flex: 1;
+  font-size: 0.84rem;
+  color: #0f172a;
+}
+
+.bank-item__code {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-reset {
+  justify-self: start;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.1rem 0;
+}
+
+.bank-reset:hover {
+  text-decoration: underline;
+}

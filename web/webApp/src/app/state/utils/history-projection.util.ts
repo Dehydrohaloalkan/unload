@@ -21,6 +21,20 @@ export interface HistoryFileRow {
   filePath: string;
   occurredAt: string;
   sentToGateway: boolean;
+  // Заполняются для extra: код скрипта (он же MemberName партии шлюза) и читаемый банк.
+  scriptCode?: string;
+  bankName?: string;
+}
+
+export interface HistoryBankNode {
+  bankName: string;
+  files: HistoryFileRow[];
+}
+
+export interface HistoryScriptNode {
+  scriptCode: string;
+  banks: HistoryBankNode[];
+  fileCount: number;
 }
 
 export interface HistoryRunNode {
@@ -34,6 +48,8 @@ export interface HistoryRunNode {
   publishToGateway: boolean;
   memberNames: string[];
   memberFiles: Record<string, HistoryFileRow[]>;
+  // Для extra — 3-уровневая структура: скрипт → банк → файлы.
+  scripts?: HistoryScriptNode[];
 }
 
 export interface HistoryProjectionInput {
@@ -82,16 +98,21 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
     );
     const extraIndex = buildRunMemberIndex(extraRun ?? null);
 
-    const memberMap = new Map<string, HistoryFileRow[]>();
+    // Группировка extra-файлов по скрипту и банку: путь вида
+    // .../output-files/<scriptCode>/<bank>/<file>. Партия шлюза — на скрипт (MemberName=scriptCode).
+    const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
     for (const file of files) {
-      const memberName = memberNameFromFile(file.fileName);
-      const batch = extraIndex.batches.get(memberKey(memberName));
-      const bucket = memberMap.get(memberName) ?? [];
+      const { scriptCode, bankName } = parseExtraFilePath(file.filePath, file.fileName);
+      const batch = extraIndex.batches.get(memberKey(scriptCode));
+      const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
+      const bucket = bankMap.get(bankName) ?? [];
       bucket.push({
         key: `extra|${correlationId}|${file.filePath}`,
         taskCode: 'extra',
         correlationId,
-        memberName,
+        memberName: scriptCode,
+        scriptCode,
+        bankName,
         fileName: file.fileName,
         filePath: file.filePath,
         occurredAt: file.modifiedAt || record.completedAt,
@@ -99,10 +120,23 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
           confirmedSentPaths.has(file.filePath) ||
           isFileSentViaBatch(file.filePath, batch?.sentFiles ?? null),
       });
-      memberMap.set(memberName, bucket);
+      bankMap.set(bankName, bucket);
+      scriptMap.set(scriptCode, bankMap);
     }
 
-    const memberFiles = Object.fromEntries(memberMap.entries());
+    const scripts: HistoryScriptNode[] = Array.from(scriptMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([scriptCode, bankMap]) => {
+        const banks: HistoryBankNode[] = Array.from(bankMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([bankName, bankFiles]) => ({ bankName, files: bankFiles }));
+        return {
+          scriptCode,
+          banks,
+          fileCount: banks.reduce((sum, bank) => sum + bank.files.length, 0),
+        };
+      });
+
     nodeMap.set(`extra|${correlationId}`, {
       key: `extra|${correlationId}`,
       taskCode: 'extra',
@@ -112,8 +146,9 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       completedAt: record.completedAt,
       occurredAt: record.completedAt,
       publishToGateway: false,
-      memberNames: sortNames([...knownMemberNames, ...Object.keys(memberFiles)]),
-      memberFiles,
+      memberNames: sortNames(knownMemberNames),
+      memberFiles: {},
+      scripts,
     });
   }
 
@@ -267,10 +302,22 @@ function collectRunMemberNames(run: RunStatusInfo, knownMemberNames: string[]): 
   return sortNames(names);
 }
 
-function memberNameFromFile(fileName: string): string {
-  if (!fileName) {
-    return 'UNKNOWN';
+/**
+ * Извлекает код скрипта и банк из относительного пути extra-файла
+ * (`.../output-files/<scriptCode>/<bank>/<file>`). Поддерживает оба разделителя путей.
+ */
+function parseExtraFilePath(
+  filePath: string,
+  fileName: string,
+): { scriptCode: string; bankName: string } {
+  const segments = (filePath ?? '').split(/[\\/]/).filter((segment) => segment.length > 0);
+  const anchor = segments.lastIndexOf('output-files');
+  if (anchor >= 0 && segments.length >= anchor + 3) {
+    return { scriptCode: segments[anchor + 1], bankName: segments[anchor + 2] };
   }
+
+  // Фолбэк для неожиданной структуры: имя файла без расширения как код скрипта.
   const dotIndex = fileName.lastIndexOf('.');
-  return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  const fallback = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName || 'UNKNOWN';
+  return { scriptCode: fallback, bankName: 'UNKNOWN' };
 }

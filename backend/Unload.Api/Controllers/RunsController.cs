@@ -5,6 +5,7 @@ using Unload.Api.Models;
 using Unload.Bootstrapper;
 using Unload.Store;
 using Unload.Tasks;
+using Unload.Tasks.ExtraUnload;
 using Unload.Tasks.MainUnload;
 
 namespace Unload.Api.Controllers;
@@ -21,6 +22,7 @@ public class RunsController(
     RunStateStore runStateStore,
     DailyWindowPolicy dailyWindowPolicy,
     WorkflowQueryService workflowQueryService,
+    ExtraBanksService extraBanksService,
     HistoryRetentionOptions historyRetentionOptions,
     IHubContext<RunStatusHub> hubContext,
     ILogger<RunsController> logger) : ControllerBase
@@ -31,6 +33,7 @@ public class RunsController(
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly WorkflowQueryService _workflowQueryService = workflowQueryService;
+    private readonly ExtraBanksService _extraBanksService = extraBanksService;
     private readonly HistoryRetentionOptions _historyRetentionOptions = historyRetentionOptions;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<RunsController> _logger = logger;
@@ -150,7 +153,18 @@ public class RunsController(
     }
 
     /// <summary>
-    /// Запускает доп-выгрузку скриптов из корня <c>scripts</c> (без подпапок).
+    /// Возвращает справочник банков (NrBank + читаемое имя) для выбора в настройках extra-выгрузки.
+    /// </summary>
+    [HttpGet("extra/banks")]
+    public async Task<IActionResult> GetExtraBanksAsync(CancellationToken cancellationToken)
+    {
+        var banks = await _extraBanksService.GetBanksAsync(cancellationToken);
+        return Ok(banks);
+    }
+
+    /// <summary>
+    /// Запускает доп-выгрузку скриптов из <c>scripts/extra</c> (или <c>scripts/extra/atomic</c>
+    /// при выборе подмножества банков).
     /// </summary>
     [HttpPost("extra")]
     public async Task<IActionResult> RunExtraAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
@@ -162,7 +176,8 @@ public class RunsController(
                 new TaskLaunchRequest(
                     TaskCode: TaskCodes.Extra,
                     AdminOverride: request?.AdminOverride == true,
-                    PublishToGateway: request?.PublishToGateway != false),
+                    PublishToGateway: request?.PublishToGateway != false,
+                    SelectedBanks: request?.SelectedBanks),
                 cancellationToken);
 
             _logger.LogInformation(

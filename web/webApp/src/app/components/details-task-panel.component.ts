@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { TaskRecord, TaskUiState } from '../app.models';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Checkbox } from 'primeng/checkbox';
+import { ExtraBankInfo, TaskRecord, TaskUiState } from '../app.models';
 import { WorkflowStore } from '../app.store';
 import { DownloadHintStore } from '../download-hint.store';
 import { TPipe, t } from '../i18n/i18n';
@@ -41,12 +43,12 @@ const COPY = buildCopy();
 @Component({
   selector: 'app-details-task-panel',
   standalone: true,
-  imports: [CommonModule, TPipe],
+  imports: [CommonModule, FormsModule, Checkbox, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './details-task-panel.component.html',
   styleUrl: './details-task-panel.component.css',
 })
-export class DetailsTaskPanelComponent {
+export class DetailsTaskPanelComponent implements OnInit {
   readonly kind = input.required<DetailsTaskKind>();
 
   private readonly store = inject(WorkflowStore);
@@ -56,6 +58,33 @@ export class DetailsTaskPanelComponent {
   readonly task = computed<TaskUiState>(() =>
     this.kind() === 'preset' ? this.store.presetTask() : this.store.extraTask(),
   );
+
+  readonly isExtra = computed<boolean>(() => this.kind() === 'extra');
+  readonly banks = computed<ExtraBankInfo[]>(() => this.store.extraBanks());
+  readonly banksLoading = computed<boolean>(() => this.store.extraBanksLoading());
+
+  ngOnInit(): void {
+    // Подгружаем справочник банков при открытии настроек extra (панель создаётся при открытии дровера).
+    if (this.isExtra()) {
+      void this.store.loadExtraBanksAsync();
+    }
+  }
+
+  isBankSelected(code: string): boolean {
+    return this.store.isExtraBankSelected(code);
+  }
+
+  allBanksSelected(): boolean {
+    return this.store.allExtraBanksSelected();
+  }
+
+  toggleBank(code: string, checked: boolean): void {
+    this.store.toggleExtraBank(code, checked);
+  }
+
+  selectAllBanks(): void {
+    this.store.selectAllExtraBanks();
+  }
 
   readonly records = computed<TaskRecord[]>(() => {
     const taskCode = this.kind();

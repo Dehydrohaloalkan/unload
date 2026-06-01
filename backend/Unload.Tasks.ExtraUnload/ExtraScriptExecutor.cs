@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
@@ -12,16 +11,22 @@ public class ExtraScriptExecutor(
     private readonly IDatabaseClientFactory _databaseClientFactory = databaseClientFactory;
     private readonly ILogger<ExtraScriptExecutor> _logger = logger;
 
+    /// <summary>
+    /// Выполняет один extra-скрипт и группирует строки <c>LineFile</c> по банку (<c>NrBank</c>).
+    /// </summary>
+    /// <param name="scriptCode">Код скрипта (имя файла без расширения).</param>
+    /// <param name="sql">Готовый SQL-текст (для atomic-скриптов плейсхолдер уже подставлен).</param>
+    /// <param name="correlationId">Идентификатор запуска для логирования.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
     public async Task<ExtraScriptExecutionResult> ExecuteAsync(
-        string scriptPath,
+        string scriptCode,
+        string sql,
         string correlationId,
-        ConcurrentDictionary<string, ConcurrentQueue<string>> aggregatedLines,
         CancellationToken cancellationToken)
     {
-        var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
         _logger.LogDebug("Extra script started. CorrelationId: {CorrelationId}, ScriptCode: {ScriptCode}", correlationId, scriptCode);
-        var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
 
+        var linesByBank = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var client = _databaseClientFactory.CreateClient();
         var records = 0;
         try
@@ -39,8 +44,13 @@ public class ExtraScriptExecutor(
                     ? string.Empty
                     : Convert.ToString(reader.GetValue(lineFileOrdinal)) ?? string.Empty;
 
-                var queue = aggregatedLines.GetOrAdd(nrBank, static _ => new ConcurrentQueue<string>());
-                queue.Enqueue(lineFile);
+                if (!linesByBank.TryGetValue(nrBank, out var bucket))
+                {
+                    bucket = [];
+                    linesByBank[nrBank] = bucket;
+                }
+
+                bucket.Add(lineFile);
                 records++;
             }
         }
@@ -50,12 +60,13 @@ public class ExtraScriptExecutor(
         }
 
         _logger.LogDebug(
-            "Extra script completed. CorrelationId: {CorrelationId}, ScriptCode: {ScriptCode}, Records: {Records}",
+            "Extra script completed. CorrelationId: {CorrelationId}, ScriptCode: {ScriptCode}, Records: {Records}, Banks: {Banks}",
             correlationId,
             scriptCode,
-            records);
+            records,
+            linesByBank.Count);
 
-        return new ExtraScriptExecutionResult(scriptCode, records);
+        return new ExtraScriptExecutionResult(scriptCode, linesByBank, records);
     }
 
     private static int ResolveOrdinal(DbDataReader reader, string columnName, int fallbackOrdinal)

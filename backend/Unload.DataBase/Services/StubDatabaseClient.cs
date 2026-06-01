@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Unload.Core;
 
 namespace Unload.DataBase;
@@ -20,6 +21,28 @@ public class StubDatabaseClient : IDatabaseClient
 
     /// <summary>Максимальная длина демонстрационного script-кода, выводимого из запроса.</summary>
     private const int ScriptCodeMaxLength = 24;
+
+    /// <summary>Количество синтетических строк на банк в extra-наборе.</summary>
+    private const int StubExtraRowsPerBank = 50;
+
+    /// <summary>Демонстрационный справочник банков (NrBank → читаемое имя).</summary>
+    private static readonly (string NrBank, string BankName)[] StubBanks =
+    [
+        ("B01", "Альфа-Банк"),
+        ("B02", "Бета-Банк"),
+        ("B03", "Гамма-Банк"),
+        ("B04", "Дельта-Банк"),
+        ("B05", "Эпсилон-Банк"),
+        ("B06", "Дзета-Банк"),
+    ];
+
+    private static readonly Regex InClauseQuotedValues = new(
+        @"IN\s*\((?<values>[^)]*)\)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex QuotedValue = new(
+        "'(?<value>(?:[^']|'')*)'",
+        RegexOptions.Compiled);
 
     private readonly int _timeoutSeconds;
     private readonly string _connectionString;
@@ -70,6 +93,18 @@ public class StubDatabaseClient : IDatabaseClient
             return Task.FromResult(probeReader);
         }
 
+        if (!string.IsNullOrWhiteSpace(query) &&
+            query.Contains("EXTRA_BANKS", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(CreateExtraBanksReader());
+        }
+
+        if (!string.IsNullOrWhiteSpace(query) &&
+            query.Contains("EXTRA_UNLOAD", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(CreateExtraUnloadReader(query));
+        }
+
         var targetCode = "STUB";
         var scriptCode = string.IsNullOrWhiteSpace(query)
             ? "QUERY"
@@ -99,6 +134,82 @@ public class StubDatabaseClient : IDatabaseClient
 
         DbDataReader reader = table.CreateDataReader();
         return Task.FromResult(reader);
+    }
+
+    /// <summary>Справочник банков для extra-выгрузки (маркер <c>EXTRA_BANKS</c>).</summary>
+    private static DbDataReader CreateExtraBanksReader()
+    {
+        var table = new DataTable();
+        table.Columns.Add("NrBank", typeof(string));
+        table.Columns.Add("BankName", typeof(string));
+        foreach (var (nrBank, bankName) in StubBanks)
+        {
+            table.Rows.Add(nrBank, bankName);
+        }
+
+        return table.CreateDataReader();
+    }
+
+    /// <summary>
+    /// Данные extra-скрипта (маркер <c>EXTRA_UNLOAD</c>): колонки NrBank + LineFile.
+    /// Если в тексте присутствует <c>IN ('B01',...)</c> — эмитятся только перечисленные банки,
+    /// чтобы снятие банков в UI реально уменьшало вывод.
+    /// </summary>
+    private static DbDataReader CreateExtraUnloadReader(string query)
+    {
+        var allowedBanks = ParseInClauseBanks(query);
+
+        var table = new DataTable();
+        table.Columns.Add("NrBank", typeof(string));
+        table.Columns.Add("LineFile", typeof(string));
+
+        foreach (var (nrBank, bankName) in StubBanks)
+        {
+            if (allowedBanks is not null && !allowedBanks.Contains(nrBank))
+            {
+                continue;
+            }
+
+            for (var i = 1; i <= StubExtraRowsPerBank; i++)
+            {
+                var lineFile = string.Join(
+                    '|',
+                    nrBank,
+                    bankName,
+                    i,
+                    DateTime.UtcNow.ToString("O"),
+                    Math.Round((i * 1.137m) % 995, 2),
+                    i % 2 == 0 ? "ACTIVE" : "PENDING");
+                table.Rows.Add(nrBank, lineFile);
+            }
+        }
+
+        return table.CreateDataReader();
+    }
+
+    /// <summary>
+    /// Извлекает коды банков из конструкции <c>IN ('B01','B02')</c>; возвращает <c>null</c>,
+    /// если конструкции нет (фильтр не применяется).
+    /// </summary>
+    private static HashSet<string>? ParseInClauseBanks(string query)
+    {
+        var match = InClauseQuotedValues.Match(query);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var banks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match value in QuotedValue.Matches(match.Groups["values"].Value))
+        {
+            var bank = value.Groups["value"].Value.Replace("''", "'").Trim();
+            if (!string.IsNullOrEmpty(bank))
+            {
+                banks.Add(bank);
+            }
+        }
+
+        return banks.Count > 0 ? banks : null;
     }
 
     private static string ResolveConnectionString(string source)

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Unload.Store;
 using Unload.Tasks;
@@ -9,6 +8,10 @@ namespace Unload.Tasks.ExtraUnload;
 /// Задача дополнительной выгрузки (extra).
 /// Синхронная: выполняется полностью внутри <see cref="ExecuteAsync"/> и возвращает Completed.
 /// Проверку дневного окна делает <see cref="TaskWorkflow"/> через <see cref="DailyWindowPolicy"/>.
+/// <para>
+/// Если выбраны все банки (<c>SelectedBanks</c> пуст) — выполняются базовые скрипты из <c>extra/</c>.
+/// Если выбрано подмножество — выполняются <c>extra/atomic/</c> с подстановкой плейсхолдера <c>{banks}</c>.
+/// </para>
 /// </summary>
 public class ExtraUnloadTask(
     ExtraUnloadOptions options,
@@ -17,8 +20,10 @@ public class ExtraUnloadTask(
     TaskExecutionHistoryStore historyStore,
     ILogger<ExtraUnloadTask> logger) : UnloadTask
 {
-    private readonly string _scriptsDirectory = Path.GetFullPath(options.ScriptsDirectory);
-    private readonly string _outputDirectory = Path.GetFullPath(options.OutputDirectory);
+    /// <summary>Плейсхолдер списка банков в atomic-скриптах: <c>WHERE NrBank IN ({banks})</c>.</summary>
+    private const string BanksPlaceholder = "{banks}";
+
+    private readonly ExtraUnloadOptions _options = options;
     private readonly ExtraScriptExecutor _scriptExecutor = scriptExecutor;
     private readonly ExtraOutputWriter _outputWriter = outputWriter;
     private readonly TaskExecutionHistoryStore _historyStore = historyStore;
@@ -45,20 +50,31 @@ public class ExtraUnloadTask(
 
         try
         {
-            _logger.LogInformation("Extra task started. ScriptsRoot: {ScriptsDirectory}", _scriptsDirectory);
-            if (!Directory.Exists(_scriptsDirectory))
+            var selectedBanks = NormalizeSelectedBanks(request.SelectedBanks);
+            var useAtomic = selectedBanks.Length > 0;
+            var scriptsDirectory = useAtomic ? _options.AtomicScriptsDirectory : _options.ExtraScriptsDirectory;
+            var correlationId = TaskCorrelationId.Create("extra");
+
+            _logger.LogInformation(
+                "Extra task started. CorrelationId: {CorrelationId}, ScriptsRoot: {ScriptsDirectory}, Atomic: {Atomic}, SelectedBanks: {BankCount}",
+                correlationId,
+                scriptsDirectory,
+                useAtomic,
+                selectedBanks.Length);
+
+            if (!Directory.Exists(scriptsDirectory))
             {
-                throw new DirectoryNotFoundException($"Scripts directory was not found: {_scriptsDirectory}");
+                throw new DirectoryNotFoundException($"Scripts directory was not found: {scriptsDirectory}");
             }
 
-            var scripts = Directory
-                .EnumerateFiles(_scriptsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
+            var scriptPaths = Directory
+                .EnumerateFiles(scriptsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
+                // Файлы, начинающиеся с подчёркивания (напр. _banks.sql), — служебные, не data-скрипты.
+                .Where(static path => !Path.GetFileName(path).StartsWith('_'))
                 .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            var correlationId = BuildCorrelationId("extra");
-
-            if (scripts.Length == 0)
+            if (scriptPaths.Length == 0)
             {
                 _logger.LogInformation("Extra task finished with no scripts. CorrelationId: {CorrelationId}", correlationId);
                 var emptyResult = new TaskExecutionResult(
@@ -74,22 +90,22 @@ public class ExtraUnloadTask(
                 return emptyResult;
             }
 
-            var aggregatedLines = new ConcurrentDictionary<string, ConcurrentQueue<string>>(StringComparer.OrdinalIgnoreCase);
-            var executionTasks = scripts.Select(path =>
-                _scriptExecutor.ExecuteAsync(path, correlationId, aggregatedLines, cancellationToken));
-            await Task.WhenAll(executionTasks);
+            var banksFilter = useAtomic ? BuildBanksInClause(selectedBanks) : null;
+            var executionTasks = scriptPaths.Select(path =>
+                ExecuteScriptAsync(path, banksFilter, correlationId, cancellationToken));
+            var scriptResults = await Task.WhenAll(executionTasks);
 
             var writeResult = await _outputWriter.WriteAsync(
-                _outputDirectory,
+                _options.OutputDirectory,
                 correlationId,
-                aggregatedLines,
+                scriptResults,
                 request.PublishToGateway,
                 cancellationToken);
 
             _logger.LogInformation(
                 "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}, OutputPath: {OutputPath}",
                 correlationId,
-                scripts.Length,
+                scriptResults.Length,
                 writeResult.FilesWritten,
                 writeResult.OutputPath);
 
@@ -98,7 +114,7 @@ public class ExtraUnloadTask(
                 ExecutionId: correlationId,
                 Status: TaskExecutionStatus.Completed,
                 Message: "Extra scripts executed and files created.",
-                ScriptsExecuted: scripts.Length,
+                ScriptsExecuted: scriptResults.Length,
                 FilesWritten: writeResult.FilesWritten,
                 OutputPath: writeResult.OutputPath);
 
@@ -116,6 +132,53 @@ public class ExtraUnloadTask(
         }
     }
 
+    private async Task<ExtraScriptExecutionResult> ExecuteScriptAsync(
+        string scriptPath,
+        string? banksFilter,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
+        var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+
+        if (banksFilter is not null)
+        {
+            if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
+            }
+
+            sql = sql.Replace(BanksPlaceholder, banksFilter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return await _scriptExecutor.ExecuteAsync(scriptCode, sql, correlationId, cancellationToken);
+    }
+
+    private static string[] NormalizeSelectedBanks(IReadOnlyCollection<string>? selectedBanks)
+    {
+        if (selectedBanks is null)
+        {
+            return [];
+        }
+
+        return selectedBanks
+            .Where(static code => !string.IsNullOrWhiteSpace(code))
+            .Select(static code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static code => code, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Строит подстановку для <c>{banks}</c>: строковые значения в одинарных кавычках через запятую,
+    /// напр. <c>'B01','B02'</c>. Одинарные кавычки внутри значений экранируются удвоением.
+    /// </summary>
+    private static string BuildBanksInClause(IReadOnlyList<string> selectedBanks)
+    {
+        return string.Join(",", selectedBanks.Select(static code => $"'{code.Replace("'", "''")}'"));
+    }
+
     private void RecordHistory(string correlationId, TaskExecutionResult result)
     {
         _historyStore.Add(
@@ -127,10 +190,5 @@ public class ExtraUnloadTask(
             result.ScriptsExecuted,
             result.FilesWritten,
             result.OutputPath);
-    }
-
-    private static string BuildCorrelationId(string prefix)
-    {
-        return TaskCorrelationId.Create(prefix);
     }
 }
