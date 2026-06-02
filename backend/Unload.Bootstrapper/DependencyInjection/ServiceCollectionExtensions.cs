@@ -83,7 +83,13 @@ public static class ServiceCollectionExtensions
 
         services.AddUnloadTasks(config.PresetGate);
         services.AddUnloadMainUnload(config.Paths.OutputDirectory);
-        services.AddUnloadExtraUnload(config.Paths.ScriptsDirectory, config.Paths.OutputDirectory);
+        services.AddUnloadExtraUnload(
+            config.Paths.ScriptsDirectory,
+            config.Paths.OutputDirectory,
+            config.Extra.ChunkSizeBytes,
+            config.Extra.ScriptsFolderName,
+            config.Extra.AtomicFolderName,
+            config.Extra.BanksScriptName);
         services.AddUnloadPreset(config.Paths.ScriptsDirectory);
 
         return services;

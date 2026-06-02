@@ -13,9 +13,9 @@
               {{ node.correlationId }}
               <span
                 class="history-run__gateway-badge"
-                [class.history-run__gateway-badge--on]="node.publishToGateway"
-                [class.history-run__gateway-badge--off]="!node.publishToGateway"
-                >{{ node.publishToGateway ? ('history.gatewayOn' | t) : ('history.gatewayOff' | t) }}</span
+                [ngClass]="'history-run__gateway-badge--' + node.gatewayDelivery"
+                [title]="deliveryTitleKey(node.gatewayDelivery) | t"
+                >{{ deliveryLabelKey(node.gatewayDelivery) | t }}</span
               >
             </span>
             <span class="history-run__meta">

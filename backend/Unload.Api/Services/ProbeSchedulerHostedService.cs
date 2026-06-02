@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Store;
 using Unload.Tasks;
 
 namespace Unload.Api.Services;
@@ -10,6 +11,7 @@ public class ProbeSchedulerHostedService(
     PresetGateOptions options,
     DailyWindowPolicy dailyWindowPolicy,
     TaskWorkflow taskWorkflow,
+    TaskExecutionHistoryStore historyStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<ProbeSchedulerHostedService> logger) : BackgroundService
 {
@@ -18,12 +20,26 @@ public class ProbeSchedulerHostedService(
     private readonly PresetGateOptions _options = options;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
+    private readonly TaskExecutionHistoryStore _historyStore = historyStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<ProbeSchedulerHostedService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _dailyWindowPolicy.ApplyInitialOptions(_options);
+
+        // Состояние DailyWindowPolicy живёт только в памяти и сбрасывается при рестарте.
+        // Если preset уже выполнен сегодня (есть в истории) — восстанавливаем PresetCompleted,
+        // иначе IsOpen() блокировал бы run/extra и пользователю пришлось бы запускать preset повторно.
+        if (_options.Enabled &&
+            _historyStore.HasRunToday(TaskCodes.Preset, DateOnly.FromDateTime(DateTime.Now)) &&
+            !_dailyWindowPolicy.Get().PresetCompleted)
+        {
+            _dailyWindowPolicy.StartPolling();
+            _dailyWindowPolicy.MarkPresetCompleted();
+            _logger.LogInformation("Preset completion restored from history after restart.");
+        }
+
         _logger.LogInformation(
             "Probe scheduler initialized. Enabled: {Enabled}, Start: {StartHour:D2}:{StartMinute:D2}, PollIntervalSeconds: {PollIntervalSeconds}",
             _options.Enabled,

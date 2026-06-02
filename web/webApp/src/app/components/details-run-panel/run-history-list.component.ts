@@ -9,6 +9,7 @@ import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
 import { TPipe, t } from '../../i18n/i18n';
 import {
+  GatewayDelivery,
   HistoryFileRow,
   HistoryRunNode,
   HistoryScriptNode,
@@ -63,6 +64,30 @@ export class RunHistoryListComponent {
   formatTimestamp = formatTimestamp;
   formatFileCount = formatFileCount;
   resolveSenderStatusLabel = resolveSenderStatusLabel;
+
+  private static readonly DELIVERY_LABEL_KEYS: Record<GatewayDelivery, string> = {
+    delivered: 'history.deliveryDelivered',
+    partial: 'history.deliveryPartial',
+    failed: 'history.deliveryFailed',
+    notSent: 'history.deliveryNotSent',
+    off: 'history.deliveryOff',
+  };
+
+  private static readonly DELIVERY_TITLE_KEYS: Record<GatewayDelivery, string> = {
+    delivered: 'history.deliveryDeliveredTitle',
+    partial: 'history.deliveryPartialTitle',
+    failed: 'history.deliveryFailedTitle',
+    notSent: 'history.deliveryNotSentTitle',
+    off: 'history.deliveryOffTitle',
+  };
+
+  deliveryLabelKey(delivery: GatewayDelivery): string {
+    return RunHistoryListComponent.DELIVERY_LABEL_KEYS[delivery];
+  }
+
+  deliveryTitleKey(delivery: GatewayDelivery): string {
+    return RunHistoryListComponent.DELIVERY_TITLE_KEYS[delivery];
+  }
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();

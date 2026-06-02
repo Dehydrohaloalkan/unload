@@ -43,7 +43,12 @@ public static class UnloadConfigurationLoader
             .Get<HistoryRetentionOptions>()
             ?? HistoryRetentionOptions.Default;
 
-        return new UnloadConfiguration(paths, database, runner, presetGate, historyRetention);
+        var extra = configuration
+            .GetSection(ExtraUnloadSettings.SectionName)
+            .Get<ExtraUnloadSettings>()
+            ?? ExtraUnloadSettings.Default;
+
+        return new UnloadConfiguration(paths, database, runner, presetGate, historyRetention, extra);
     }
 
     private static string ResolveWorkspaceRoot()

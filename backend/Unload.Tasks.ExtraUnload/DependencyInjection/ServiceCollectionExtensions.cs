@@ -15,9 +15,19 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddUnloadExtraUnload(
         this IServiceCollection services,
         string scriptsDirectory,
-        string outputDirectory)
+        string outputDirectory,
+        int chunkSizeBytes,
+        string extraFolderName,
+        string atomicFolderName,
+        string banksScriptName)
     {
-        services.AddSingleton(new ExtraUnloadOptions(scriptsDirectory, outputDirectory));
+        services.AddSingleton(new ExtraUnloadOptions(
+            scriptsDirectory,
+            outputDirectory,
+            chunkSizeBytes,
+            extraFolderName,
+            atomicFolderName,
+            banksScriptName));
         services.AddSingleton<ExtraScriptExecutor>();
         services.AddSingleton<ExtraOutputWriter>();
         services.AddSingleton<ExtraBanksService>();

@@ -37,6 +37,16 @@ export interface HistoryScriptNode {
   fileCount: number;
 }
 
+/**
+ * Фактический результат доставки в шлюз (не «была ли настроена отправка»):
+ * - `off` — выгрузка без шлюза (publishToGateway=false);
+ * - `delivered` — все файлы доставлены;
+ * - `partial` — доставлена часть;
+ * - `notSent` — ничего не доставлено (есть файлы, ни один не отправлен);
+ * - `failed` — отправка настроена, но файлов нет вовсе (доставлять нечего/сбой).
+ */
+export type GatewayDelivery = 'off' | 'delivered' | 'partial' | 'notSent' | 'failed';
+
 export interface HistoryRunNode {
   key: string;
   taskCode: HistoryTaskCode;
@@ -46,6 +56,7 @@ export interface HistoryRunNode {
   completedAt: string;
   occurredAt: string;
   publishToGateway: boolean;
+  gatewayDelivery: GatewayDelivery;
   memberNames: string[];
   memberFiles: Record<string, HistoryFileRow[]>;
   // Для extra — 3-уровневая структура: скрипт → банк → файлы.
@@ -72,6 +83,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
     }
 
     const memberFiles = buildRunMemberFiles(run, correlationId, confirmedSentPaths);
+    const publishToGateway = run.publishToGateway ?? true;
     nodeMap.set(`run|${correlationId}`, {
       key: `run|${correlationId}`,
       taskCode: 'run',
@@ -80,7 +92,11 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       startedAt: run.createdAt,
       completedAt: run.updatedAt,
       occurredAt: run.updatedAt,
-      publishToGateway: run.publishToGateway ?? true,
+      publishToGateway,
+      gatewayDelivery: resolveGatewayDelivery(
+        publishToGateway,
+        Object.values(memberFiles).flat(),
+      ),
       memberNames: collectRunMemberNames(run, knownMemberNames),
       memberFiles,
     });
@@ -137,15 +153,20 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
         };
       });
 
+    const extraPublishToGateway = extraRun?.publishToGateway ?? false;
     nodeMap.set(`extra|${correlationId}`, {
       key: `extra|${correlationId}`,
       taskCode: 'extra',
       correlationId,
-      status: 'Completed',
+      status: extraRun ? resolveRunStatusLabel(extraRun.status) : 'Completed',
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       occurredAt: record.completedAt,
-      publishToGateway: false,
+      publishToGateway: extraPublishToGateway,
+      gatewayDelivery: resolveGatewayDelivery(
+        extraPublishToGateway,
+        scripts.flatMap((script) => script.banks.flatMap((bank) => bank.files)),
+      ),
       memberNames: sortNames(knownMemberNames),
       memberFiles: {},
       scripts,
@@ -253,6 +274,31 @@ export function summarizeRequeue(
   }
 
   return { total, sent, notSent: Math.max(0, total - sent) };
+}
+
+/**
+ * Вычисляет фактический результат доставки по списку файлов выгрузки.
+ * Зелёный «delivered» — только когда отправка была настроена и все файлы реально доставлены.
+ */
+function resolveGatewayDelivery(
+  publishToGateway: boolean,
+  files: HistoryFileRow[],
+): GatewayDelivery {
+  if (!publishToGateway) {
+    return 'off';
+  }
+  if (files.length === 0) {
+    // Отправка была настроена, но доставлять нечего/ничего не записалось.
+    return 'failed';
+  }
+  const sent = files.filter((file) => file.sentToGateway).length;
+  if (sent === 0) {
+    return 'notSent';
+  }
+  if (sent === files.length) {
+    return 'delivered';
+  }
+  return 'partial';
 }
 
 function buildRunMemberFiles(

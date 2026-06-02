@@ -12,4 +12,5 @@ public record UnloadConfiguration(
     DatabaseRuntimeSettings Database,
     RunnerOptions Runner,
     PresetGateOptions PresetGate,
-    HistoryRetentionOptions HistoryRetention);
+    HistoryRetentionOptions HistoryRetention,
+    ExtraUnloadSettings Extra);

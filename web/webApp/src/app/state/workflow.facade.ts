@@ -135,6 +135,13 @@ export class WorkflowStore {
       this.extraStore.restore();
     }
 
+    // Дневное окно обновляется по SignalR (preset_state). Без этой подписки переход окна
+    // (например, после выхода ПК из гибернации) не доходил до UI до ручного refresh.
+    this.hub.presetStateEvents$.subscribe((state) => this.presetStore.setPresetState(state));
+    // SignalR шлёт preset_state только на изменение; пропущенный во время дисконнекта переход
+    // добираем полным re-fetch'ем дашборда при реконнекте.
+    this.hub.reconnected$.subscribe(() => void this.dashboardStore.refreshDashboardAsync());
+
     void this.hub.connect();
     void this.bootstrapAsync();
   }
