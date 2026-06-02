@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(presetGateOptions);
         services.AddSingleton<DailyWindowPolicy>();
         services.AddSingleton<RunActivationChannel>();
+        services.AddSingleton<ExtraActivationChannel>();
 
         services.AddSingleton<TaskWorkflow>();
         services.AddSingleton<WorkflowQueryService>();

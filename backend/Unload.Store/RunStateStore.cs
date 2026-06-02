@@ -41,12 +41,15 @@ public class RunStateStore
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
-    /// <param name="memberNames">Мемберы, выбранные для выгрузки.</param>
-    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToGateway = true)
+    /// <param name="memberNames">Мемберы, выбранные для выгрузки (для extra — коды скриптов).</param>
+    /// <param name="publishToGateway">Публиковать ли результаты в шлюз.</param>
+    /// <param name="taskCode">Код задачи (<c>run</c> по умолчанию, <c>extra</c> для доп-выгрузки).</param>
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToGateway = true, string taskCode = TaskCodeRun)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentNullException.ThrowIfNull(targetCodes);
         ArgumentNullException.ThrowIfNull(memberNames);
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskCode);
 
         var now = DateTimeOffset.UtcNow;
         var memberStatuses = memberNames
@@ -62,7 +65,7 @@ public class RunStateStore
                 StringComparer.OrdinalIgnoreCase);
         var snapshot = new RunStatusInfo(
             correlationId,
-            TaskCodeRun,
+            taskCode,
             RunLifecycleStatus.Running,
             targetCodes.ToArray(),
             now,

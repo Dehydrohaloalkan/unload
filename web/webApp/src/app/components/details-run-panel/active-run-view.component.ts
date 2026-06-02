@@ -26,6 +26,7 @@ import {
   memberKey,
 } from '../../state/utils/member-index.util';
 import { isTerminalRunStatus } from '../../state/utils/run-status.util';
+import { formatTimestamp } from '../../state/utils/time.util';
 
 @Component({
   selector: 'app-active-run-view',
@@ -56,6 +57,15 @@ export class ActiveRunViewComponent {
   resolveSenderStatusLabel = resolveSenderStatusLabel;
   resolveRunnerStepLabel = resolveRunnerStepLabel;
   resolveMemberStatusLabel = resolveMemberStatusLabel;
+  formatTimestamp = formatTimestamp;
+
+  /** #5: мембер завершён, но ни одного файла — подсветить «0 файлов», а не просто «завершён». */
+  isCompletedWithoutFiles(member: MemberRunStatusInfo): boolean {
+    return (
+      member.status === MemberRunLifecycleStatus.Completed &&
+      this.memberArtifacts(member.memberName).length === 0
+    );
+  }
 
   onDownloadClick(): void {
     this.downloadHint.notifyDownloadStarted();

@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ExtraScriptExecutor>();
         services.AddSingleton<ExtraOutputWriter>();
         services.AddSingleton<ExtraBanksService>();
+        services.AddSingleton<ExtraUnloadEngine>();
         services.AddSingleton<ExtraUnloadTask>();
         services.AddSingleton<UnloadTask>(static sp => sp.GetRequiredService<ExtraUnloadTask>());
         return services;

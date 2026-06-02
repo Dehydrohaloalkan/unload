@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ConfirmationService } from 'primeng/api';
 import { Button } from 'primeng/button';
@@ -8,11 +8,13 @@ import { RequeueItem } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
 import { TPipe, t } from '../../i18n/i18n';
+import { I18nKey } from '../../i18n/ru';
 import {
   GatewayDelivery,
   HistoryFileRow,
   HistoryRunNode,
   HistoryScriptNode,
+  HistoryTaskCode,
   buildConfirmedSentPaths,
   buildHistoryNodes,
   summarizeRequeue,
@@ -42,16 +44,21 @@ export class RunHistoryListComponent {
     buildConfirmedSentPaths(this.store.requeueResult(), this.requeueSnapshot()),
   );
 
-  readonly historyNodes = computed<HistoryRunNode[]>(() =>
-    buildHistoryNodes({
+  /** Опциональный фильтр по типу задачи: панель extra показывает только extra-узлы. */
+  readonly taskCodeFilter = input<HistoryTaskCode | null>(null);
+
+  readonly historyNodes = computed<HistoryRunNode[]>(() => {
+    const nodes = buildHistoryNodes({
       todayRuns: this.store.todayRuns(),
       todayHistory: this.store.todayHistory(),
       allTodayRuns: this.store.allTodayRuns(),
       outputFilesByPath: this.store.outputFilesByPath() ?? {},
       knownMemberNames: this.store.historyMemberNames(),
       confirmedSentPaths: this.confirmedSentPaths(),
-    }),
-  );
+    });
+    const filter = this.taskCodeFilter();
+    return filter ? nodes.filter((node) => node.taskCode === filter) : nodes;
+  });
 
   readonly canRequeue = computed(() => this.selectedHistoryFiles().length > 0);
 
@@ -65,7 +72,7 @@ export class RunHistoryListComponent {
   formatFileCount = formatFileCount;
   resolveSenderStatusLabel = resolveSenderStatusLabel;
 
-  private static readonly DELIVERY_LABEL_KEYS: Record<GatewayDelivery, string> = {
+  private static readonly DELIVERY_LABEL_KEYS: Record<GatewayDelivery, I18nKey> = {
     delivered: 'history.deliveryDelivered',
     partial: 'history.deliveryPartial',
     failed: 'history.deliveryFailed',
@@ -73,7 +80,7 @@ export class RunHistoryListComponent {
     off: 'history.deliveryOff',
   };
 
-  private static readonly DELIVERY_TITLE_KEYS: Record<GatewayDelivery, string> = {
+  private static readonly DELIVERY_TITLE_KEYS: Record<GatewayDelivery, I18nKey> = {
     delivered: 'history.deliveryDeliveredTitle',
     partial: 'history.deliveryPartialTitle',
     failed: 'history.deliveryFailedTitle',
@@ -81,11 +88,11 @@ export class RunHistoryListComponent {
     off: 'history.deliveryOffTitle',
   };
 
-  deliveryLabelKey(delivery: GatewayDelivery): string {
+  deliveryLabelKey(delivery: GatewayDelivery): I18nKey {
     return RunHistoryListComponent.DELIVERY_LABEL_KEYS[delivery];
   }
 
-  deliveryTitleKey(delivery: GatewayDelivery): string {
+  deliveryTitleKey(delivery: GatewayDelivery): I18nKey {
     return RunHistoryListComponent.DELIVERY_TITLE_KEYS[delivery];
   }
 

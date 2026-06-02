@@ -1,26 +1,39 @@
-import { inject, isDevMode } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { DestroyRef, PLATFORM_ID, computed, effect, inject, isDevMode } from '@angular/core';
 import {
   signalStore,
+  withComputed,
+  withHooks,
   withMethods,
   withState,
   patchState,
 } from '@ngrx/signals';
-import { ExtraBankInfo, TaskUiState } from '../app.models';
+import { rxMethod } from '@ngrx/signals/rxjs-interop';
+import { tap } from 'rxjs';
+import {
+  ExtraBankInfo,
+  ProblemDetailsResponse,
+  RunStatusInfo,
+  TaskUiState,
+} from '../app.models';
 import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
+import { DashboardStore } from './dashboard.store';
 import { WorkflowErrorStore } from './error.store';
-import { BROWSER_STORAGE } from './storage.token';
-import {
-  createIdleTaskState,
-  restoreTaskState,
-  runTaskAsync,
-} from './utils/task-runner.util';
+import { RealtimeHubService } from './realtime-hub.service';
+import { isTerminalRunStatus } from './utils/run-status.util';
 
-const EXTRA_TASK_STORAGE_KEY = 'unload.web.extra-task';
+const POLL_INTERVAL_MS = 2500;
+
+const isExtraStatus = (status: RunStatusInfo): boolean =>
+  (status.taskCode ?? '').trim().toLowerCase() === 'extra';
 
 interface ExtraState {
-  extraTask: TaskUiState;
+  // Активная/последняя extra-выгрузка как серверная запись (источник истины, переживает refresh).
+  activeExtraRun: RunStatusInfo | null;
+  trackedExtraId: string | null;
   publishExtraToGateway: boolean;
   banks: ExtraBankInfo[];
   banksLoaded: boolean;
@@ -30,7 +43,8 @@ interface ExtraState {
 }
 
 const INITIAL: ExtraState = {
-  extraTask: createIdleTaskState(),
+  activeExtraRun: null,
+  trackedExtraId: null,
   publishExtraToGateway: true,
   banks: [],
   banksLoaded: false,
@@ -41,13 +55,35 @@ const INITIAL: ExtraState = {
 export const ExtraStore = signalStore(
   { providedIn: 'root' },
   withState(INITIAL),
+  withComputed(({ activeExtraRun }) => ({
+    isExtraBusy: computed<boolean>(() => {
+      const run = activeExtraRun();
+      return !!run && !isTerminalRunStatus(run.status);
+    }),
+    // Совместимый с карточкой TaskUiState: карточке нужен только флаг running (спиннер/молния).
+    extraTask: computed<TaskUiState>(() => {
+      const run = activeExtraRun();
+      const running = !!run && !isTerminalRunStatus(run.status);
+      return {
+        running,
+        startedAt: run?.createdAt ?? null,
+        completedAt: run && !running ? run.updatedAt : null,
+        result: null,
+        error: null,
+        stale: false,
+      };
+    }),
+  })),
   withMethods((store) => {
     const api = inject(ApiClientService);
     const admin = inject(AdminStore);
     const errorStore = inject(WorkflowErrorStore);
-    const storage = inject(BROWSER_STORAGE);
+    const dashboard = inject(DashboardStore);
+    const hub = inject(RealtimeHubService);
+    const platformId = inject(PLATFORM_ID);
+    const browser = isPlatformBrowser(platformId);
 
-    const setTask = (next: TaskUiState): void => patchState(store, { extraTask: next });
+    let pollTimerId: number | null = null;
 
     const allBankCodes = (): string[] => store.banks().map((bank) => bank.nrBank);
 
@@ -57,14 +93,32 @@ export const ExtraStore = signalStore(
       return new Set(selected ?? allBankCodes());
     };
 
+    const stopPolling = (): void => {
+      if (!browser || pollTimerId === null) return;
+      window.clearInterval(pollTimerId);
+      pollTimerId = null;
+    };
+
+    const refreshTrackedExtraAsync = async (): Promise<void> => {
+      const correlationId = store.trackedExtraId();
+      if (!correlationId) return;
+      const state = await api.fetchRunStatus(correlationId);
+      if (!state) return;
+      patchState(store, { activeExtraRun: state });
+      if (isTerminalRunStatus(state.status)) {
+        await dashboard.refreshDashboardAsync();
+      }
+    };
+
+    const ensurePolling = (): void => {
+      if (!browser || pollTimerId !== null) return;
+      pollTimerId = window.setInterval(() => void refreshTrackedExtraAsync(), POLL_INTERVAL_MS);
+    };
+
     return {
-      restore(): void {
-        restoreTaskState({
-          setState: setTask,
-          storage,
-          storageKey: EXTRA_TASK_STORAGE_KEY,
-        });
-      },
+      _stopPolling: stopPolling,
+      _ensurePolling: ensurePolling,
+
       setPublishExtraToGateway(enabled: boolean): void {
         patchState(store, { publishExtraToGateway: Boolean(enabled) });
       },
@@ -106,23 +160,95 @@ export const ExtraStore = signalStore(
       selectAllBanks(): void {
         patchState(store, { selectedBankCodes: null });
       },
-      runExtraAsync(): Promise<void> {
+
+      /** Подхватывает активную extra-выгрузку из списка сегодняшних запусков (bootstrap/refresh). */
+      adoptActiveFromRuns(runs: RunStatusInfo[]): void {
+        const active = (runs ?? [])
+          .filter((run) => isExtraStatus(run) && !isTerminalRunStatus(run.status))
+          .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
+        if (active) {
+          patchState(store, { trackedExtraId: active.correlationId, activeExtraRun: active });
+        }
+      },
+
+      async runExtraAsync(): Promise<void> {
+        errorStore.clear();
         const selected = store.selectedBankCodes();
         // Все банки (null) → null; подмножество → массив выбранных кодов.
         const payloadBanks = selected === null ? null : selected;
-        return runTaskAsync(
-          {
-            setState: setTask,
-            errorStore,
-            storage,
-            storageKey: EXTRA_TASK_STORAGE_KEY,
-          },
-          () => api.runExtra(admin.adminMode(), store.publishExtraToGateway(), payloadBanks),
-          t('errors.extraFailed'),
-        );
+        try {
+          const response = await api.runExtra(
+            admin.adminMode(),
+            store.publishExtraToGateway(),
+            payloadBanks,
+          );
+          patchState(store, {
+            trackedExtraId: response.correlationId,
+            activeExtraRun: await api.fetchRunStatus(response.correlationId),
+          });
+        } catch (error) {
+          errorStore.setError(toExtraError(error));
+        }
       },
+
+      async stopExtraAsync(): Promise<void> {
+        const correlationId = store.trackedExtraId();
+        if (!correlationId || !store.isExtraBusy()) {
+          return;
+        }
+        errorStore.clear();
+        try {
+          await api.stopRun(correlationId);
+        } catch (error) {
+          errorStore.setError(toExtraError(error));
+        }
+      },
+
+      _trackExtraStatus: rxMethod<RunStatusInfo>(
+        tap((status) => {
+          if (!isExtraStatus(status)) {
+            return;
+          }
+          patchState(store, {
+            trackedExtraId: status.correlationId,
+            activeExtraRun: status,
+          });
+          if (isTerminalRunStatus(status.status)) {
+            void dashboard.refreshDashboardAsync();
+          }
+        }),
+      ),
     };
   }),
+  withHooks({
+    onInit(store) {
+      const hub = inject(RealtimeHubService);
+      const destroyRef = inject(DestroyRef);
+
+      store._trackExtraStatus(hub.runStatusEvents$);
+      destroyRef.onDestroy(() => store._stopPolling());
+
+      // Polling — только когда хаб отвалился и есть активная extra-выгрузка.
+      effect(() => {
+        const shouldPoll = store.isExtraBusy() && !!store.trackedExtraId() && !hub.connectionReady();
+        if (shouldPoll) {
+          store._ensurePolling();
+        } else {
+          store._stopPolling();
+        }
+      });
+    },
+  }),
 );
+
+function toExtraError(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const details = (error.error ?? {}) as ProblemDetailsResponse;
+    if (details.detail) {
+      return details.detail;
+    }
+  }
+  return t('errors.extraFailed');
+}
 
 export type ExtraStore = InstanceType<typeof ExtraStore>;

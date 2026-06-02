@@ -9,6 +9,10 @@
           <span class="details-item__value">{{ activeRun.correlationId }}</span>
         </div>
         <div class="details-item__row">
+          <span class="details-item__label">{{ 'activeRun.startedAt' | t }}</span>
+          <span class="details-item__value">{{ formatTimestamp(activeRun.createdAt) }}</span>
+        </div>
+        <div class="details-item__row">
           <span class="details-item__label">{{ 'activeRun.status' | t }}</span>
           <span class="details-item__value">{{ resolveRunStatusLabel(activeRun.status) }}</span>
         </div>
@@ -27,6 +31,9 @@
                   <span class="active-member__status">
                     @if (memberStatus(memberName); as status) {
                       {{ resolveMemberEffectiveStatusLabel(status) }}
+                      @if (isCompletedWithoutFiles(status)) {
+                        · {{ 'activeRun.zeroFiles' | t }}
+                      }
                     } @else {
                       —
                     }

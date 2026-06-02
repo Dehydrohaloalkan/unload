@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\backend\Unload.Store\Unload.Store.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Tasks\Unload.Tasks.csproj" />
     <ProjectReference Include="..\..\backend\Unload.Tasks.MainUnload\Unload.Tasks.MainUnload.csproj" />
+    <ProjectReference Include="..\..\backend\Unload.Tasks.ExtraUnload\Unload.Tasks.ExtraUnload.csproj" />
   </ItemGroup>
 
   <ItemGroup>

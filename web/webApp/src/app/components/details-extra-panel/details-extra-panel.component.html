@@ -1,0 +1,66 @@
+<p-tabs value="extra">
+  <p-tablist>
+    <p-tab value="extra">{{ 'details.tabs.extra' | t }}</p-tab>
+    <p-tab value="history">{{ 'details.tabs.history' | t }}</p-tab>
+  </p-tablist>
+
+  <p-tabpanels>
+    <p-tabpanel value="extra">
+      <div class="details-section">
+        <div class="details-section__title">{{ 'details.task.sectionBanks' | t }}</div>
+        @if (banksLoading()) {
+          <div class="details-empty">{{ 'details.task.banksLoading' | t }}</div>
+        } @else if (banks().length === 0) {
+          <div class="details-empty">{{ 'details.task.banksEmpty' | t }}</div>
+        } @else {
+          <div class="details-item__message">
+            {{ allBanksSelected() ? ('details.task.banksAllSelected' | t) : ('details.task.banksSubset' | t) }}
+          </div>
+          <div class="bank-grid">
+            @for (bank of banks(); track bank.nrBank) {
+              <label class="bank-item">
+                <p-checkbox
+                  binary="true"
+                  [ngModel]="isBankSelected(bank.nrBank)"
+                  (onChange)="toggleBank(bank.nrBank, $event.checked)"
+                />
+                <span class="bank-item__name">{{ bank.bankName }}</span>
+                <span class="bank-item__code">{{ bank.nrBank }}</span>
+              </label>
+            }
+          </div>
+          @if (!allBanksSelected()) {
+            <button type="button" class="bank-reset" (click)="selectAllBanks()">
+              {{ 'details.task.banksSelectAll' | t }}
+            </button>
+          }
+        }
+      </div>
+
+      <div class="details-section">
+        <label class="extra-gateway-toggle">
+          <p-checkbox
+            binary="true"
+            [ngModel]="publishToGateway()"
+            (onChange)="setPublishToGateway($event.checked)"
+          />
+          <span>{{ 'extraSettings.publishToGateway' | t }}</span>
+        </label>
+
+        <p-button
+          [label]="'extraStage.runButton' | t"
+          icon="app-icon app-icon--bolt"
+          [fluid]="true"
+          [disabled]="!canRun()"
+          (onClick)="handleRunClick()"
+        />
+      </div>
+
+      <app-active-extra-view />
+    </p-tabpanel>
+
+    <p-tabpanel value="history">
+      <app-run-history-list [taskCodeFilter]="'extra'" />
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>

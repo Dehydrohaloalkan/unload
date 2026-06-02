@@ -1,0 +1,89 @@
+<div class="details-section">
+  <div class="details-section__title">{{ 'extraActive.title' | t }}</div>
+
+  @if (run(); as extraRun) {
+    <div class="details-item active-run">
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.correlation' | t }}</span>
+        <span class="details-item__value">{{ extraRun.correlationId }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.startedAt' | t }}</span>
+        <span class="details-item__value">{{ formatTimestamp(extraRun.createdAt) }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.status' | t }}</span>
+        <span class="details-item__value">{{ resolveRunStatusLabel(extraRun.status) }}</span>
+      </div>
+      @if (extraRun.message) {
+        <div class="details-item__message">{{ extraRun.message }}</div>
+      }
+
+      @if (scriptNames().length === 0) {
+        <div class="details-empty">{{ 'extraActive.noScripts' | t }}</div>
+      } @else {
+        <div class="active-subtitle">{{ 'extraActive.scripts' | t }}</div>
+        <div class="active-members">
+          @for (scriptCode of scriptNames(); track scriptCode) {
+            <details class="active-member">
+              <summary class="active-member__summary">
+                <span class="active-member__name">{{ scriptCode }}</span>
+                <span class="active-member__status">
+                  @if (scriptStatus(scriptCode); as status) {
+                    {{ resolveMemberStatusLabel(status.status) }}
+                    @if (isCompletedWithoutFiles(status)) {
+                      · {{ 'activeRun.zeroFiles' | t }}
+                    }
+                  } @else {
+                    —
+                  }
+                  @if (senderBatchForScript(scriptCode); as batch) {
+                    {{ 'activeRun.gatewayInline' | t }} {{ resolveSenderStatusLabel(batch.status) }}
+                  }
+                </span>
+              </summary>
+
+              <div class="active-member__body">
+                @if (scriptStatus(scriptCode)?.message; as message) {
+                  <div class="details-item__message">{{ message }}</div>
+                }
+
+                <div class="active-subtitle">{{ 'activeRun.files' | t }}</div>
+                @if (scriptArtifacts(scriptCode).length === 0) {
+                  <div class="details-empty">{{ 'activeRun.noFilesForMember' | t }}</div>
+                } @else {
+                  <div class="active-files">
+                    @for (artifact of scriptArtifacts(scriptCode); track artifact.filePath) {
+                      <div class="active-file">
+                        <a
+                          class="history-file-link"
+                          [href]="buildDownloadUrl(artifact.filePath)"
+                          [attr.download]="artifact.fileName"
+                          (click)="onDownloadClick()"
+                        >
+                          {{ artifact.fileName }}
+                        </a>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </details>
+          }
+        </div>
+      }
+
+      @if (isBusy()) {
+        <p-button
+          [label]="'activeRun.stop' | t"
+          icon="app-icon app-icon--stop"
+          severity="secondary"
+          [outlined]="true"
+          (onClick)="stopExtra()"
+        />
+      }
+    </div>
+  } @else {
+    <div class="details-empty">{{ 'extraActive.noActive' | t }}</div>
+  }
+</div>

@@ -115,7 +115,7 @@
           }
           @default {
             @defer (when detailsPanelOpen()) {
-              <app-details-task-panel kind="extra" />
+              <app-details-extra-panel />
             } @loading (minimum 100ms) {
               <p-progress-spinner strokeWidth="4" />
             }

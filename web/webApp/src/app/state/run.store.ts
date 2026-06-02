@@ -203,15 +203,23 @@ export const RunStore = signalStore(
       },
 
       _trackStatusEvents: rxMethod<RunnerEvent>(
-        tap((event) =>
+        tap((event) => {
+          // Игнорируем события чужих запусков (в т.ч. extra) — копим лог только отслеживаемого run.
+          if (event.correlationId !== store.trackedCorrelationId()) {
+            return;
+          }
           patchState(store, (current) => ({
             runEvents: [event, ...current.runEvents].slice(0, RUN_EVENT_LIMIT),
-          })),
-        ),
+          }));
+        }),
       ),
 
       _trackRunStatus: rxMethod<RunStatusInfo>(
         tap((status) => {
+          // Этот стор владеет только main-run; extra трекает ExtraStore.
+          if ((status.taskCode ?? '').trim().toLowerCase() !== 'run') {
+            return;
+          }
           patchState(store, {
             trackedCorrelationId: status.correlationId,
             activeRun: status,

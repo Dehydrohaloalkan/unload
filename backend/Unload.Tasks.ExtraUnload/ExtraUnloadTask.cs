@@ -6,8 +6,9 @@ namespace Unload.Tasks.ExtraUnload;
 
 /// <summary>
 /// Задача дополнительной выгрузки (extra).
-/// Синхронная: выполняется полностью внутри <see cref="ExecuteAsync"/> и возвращает Completed.
-/// Проверку дневного окна делает <see cref="TaskWorkflow"/> через <see cref="DailyWindowPolicy"/>.
+/// Deferred: стартует фоновую обработку через <see cref="ExtraActivationChannel"/> и возвращает Accepted.
+/// Саму выгрузку выполняет фоновый воркер (<c>ExtraUnloadHostedService</c>) через <see cref="ExtraUnloadEngine"/>.
+/// Проверку дневного окна и конфликтов делает <see cref="TaskWorkflow"/>.
 /// <para>
 /// Если выбраны все банки (<c>SelectedBanks</c> пуст) — выполняются базовые скрипты из <c>extra/</c>.
 /// Если выбрано подмножество — выполняются <c>extra/atomic/</c> с подстановкой плейсхолдера <c>{banks}</c>.
@@ -15,20 +16,17 @@ namespace Unload.Tasks.ExtraUnload;
 /// </summary>
 public class ExtraUnloadTask(
     ExtraUnloadOptions options,
-    ExtraScriptExecutor scriptExecutor,
-    ExtraOutputWriter outputWriter,
-    TaskExecutionHistoryStore historyStore,
+    ExtraActivationChannel extraWorkflow,
+    RunStateStore runStateStore,
     ILogger<ExtraUnloadTask> logger) : UnloadTask
 {
     /// <summary>Плейсхолдер списка банков в atomic-скриптах: <c>WHERE NrBank IN ({banks})</c>.</summary>
     private const string BanksPlaceholder = "{banks}";
 
     private readonly ExtraUnloadOptions _options = options;
-    private readonly ExtraScriptExecutor _scriptExecutor = scriptExecutor;
-    private readonly ExtraOutputWriter _outputWriter = outputWriter;
-    private readonly TaskExecutionHistoryStore _historyStore = historyStore;
+    private readonly ExtraActivationChannel _extraWorkflow = extraWorkflow;
+    private readonly RunStateStore _runStateStore = runStateStore;
     private readonly ILogger<ExtraUnloadTask> _logger = logger;
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     public override string Code => TaskCodes.Extra;
 
@@ -38,121 +36,96 @@ public class ExtraUnloadTask(
 
     public override bool RequiresDailyWindowOpen => true;
 
+    public override bool IsDeferred => true;
+
     public override async Task<TaskExecutionResult> ExecuteAsync(
         TaskLaunchRequest request,
         CancellationToken cancellationToken)
     {
-        if (!await _semaphore.WaitAsync(0, cancellationToken))
+        var selectedBanks = NormalizeSelectedBanks(request.SelectedBanks);
+        var useAtomic = selectedBanks.Length > 0;
+        var scriptsDirectory = useAtomic ? _options.AtomicScriptsDirectory : _options.ExtraScriptsDirectory;
+
+        if (!Directory.Exists(scriptsDirectory))
         {
-            _logger.LogWarning("Extra task launch rejected: another extra task is already running.");
-            throw new InvalidOperationException("Extra scripts task is already running.");
+            throw new TaskLaunchException(
+                TaskLaunchFailureKind.Validation,
+                "EXTRA_SCRIPTS_NOT_FOUND",
+                $"Scripts directory was not found: {scriptsDirectory}");
+        }
+
+        var scriptPaths = Directory
+            .EnumerateFiles(scriptsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
+            // Файлы, начинающиеся с подчёркивания (напр. _banks.sql), — служебные, не data-скрипты.
+            .Where(static path => !Path.GetFileName(path).StartsWith('_'))
+            .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (scriptPaths.Length == 0)
+        {
+            throw new TaskLaunchException(
+                TaskLaunchFailureKind.Validation,
+                "EXTRA_SCRIPTS_NOT_FOUND",
+                $"No extra scripts found in '{scriptsDirectory}'.");
+        }
+
+        var banksFilter = useAtomic ? BuildBanksInClause(selectedBanks) : null;
+
+        // Валидируем плейсхолдер заранее, чтобы вернуть понятную 400, а не «упасть» в фоне.
+        if (useAtomic)
+        {
+            foreach (var path in scriptPaths)
+            {
+                var sql = await File.ReadAllTextAsync(path, cancellationToken);
+                if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new TaskLaunchException(
+                        TaskLaunchFailureKind.Validation,
+                        "EXTRA_PLACEHOLDER_MISSING",
+                        $"Atomic script '{Path.GetFileNameWithoutExtension(path)}' does not contain required placeholder '{BanksPlaceholder}'.");
+                }
+            }
+        }
+
+        var correlationId = TaskCorrelationId.Create("extra");
+        var scriptCodes = scriptPaths.Select(Path.GetFileNameWithoutExtension).ToArray();
+        var payload = new ExtraRunRequest(correlationId, scriptPaths, banksFilter, request.PublishToGateway);
+
+        if (!_extraWorkflow.TryActivate(correlationId, payload))
+        {
+            throw new TaskLaunchException(
+                TaskLaunchFailureKind.Conflict,
+                "TASK_ALREADY_RUNNING",
+                "Extra task is already running.");
         }
 
         try
         {
-            var selectedBanks = NormalizeSelectedBanks(request.SelectedBanks);
-            var useAtomic = selectedBanks.Length > 0;
-            var scriptsDirectory = useAtomic ? _options.AtomicScriptsDirectory : _options.ExtraScriptsDirectory;
-            var correlationId = TaskCorrelationId.Create("extra");
-
-            _logger.LogInformation(
-                "Extra task started. CorrelationId: {CorrelationId}, ScriptsRoot: {ScriptsDirectory}, Atomic: {Atomic}, SelectedBanks: {BankCount}",
+            _runStateStore.SetStarted(
                 correlationId,
-                scriptsDirectory,
-                useAtomic,
-                selectedBanks.Length);
-
-            if (!Directory.Exists(scriptsDirectory))
-            {
-                throw new DirectoryNotFoundException($"Scripts directory was not found: {scriptsDirectory}");
-            }
-
-            var scriptPaths = Directory
-                .EnumerateFiles(scriptsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
-                // Файлы, начинающиеся с подчёркивания (напр. _banks.sql), — служебные, не data-скрипты.
-                .Where(static path => !Path.GetFileName(path).StartsWith('_'))
-                .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            if (scriptPaths.Length == 0)
-            {
-                _logger.LogInformation("Extra task finished with no scripts. CorrelationId: {CorrelationId}", correlationId);
-                var emptyResult = new TaskExecutionResult(
-                    TaskCode: Code,
-                    ExecutionId: correlationId,
-                    Status: TaskExecutionStatus.Completed,
-                    Message: "No root scripts found.",
-                    ScriptsExecuted: 0,
-                    FilesWritten: 0,
-                    OutputPath: null);
-
-                RecordHistory(correlationId, emptyResult);
-                return emptyResult;
-            }
-
-            var banksFilter = useAtomic ? BuildBanksInClause(selectedBanks) : null;
-            var executionTasks = scriptPaths.Select(path =>
-                ExecuteScriptAsync(path, banksFilter, correlationId, cancellationToken));
-            var scriptResults = await Task.WhenAll(executionTasks);
-
-            var writeResult = await _outputWriter.WriteAsync(
-                _options.OutputDirectory,
-                correlationId,
-                scriptResults,
-                request.PublishToGateway,
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}, OutputPath: {OutputPath}",
-                correlationId,
-                scriptResults.Length,
-                writeResult.FilesWritten,
-                writeResult.OutputPath);
-
-            var result = new TaskExecutionResult(
-                TaskCode: Code,
-                ExecutionId: correlationId,
-                Status: TaskExecutionStatus.Completed,
-                Message: "Extra scripts executed and files created.",
-                ScriptsExecuted: scriptResults.Length,
-                FilesWritten: writeResult.FilesWritten,
-                OutputPath: writeResult.OutputPath);
-
-            RecordHistory(correlationId, result);
-            return result;
+                targetCodes: Array.Empty<string>(),
+                memberNames: scriptCodes!,
+                publishToGateway: request.PublishToGateway,
+                taskCode: Code);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogError(ex, "Extra task failed.");
+            _extraWorkflow.Complete(correlationId);
             throw;
         }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
 
-    private async Task<ExtraScriptExecutionResult> ExecuteScriptAsync(
-        string scriptPath,
-        string? banksFilter,
-        string correlationId,
-        CancellationToken cancellationToken)
-    {
-        var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
-        var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+        _logger.LogInformation(
+            "Extra task accepted. CorrelationId: {CorrelationId}, Scripts: {ScriptCount}, Atomic: {Atomic}, SelectedBanks: {BankCount}",
+            correlationId,
+            scriptPaths.Length,
+            useAtomic,
+            selectedBanks.Length);
 
-        if (banksFilter is not null)
-        {
-            if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
-            }
-
-            sql = sql.Replace(BanksPlaceholder, banksFilter, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return await _scriptExecutor.ExecuteAsync(scriptCode, sql, correlationId, cancellationToken);
+        return new TaskExecutionResult(
+            TaskCode: Code,
+            ExecutionId: correlationId,
+            Status: TaskExecutionStatus.Accepted,
+            Message: "Extra accepted.");
     }
 
     private static string[] NormalizeSelectedBanks(IReadOnlyCollection<string>? selectedBanks)
@@ -177,18 +150,5 @@ public class ExtraUnloadTask(
     private static string BuildBanksInClause(IReadOnlyList<string> selectedBanks)
     {
         return string.Join(",", selectedBanks.Select(static code => $"'{code.Replace("'", "''")}'"));
-    }
-
-    private void RecordHistory(string correlationId, TaskExecutionResult result)
-    {
-        _historyStore.Add(
-            Code,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow,
-            correlationId,
-            result.Message,
-            result.ScriptsExecuted,
-            result.FilesWritten,
-            result.OutputPath);
     }
 }

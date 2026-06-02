@@ -37,17 +37,13 @@ export class RealtimeHubService {
       .withAutomaticReconnect()
       .build();
 
+    // Доставляем все события всем подписчикам; разделение run/extra делают сторы по taskCode/correlationId.
+    // (Раньше единый currentCorrelationId-фильтр глотал бы extra-события во время трекинга run.)
     connection.on('status', (event: RunnerEvent) => {
-      if (!this.shouldProcessCorrelation(event.correlationId)) {
-        return;
-      }
       this.statusEventsSubject.next(event);
     });
 
     connection.on('run_status', (status: RunStatusInfo) => {
-      if (!this.shouldProcessCorrelation(status.correlationId)) {
-        return;
-      }
       this.runStatusEventsSubject.next(status);
     });
 
@@ -91,11 +87,4 @@ export class RealtimeHubService {
     }
   }
 
-  private shouldProcessCorrelation(correlationId: string): boolean {
-    const tracked = this.currentCorrelationId;
-    if (tracked) {
-      return tracked === correlationId;
-    }
-    return true;
-  }
 }

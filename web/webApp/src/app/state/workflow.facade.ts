@@ -62,6 +62,8 @@ export class WorkflowStore {
   readonly presetState = this.presetStore.presetState;
   readonly presetTask = this.presetStore.presetTask;
   readonly extraTask = this.extraStore.extraTask;
+  readonly activeExtraRun = this.extraStore.activeExtraRun;
+  readonly isExtraBusy = this.extraStore.isExtraBusy;
   readonly publishExtraToGateway = this.extraStore.publishExtraToGateway;
   readonly extraBanks = this.extraStore.banks;
   readonly extraBanksLoading = this.extraStore.banksLoading;
@@ -132,7 +134,6 @@ export class WorkflowStore {
     if (this.browser) {
       this.clock.init();
       this.presetStore.restore();
-      this.extraStore.restore();
     }
 
     // Дневное окно обновляется по SignalR (preset_state). Без этой подписки переход окна
@@ -213,6 +214,10 @@ export class WorkflowStore {
     await this.dashboardStore.refreshDashboardAsync();
   }
 
+  stopExtraAsync(): Promise<void> {
+    return this.extraStore.stopExtraAsync();
+  }
+
   startRunAsync(): Promise<void> {
     return this.runStore.startRunAsync();
   }
@@ -247,6 +252,7 @@ export class WorkflowStore {
       this.presetStore.setPresetState(dashboard.presetState ?? presetState);
       this.dashboardStore.applySnapshot(dashboard);
       this.dashboardStore.applyTodayRuns(runsToday);
+      this.extraStore.adoptActiveFromRuns(runsToday);
       await this.outputFilesStore.refreshForHistory(dashboard.todayHistory ?? []);
       this.selectionStore.reconcileFromCatalog(catalog);
 

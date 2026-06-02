@@ -143,9 +143,10 @@ export class ApiClientService {
     adminOverride: boolean,
     publishToGateway: boolean,
     selectedBanks: string[] | null,
-  ): Promise<ScriptTaskRunResult> {
+  ): Promise<RunAcceptedResponse> {
+    // Extra теперь deferred: API возвращает 202 Accepted + correlationId, статус трекается отдельно.
     return firstValueFrom(
-      this.http.post<ScriptTaskRunResult>(this.url('/api/runs/extra'), {
+      this.http.post<RunAcceptedResponse>(this.url('/api/runs/extra'), {
         adminOverride,
         publishToGateway,
         selectedBanks,

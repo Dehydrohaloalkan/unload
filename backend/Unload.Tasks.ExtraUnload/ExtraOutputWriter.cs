@@ -21,64 +21,89 @@ public class ExtraOutputWriter(ExtraUnloadOptions options, IGatewayPublisher gat
         bool publishToGateway,
         CancellationToken cancellationToken)
     {
-        var runDirectory = CreateRunDirectory(baseOutputDirectory);
-        var filesDirectory = Path.Combine(runDirectory, "output-files");
-        Directory.CreateDirectory(filesDirectory);
-
-        var dayOfYear = DateTimeOffset.Now.DayOfYear;
+        var (runDirectory, filesDirectory) = CreateRunDirectory(baseOutputDirectory);
         var filesWritten = 0;
 
         foreach (var script in scriptResults.OrderBy(static s => s.ScriptCode, StringComparer.OrdinalIgnoreCase))
         {
-            var scriptSegment = SanitizeFileNameSegment(script.ScriptCode);
-            var stem = BuildStem(script.ScriptCode);
-            var scriptDirectory = Path.Combine(filesDirectory, scriptSegment);
-
-            var scriptFiles = new List<SenderFileDescriptor>();
-            // Сквозная нумерация чанков в рамках скрипта (по всем банкам).
-            var chunkNumber = 0;
-
-            foreach (var bank in script.LinesByBank.OrderBy(static x => x.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                var bankSegment = SanitizeFileNameSegment(bank.Key);
-                var bankDirectory = Path.Combine(scriptDirectory, bankSegment);
-                Directory.CreateDirectory(bankDirectory);
-
-                // Расширение файла — код банка (NrBank), напр. ~YW15201.B01
-                var fileExtension = $".{bankSegment}";
-
-                foreach (var chunkLines in SplitIntoChunks(bank.Value, stem, dayOfYear, fileExtension))
-                {
-                    chunkNumber++;
-                    var descriptor = await WriteChunkAsync(
-                        bankDirectory,
-                        stem,
-                        dayOfYear,
-                        chunkNumber,
-                        fileExtension,
-                        chunkLines,
-                        cancellationToken);
-                    scriptFiles.Add(descriptor);
-                    filesWritten++;
-                }
-            }
-
-            if (publishToGateway && scriptFiles.Count > 0)
-            {
-                var @event = new SenderFileBatchReadyEvent(
-                    OccurredAt: DateTimeOffset.UtcNow,
-                    CorrelationId: correlationId,
-                    MemberName: script.ScriptCode,
-                    BatchId: $"{correlationId}:{script.ScriptCode}",
-                    Version: 1,
-                    Files: scriptFiles
-                        .OrderBy(static f => f.FileName, StringComparer.OrdinalIgnoreCase)
-                        .ToArray());
-                await _gatewayPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
-            }
+            var result = await WriteScriptAsync(filesDirectory, correlationId, script, publishToGateway, cancellationToken);
+            filesWritten += result.FilesWritten;
         }
 
         return new ExtraOutputWriteResult(runDirectory, filesWritten);
+    }
+
+    /// <summary>
+    /// Создаёт каталог запуска и подкаталог <c>output-files</c>; возвращает оба пути.
+    /// Используется фоновым движком (<c>ExtraUnloadEngine</c>), который пишет скрипты по одному.
+    /// </summary>
+    public (string RunDirectory, string FilesDirectory) CreateRunDirectory(string baseOutputDirectory)
+    {
+        var runDirectory = CreateRunDirectoryCore(baseOutputDirectory);
+        var filesDirectory = Path.Combine(runDirectory, "output-files");
+        Directory.CreateDirectory(filesDirectory);
+        return (runDirectory, filesDirectory);
+    }
+
+    /// <summary>
+    /// Пишет файлы одного extra-скрипта в общий каталог <paramref name="filesDirectory"/>
+    /// и (опционально) публикует партию в шлюз. Возвращает число файлов и их дескрипторы.
+    /// </summary>
+    public async Task<ExtraScriptWriteResult> WriteScriptAsync(
+        string filesDirectory,
+        string correlationId,
+        ExtraScriptExecutionResult script,
+        bool publishToGateway,
+        CancellationToken cancellationToken)
+    {
+        var dayOfYear = DateTimeOffset.Now.DayOfYear;
+        var scriptSegment = SanitizeFileNameSegment(script.ScriptCode);
+        var stem = BuildStem(script.ScriptCode);
+        var scriptDirectory = Path.Combine(filesDirectory, scriptSegment);
+
+        var scriptFiles = new List<SenderFileDescriptor>();
+        // Сквозная нумерация чанков в рамках скрипта (по всем банкам).
+        var chunkNumber = 0;
+
+        foreach (var bank in script.LinesByBank.OrderBy(static x => x.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var bankSegment = SanitizeFileNameSegment(bank.Key);
+            var bankDirectory = Path.Combine(scriptDirectory, bankSegment);
+            Directory.CreateDirectory(bankDirectory);
+
+            // Расширение файла — код банка (NrBank), напр. ~YW15201.B01
+            var fileExtension = $".{bankSegment}";
+
+            foreach (var chunkLines in SplitIntoChunks(bank.Value, stem, dayOfYear, fileExtension))
+            {
+                chunkNumber++;
+                var descriptor = await WriteChunkAsync(
+                    bankDirectory,
+                    stem,
+                    dayOfYear,
+                    chunkNumber,
+                    fileExtension,
+                    chunkLines,
+                    cancellationToken);
+                scriptFiles.Add(descriptor);
+            }
+        }
+
+        if (publishToGateway && scriptFiles.Count > 0)
+        {
+            var @event = new SenderFileBatchReadyEvent(
+                OccurredAt: DateTimeOffset.UtcNow,
+                CorrelationId: correlationId,
+                MemberName: script.ScriptCode,
+                BatchId: $"{correlationId}:{script.ScriptCode}",
+                Version: 1,
+                Files: scriptFiles
+                    .OrderBy(static f => f.FileName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+            await _gatewayPublisher.PublishFileBatchReadyAsync(@event, cancellationToken);
+        }
+
+        return new ExtraScriptWriteResult(scriptFiles.Count, scriptFiles);
     }
 
     /// <summary>
@@ -164,7 +189,7 @@ public class ExtraOutputWriter(ExtraUnloadOptions options, IGatewayPublisher gat
         return normalized.Length <= 3 ? normalized : normalized[..3];
     }
 
-    private string CreateRunDirectory(string baseOutputDirectory)
+    private string CreateRunDirectoryCore(string baseOutputDirectory)
     {
         Directory.CreateDirectory(baseOutputDirectory);
         var timestamp = DateTime.Now.ToString("dd_MM_yyyy_HHmmss");

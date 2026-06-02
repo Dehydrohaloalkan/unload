@@ -19,6 +19,7 @@ public class RunsController(
     TaskWorkflow taskWorkflow,
     RequeueService requeueService,
     RunActivationChannel runWorkflow,
+    ExtraActivationChannel extraWorkflow,
     RunStateStore runStateStore,
     DailyWindowPolicy dailyWindowPolicy,
     WorkflowQueryService workflowQueryService,
@@ -30,6 +31,7 @@ public class RunsController(
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
     private readonly RequeueService _requeueService = requeueService;
     private readonly RunActivationChannel _runWorkflow = runWorkflow;
+    private readonly ExtraActivationChannel _extraWorkflow = extraWorkflow;
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly WorkflowQueryService _workflowQueryService = workflowQueryService;
@@ -180,19 +182,26 @@ public class RunsController(
                     SelectedBanks: request?.SelectedBanks),
                 cancellationToken);
 
-            _logger.LogInformation(
-                "Extra task completed. CorrelationId: {CorrelationId}, ScriptsExecuted: {ScriptsExecuted}, FilesWritten: {FilesWritten}",
-                result.ExecutionId,
-                result.ScriptsExecuted,
-                result.FilesWritten);
+            _logger.LogInformation("Extra accepted. CorrelationId: {CorrelationId}", result.ExecutionId);
 
-            return Ok(new ScriptTaskRunResult(
-                TaskName: result.TaskCode,
-                CorrelationId: result.ExecutionId,
-                ScriptsExecuted: result.ScriptsExecuted ?? 0,
-                FilesWritten: result.FilesWritten ?? 0,
-                OutputPath: result.OutputPath,
-                Message: result.Message));
+            // Extra теперь deferred (как run): сразу отдаём Accepted + correlationId, а статус
+            // отслеживается через SignalR. Это убирает «тихое» зависание долгого HTTP-запроса.
+            var runState = _runStateStore.Get(result.ExecutionId);
+            if (runState is not null)
+            {
+                await _hubContext.Clients.All.SendAsync("run_status", runState, cancellationToken);
+            }
+
+            var response = new RunAcceptedResponse(
+                result.ExecutionId,
+                $"/api/runs/{result.ExecutionId}",
+                "/hubs/status",
+                "SubscribeRun",
+                "status",
+                "run_status",
+                $"/api/runs/{result.ExecutionId}/stop");
+
+            return Accepted(response.RunStatusPath, response);
         }
         catch (TaskLaunchException ex)
         {
@@ -284,7 +293,12 @@ public class RunsController(
     [HttpPost("{correlationId}/stop")]
     public async Task<IActionResult> StopRunAsync(string correlationId, CancellationToken cancellationToken)
     {
-        if (!_runWorkflow.TryCancel(correlationId))
+        // Отмена маршрутизируется по типу задачи (run/extra) — оба deferred и отменяются через свой канал.
+        var cancelled = correlationId.StartsWith("extra-", StringComparison.OrdinalIgnoreCase)
+            ? _extraWorkflow.TryCancel(correlationId)
+            : _runWorkflow.TryCancel(correlationId);
+
+        if (!cancelled)
         {
             throw new ApiProblemException(
                 StatusCodes.Status404NotFound,

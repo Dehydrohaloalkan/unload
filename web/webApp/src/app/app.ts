@@ -12,6 +12,7 @@ import { WorkflowStore } from './app.store';
 import { TPipe, t } from './i18n/i18n';
 import { byDescDate } from './state/utils/compare.util';
 import { DetailsRunPanelComponent } from './components/details-run-panel/details-run-panel.component';
+import { DetailsExtraPanelComponent } from './components/details-extra-panel/details-extra-panel.component';
 import { DetailsTaskPanelComponent } from './components/details-task-panel.component';
 import { DownloadHintToastComponent } from './components/download-hint-toast.component';
 import { ExtraCardComponent } from './components/extra-card.component';
@@ -33,6 +34,7 @@ import { RunCardComponent } from './components/run-card.component';
     ProgressSpinner,
     TPipe,
     DetailsRunPanelComponent,
+    DetailsExtraPanelComponent,
     DetailsTaskPanelComponent,
     DownloadHintToastComponent,
     ExtraCardComponent,

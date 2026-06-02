@@ -15,9 +15,10 @@ public class TaskWorkflow
     private readonly DailyWindowPolicy _window;
     private readonly TaskExecutionHistoryStore _historyStore;
     private readonly RunActivationChannel _runWorkflow;
+    private readonly ExtraActivationChannel _extraWorkflow;
     private readonly ILogger<TaskWorkflow> _logger;
 
-    // Потокобезопасный набор активных foreground-задач (preset, extra).
+    // Потокобезопасный набор активных foreground-задач (preset).
     private readonly object _sync = new();
     private readonly HashSet<string> _activeForegroundTaskCodes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -26,12 +27,14 @@ public class TaskWorkflow
         DailyWindowPolicy window,
         TaskExecutionHistoryStore historyStore,
         RunActivationChannel runWorkflow,
+        ExtraActivationChannel extraWorkflow,
         ILogger<TaskWorkflow> logger)
     {
         _tasks = tasks.ToDictionary(static t => t.Code, StringComparer.OrdinalIgnoreCase);
         _window = window;
         _historyStore = historyStore;
         _runWorkflow = runWorkflow;
+        _extraWorkflow = extraWorkflow;
         _logger = logger;
     }
 
@@ -125,8 +128,9 @@ public class TaskWorkflow
         // ConflictsWith — атомарно проверяется вместе с захватом слота в ClaimSlot.
 
         // Single-active для run: проверяем RunActivationChannel.
+        // (run сам deferred и конфликтует с preset/extra; preset тоже сюда попадает через ConflictsWith run.)
         var conflictsWithRun = task.ConflictsWith.Contains(TaskCodes.Run, StringComparer.OrdinalIgnoreCase);
-        if (task.IsDeferred || conflictsWithRun)
+        if (string.Equals(task.Code, TaskCodes.Run, StringComparison.OrdinalIgnoreCase) || conflictsWithRun)
         {
             var activeRunId = _runWorkflow.GetActiveCorrelationId();
             if (!string.IsNullOrEmpty(activeRunId))
@@ -136,6 +140,23 @@ public class TaskWorkflow
                     "RUN_ALREADY_IN_PROGRESS",
                     "Another run task is already active.",
                     new Dictionary<string, object?> { ["activeCorrelationId"] = activeRunId });
+            }
+        }
+
+        // Single-active для extra и конфликты с активным extra (preset).
+        // extra deferred — foreground-слот не занимает, поэтому ClaimSlot его не видит;
+        // активность отслеживаем через ExtraActivationChannel.
+        var conflictsWithExtra = task.ConflictsWith.Contains(TaskCodes.Extra, StringComparer.OrdinalIgnoreCase);
+        if (string.Equals(task.Code, TaskCodes.Extra, StringComparison.OrdinalIgnoreCase) || conflictsWithExtra)
+        {
+            var activeExtraId = _extraWorkflow.GetActiveCorrelationId();
+            if (!string.IsNullOrEmpty(activeExtraId))
+            {
+                throw new TaskLaunchException(
+                    TaskLaunchFailureKind.Conflict,
+                    "TASK_ALREADY_RUNNING",
+                    "Extra task is already active.",
+                    new Dictionary<string, object?> { ["activeCorrelationId"] = activeExtraId });
             }
         }
     }

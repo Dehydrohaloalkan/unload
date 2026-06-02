@@ -42,14 +42,19 @@ public sealed class WorkflowQueryService(
     private readonly TaskExecutionHistoryStore _historyStore = historyStore;
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
 
-    /// <summary>Возвращает запуски <c>run</c> за текущий день.</summary>
+    /// <summary>
+    /// Возвращает запуски <c>run</c> и <c>extra</c> за текущий день.
+    /// extra нужен фронту, чтобы в истории подтянуть sender-батчи и фактический статус доставки;
+    /// разделение main/extra на стороне UI (по taskCode/префиксу correlationId).
+    /// </summary>
     public IReadOnlyList<RunStatusInfo> GetTodayRuns()
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
         return _runStateStore
             .List()
             .Where(run =>
-                string.Equals(run.TaskCode, TaskCodes.Run, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(run.TaskCode, TaskCodes.Run, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(run.TaskCode, TaskCodes.Extra, StringComparison.OrdinalIgnoreCase)) &&
                 DateOnly.FromDateTime(run.CreatedAt.LocalDateTime) == today)
             .OrderByDescending(static run => run.CreatedAt)
             .ToArray();

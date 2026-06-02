@@ -18,6 +18,7 @@ builder.Services.AddScoped<OutputFilesService>();
 builder.Services.AddUnloadRuntime(builder.Configuration);
 builder.Services.AddHostedService<HistoryRetentionBackgroundService>();
 builder.Services.AddHostedService<MainUnloadHostedService>();
+builder.Services.AddHostedService<ExtraUnloadHostedService>();
 builder.Services.AddHostedService<ProbeSchedulerHostedService>();
 builder.Services.AddHostedService<SenderFeedbackProjectionBackgroundService>();
 

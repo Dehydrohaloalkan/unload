@@ -7,6 +7,7 @@ using Unload.Bootstrapper.DependencyInjection;
 using Unload.Core;
 using Unload.Store;
 using Unload.Tasks;
+using Unload.Tasks.ExtraUnload;
 using Unload.Tasks.MainUnload;
 using Stopwatch = System.Diagnostics.Stopwatch;
 
@@ -37,6 +38,8 @@ var taskWorkflow = provider.ServiceProvider.GetRequiredService<TaskWorkflow>();
 var runWorkflow = provider.ServiceProvider.GetRequiredService<RunActivationChannel>();
 var runStateStore = provider.ServiceProvider.GetRequiredService<RunStateStore>();
 var runner = provider.ServiceProvider.GetRequiredService<MainUnloadEngine>();
+var extraWorkflow = provider.ServiceProvider.GetRequiredService<ExtraActivationChannel>();
+var extraEngine = provider.ServiceProvider.GetRequiredService<ExtraUnloadEngine>();
 var dailyWindowPolicy = provider.ServiceProvider.GetRequiredService<DailyWindowPolicy>();
 var mode = args.Length > 0 && args[0].StartsWith("--", StringComparison.Ordinal)
     ? args[0].Trim().ToLowerInvariant()
@@ -50,8 +53,10 @@ if (mode == "--default" && args.Length == 0)
         catalogService,
         taskWorkflow,
         runWorkflow,
+        extraWorkflow,
         runStateStore,
         runner,
+        extraEngine,
         runnerOptions,
         dailyWindowPolicy,
         presetGateOptions,
@@ -70,16 +75,24 @@ if (mode is "--preset" or "--extra")
         taskCts.Cancel();
     };
 
-    TaskExecutionResult taskResult;
     try
     {
-        taskResult = mode == "--preset"
-            ? await taskWorkflow.LaunchAsync(
+        if (mode == "--preset")
+        {
+            var taskResult = await taskWorkflow.LaunchAsync(
                 new TaskLaunchRequest(TaskCode: TaskCodes.Preset),
-                taskCts.Token)
-            : await taskWorkflow.LaunchAsync(
-                new TaskLaunchRequest(TaskCode: TaskCodes.Extra),
                 taskCts.Token);
+            AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskCode)}");
+            AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.ExecutionId)}");
+            AnsiConsole.MarkupLine($"[grey]Scripts:[/] {taskResult.ScriptsExecuted}");
+            AnsiConsole.MarkupLine($"[grey]Files:[/] {taskResult.FilesWritten}");
+            AnsiConsole.MarkupLine($"[grey]Output:[/] {Markup.Escape(taskResult.OutputPath ?? "-")}");
+        }
+        else
+        {
+            // extra теперь deferred — гоняем движок напрямую (хост-сервиса в консоли нет).
+            await ExecuteExtraAsync(taskWorkflow, extraWorkflow, runStateStore, extraEngine, taskCts.Token);
+        }
     }
     catch (TaskLaunchException ex)
     {
@@ -87,11 +100,6 @@ if (mode is "--preset" or "--extra")
         return;
     }
 
-    AnsiConsole.MarkupLine($"[green]Task completed:[/] {Markup.Escape(taskResult.TaskCode)}");
-    AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(taskResult.ExecutionId)}");
-    AnsiConsole.MarkupLine($"[grey]Scripts:[/] {taskResult.ScriptsExecuted}");
-    AnsiConsole.MarkupLine($"[grey]Files:[/] {taskResult.FilesWritten}");
-    AnsiConsole.MarkupLine($"[grey]Output:[/] {Markup.Escape(taskResult.OutputPath ?? "-")}");
     return;
 }
 
@@ -137,8 +145,10 @@ static async Task RunInteractiveSessionAsync(
     ICatalogService catalogService,
     TaskWorkflow taskWorkflow,
     RunActivationChannel runWorkflow,
+    ExtraActivationChannel extraWorkflow,
     RunStateStore runStateStore,
     MainUnloadEngine runner,
+    ExtraUnloadEngine extraEngine,
     RunnerOptions runnerOptions,
     DailyWindowPolicy dailyWindowPolicy,
     PresetGateOptions presetGateOptions,
@@ -209,11 +219,7 @@ static async Task RunInteractiveSessionAsync(
             }
             else if (string.Equals(action, "Запустить extra", StringComparison.Ordinal))
             {
-                var extraResult = await taskWorkflow.LaunchAsync(
-                    new TaskLaunchRequest(TaskCode: TaskCodes.Extra),
-                    cancellationToken);
-                AnsiConsole.MarkupLine(
-                    $"[green]Extra completed.[/] Files: {extraResult.FilesWritten}, Output: {Markup.Escape(extraResult.OutputPath ?? "-")}");
+                await ExecuteExtraAsync(taskWorkflow, extraWorkflow, runStateStore, extraEngine, cancellationToken);
                 Pause();
             }
         }
@@ -357,6 +363,74 @@ static DateTimeOffset ResolveNextPresetWindowStart(DateTimeOffset now, int start
         0,
         now.Offset);
     return now <= todayStart ? todayStart : todayStart.AddDays(1);
+}
+
+static async Task ExecuteExtraAsync(
+    TaskWorkflow taskWorkflow,
+    ExtraActivationChannel extraWorkflow,
+    RunStateStore runStateStore,
+    ExtraUnloadEngine extraEngine,
+    CancellationToken cancellationToken)
+{
+    var startResult = await taskWorkflow.LaunchAsync(
+        new TaskLaunchRequest(TaskCode: TaskCodes.Extra),
+        cancellationToken);
+    var correlationId = startResult.ExecutionId;
+
+    var activation = await WaitForExtraActivationAsync(extraWorkflow, correlationId, cancellationToken);
+    if (activation is null)
+    {
+        throw new InvalidOperationException("Extra request was not received by processor.");
+    }
+
+    AnsiConsole.MarkupLine($"[grey]CorrelationId:[/] {Markup.Escape(correlationId)}");
+    var stopwatch = Stopwatch.StartNew();
+    try
+    {
+        using var extraCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, activation.CancellationToken);
+        await foreach (var @event in extraEngine.RunAsync(activation.Payload, extraCts.Token))
+        {
+            runStateStore.ApplyEvent(@event);
+            AnsiConsole.MarkupLine($"[grey]{Markup.Escape(FormatEventLine(@event))}[/]");
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        runStateStore.SetCancelled(correlationId, "Extra was cancelled.");
+        AnsiConsole.MarkupLine("[yellow]Extra cancelled.[/]");
+    }
+    catch (Exception ex)
+    {
+        runStateStore.SetFailed(correlationId, ex.Message);
+        throw;
+    }
+    finally
+    {
+        extraWorkflow.Complete(correlationId);
+    }
+
+    stopwatch.Stop();
+    var finalState = runStateStore.Get(correlationId);
+    AnsiConsole.MarkupLine(
+        $"[green]Extra completed.[/] Files: {finalState?.OutputArtifacts?.Count ?? 0}, Output: {Markup.Escape(finalState?.OutputPath ?? "-")}");
+    AnsiConsole.MarkupLine(
+        $"[green]Total extra time:[/] [white]{stopwatch.Elapsed:hh\\:mm\\:ss\\.fff}[/]");
+}
+
+static async Task<ExtraActivation?> WaitForExtraActivationAsync(
+    ExtraActivationChannel extraWorkflow,
+    string correlationId,
+    CancellationToken cancellationToken)
+{
+    await foreach (var activation in extraWorkflow.ReadActivationsAsync(cancellationToken))
+    {
+        if (string.Equals(activation.CorrelationId, correlationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return activation;
+        }
+    }
+
+    return null;
 }
 
 static async Task<RunActivation?> WaitForRunRequestAsync(

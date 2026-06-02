@@ -28,10 +28,10 @@
       <div class="stage-main-action">
       <p-button
         [label]="'extraStage.runButton' | t"
-        icon="app-icon app-icon--bolt"
+        [icon]="task().running ? 'app-icon app-icon--spinner app-icon--spin' : 'app-icon app-icon--bolt'"
         size="small"
         [fluid]="true"
-        [disabled]="!canRun()"
+        [disabled]="!canRun() || task().running"
         [styleClass]="hasRunToday() ? 'stage-button--done' : 'pulse-button'"
         (onClick)="handleStartClick()"
       />

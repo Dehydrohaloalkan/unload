@@ -58,12 +58,19 @@ export const RU = {
   'extraStage.runButton': 'Запустить extra',
   'extraStage.done': 'Выполнено',
 
+  'extraSettings.publishToGateway': 'Отправлять в шлюз',
+  'extraActive.title': 'Активная доп-выгрузка',
+  'extraActive.scripts': 'Скрипты',
+  'extraActive.noScripts': 'Скриптов пока нет.',
+  'extraActive.noActive': 'Активной доп-выгрузки сейчас нет.',
+
   'confirm.header': 'Подтверждение',
   'confirm.runPrompt': 'Точно запустить выгрузку?',
   'confirm.accept': 'Запустить',
   'confirm.reject': 'Отмена',
 
   'details.tabs.run': 'Запуск',
+  'details.tabs.extra': 'Выгрузка',
   'details.tabs.history': 'История',
 
   'details.task.sectionScripts': 'Скрипты и статусы',
@@ -94,6 +101,8 @@ export const RU = {
 
   'activeRun.sectionTitle': 'Активная выгрузка',
   'activeRun.correlation': 'Correlation',
+  'activeRun.startedAt': 'Старт',
+  'activeRun.zeroFiles': 'выполнено, 0 файлов',
   'activeRun.status': 'Статус',
   'activeRun.step': 'Шаг',
   'activeRun.noMemberDetails': 'Деталей по мемберам пока нет.',

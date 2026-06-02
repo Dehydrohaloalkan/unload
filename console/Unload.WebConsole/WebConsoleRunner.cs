@@ -267,9 +267,25 @@ internal static class WebConsoleRunner
             return;
         }
 
-        var result = await apiClient.RunExtraAsync(cancellationToken);
+        var accepted = await apiClient.RunExtraAsync(cancellationToken);
+        var correlationId = accepted.CorrelationId;
+        AnsiConsole.MarkupLine($"[green]Extra accepted:[/] {Markup.Escape(correlationId)}");
+
+        // Extra deferred — поллим статус до терминального.
+        RunStatusInfo? state = null;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            state = await apiClient.GetRunStatusAsync(correlationId, cancellationToken);
+            if (state is not null && IsTerminalStatus(state.Status))
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+
         AnsiConsole.MarkupLine(
-            $"[green]Extra completed.[/] Scripts: {result.ScriptsExecuted}, Files: {result.FilesWritten}, Output: {Markup.Escape(result.OutputPath ?? "-")}");
+            $"[green]Extra finished.[/] Status: {state?.Status}, Files: {state?.OutputArtifacts?.Count ?? 0}, Output: {Markup.Escape(state?.OutputPath ?? "-")}");
     }
 
     /// <summary>

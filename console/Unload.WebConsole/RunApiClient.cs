@@ -141,13 +141,14 @@ internal  class RunApiClient(HttpClient httpClient)
     }
 
     /// <summary>
-    /// Запускает extra-задачу на API.
+    /// Запускает extra-задачу на API. Extra теперь deferred — возвращается 202 Accepted + correlationId,
+    /// статус нужно дочитывать через <see cref="GetRunStatusAsync"/>.
     /// </summary>
-    public async Task<ScriptTaskRunResult> RunExtraAsync(CancellationToken cancellationToken)
+    public async Task<RunAcceptedResponse> RunExtraAsync(CancellationToken cancellationToken)
     {
         using var response = await httpClient.PostAsync("/api/runs/extra", content: null, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ScriptTaskRunResult>(cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Extra result payload is empty.");
+        return await response.Content.ReadFromJsonAsync<RunAcceptedResponse>(cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("Extra accepted payload is empty.");
     }
 }
