@@ -105,7 +105,7 @@ export class ActiveRunViewComponent {
     }
 
     if (batch.status === SenderBatchStatus.Failed) {
-      return 'Failed';
+      return t('status.sender.failed');
     }
 
     if (batch.status === SenderBatchStatus.SkippedByRequest) {

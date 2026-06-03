@@ -3,8 +3,10 @@ import {
   RequeueToGatewayResponse,
   RunStatusInfo,
   SenderBatchStatus,
+  SenderBatchStatusInfo,
   TaskRecord,
 } from '../../app.models';
+import { t } from '../../i18n/i18n';
 import { byDescDate } from './compare.util';
 import { resolveRunStatusLabel } from './labels.util';
 import { buildRunMemberIndex, isFileSentViaBatch, memberKey } from './member-index.util';
@@ -38,12 +40,13 @@ export interface HistoryScriptNode {
 }
 
 /**
- * Фактический результат доставки в шлюз (не «была ли настроена отправка»):
+ * Фактический результат доставки в шлюз. «Жёлтый/красный» — только при реальном сбое отправки,
+ * а не когда какой-то скрипт дал 0 файлов или пофайловое подтверждение пришло не полностью.
  * - `off` — выгрузка без шлюза (publishToGateway=false);
- * - `delivered` — все файлы доставлены;
- * - `partial` — доставлена часть;
- * - `notSent` — ничего не доставлено (есть файлы, ни один не отправлен);
- * - `failed` — отправка настроена, но файлов нет вовсе (доставлять нечего/сбой).
+ * - `delivered` — отправлять было нечего или всё, что встало в очередь, ушло без сбоя;
+ * - `partial` — была ошибка отправки, но часть партий всё же доставлена;
+ * - `notSent` — ничего не доставлено (есть файлы, ни один не отправлен) без явного сбоя;
+ * - `failed` — отправка дала сбой и не доставлено ничего.
  */
 export type GatewayDelivery = 'off' | 'delivered' | 'partial' | 'notSent' | 'failed';
 
@@ -70,11 +73,21 @@ export interface HistoryProjectionInput {
   outputFilesByPath: Record<string, OutputFileInfo[]>;
   knownMemberNames: string[];
   confirmedSentPaths: Set<string>;
+  // Код банка (NrBank) → читаемое название. Для дерева extra-истории показываем название, а не код.
+  bankNamesByCode?: Record<string, string>;
 }
 
 export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode[] {
   const nodeMap = new Map<string, HistoryRunNode>();
-  const { todayRuns, todayHistory, allTodayRuns, outputFilesByPath, knownMemberNames, confirmedSentPaths } = input;
+  const {
+    todayRuns,
+    todayHistory,
+    allTodayRuns,
+    outputFilesByPath,
+    knownMemberNames,
+    confirmedSentPaths,
+    bankNamesByCode = {},
+  } = input;
 
   for (const run of todayRuns) {
     const correlationId = run.correlationId?.trim();
@@ -82,7 +95,8 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       continue;
     }
 
-    const memberFiles = buildRunMemberFiles(run, correlationId, confirmedSentPaths);
+    const index = buildRunMemberIndex(run);
+    const memberFiles = buildRunMemberFiles(run, correlationId, confirmedSentPaths, index);
     const publishToGateway = run.publishToGateway ?? true;
     nodeMap.set(`run|${correlationId}`, {
       key: `run|${correlationId}`,
@@ -96,6 +110,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       gatewayDelivery: resolveGatewayDelivery(
         publishToGateway,
         Object.values(memberFiles).flat(),
+        Array.from(index.batches.values()),
       ),
       memberNames: collectRunMemberNames(run, knownMemberNames),
       memberFiles,
@@ -116,12 +131,14 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
 
     // Группировка extra-файлов по скрипту и банку: путь вида
     // .../output-files/<scriptCode>/<bank>/<file>. Партия шлюза — на скрипт (MemberName=scriptCode).
+    // Группируем по коду банка (NrBank из пути), но показываем читаемое название.
     const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
     for (const file of files) {
-      const { scriptCode, bankName } = parseExtraFilePath(file.filePath, file.fileName);
+      const { scriptCode, bankCode } = parseExtraFilePath(file.filePath, file.fileName);
+      const bankName = bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
       const batch = extraIndex.batches.get(memberKey(scriptCode));
       const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
-      const bucket = bankMap.get(bankName) ?? [];
+      const bucket = bankMap.get(bankCode) ?? [];
       bucket.push({
         key: `extra|${correlationId}|${file.filePath}`,
         taskCode: 'extra',
@@ -136,7 +153,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
           confirmedSentPaths.has(file.filePath) ||
           isFileSentViaBatch(file.filePath, batch?.sentFiles ?? null),
       });
-      bankMap.set(bankName, bucket);
+      bankMap.set(bankCode, bucket);
       scriptMap.set(scriptCode, bankMap);
     }
 
@@ -144,8 +161,12 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([scriptCode, bankMap]) => {
         const banks: HistoryBankNode[] = Array.from(bankMap.entries())
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([bankName, bankFiles]) => ({ bankName, files: bankFiles }));
+          // Сортируем по отображаемому названию банка.
+          .map(([bankCode, bankFiles]) => ({
+            bankName: bankFiles[0]?.bankName ?? bankCode,
+            files: bankFiles,
+          }))
+          .sort((a, b) => a.bankName.localeCompare(b.bankName));
         return {
           scriptCode,
           banks,
@@ -158,7 +179,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       key: `extra|${correlationId}`,
       taskCode: 'extra',
       correlationId,
-      status: extraRun ? resolveRunStatusLabel(extraRun.status) : 'Completed',
+      status: extraRun ? resolveRunStatusLabel(extraRun.status) : t('status.run.completed'),
       startedAt: record.startedAt,
       completedAt: record.completedAt,
       occurredAt: record.completedAt,
@@ -166,6 +187,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       gatewayDelivery: resolveGatewayDelivery(
         extraPublishToGateway,
         scripts.flatMap((script) => script.banks.flatMap((bank) => bank.files)),
+        Array.from(extraIndex.batches.values()),
       ),
       memberNames: sortNames(knownMemberNames),
       memberFiles: {},
@@ -277,37 +299,41 @@ export function summarizeRequeue(
 }
 
 /**
- * Вычисляет фактический результат доставки по списку файлов выгрузки.
- * Зелёный «delivered» — только когда отправка была настроена и все файлы реально доставлены.
+ * Вычисляет фактический результат доставки.
+ *
+ * Жёлтый «частично»/красный «ошибка» показываем ТОЛЬКО при настоящем сбое отправки
+ * (партия шлюза в статусе Failed). Если сбоев нет — выгрузка считается доставленной,
+ * даже если какой-то скрипт дал 0 файлов или пофайловое подтверждение пришло не полностью
+ * (статус успешной партии авторитетнее, чем список подтверждённых файлов).
  */
 function resolveGatewayDelivery(
   publishToGateway: boolean,
   files: HistoryFileRow[],
+  batches: SenderBatchStatusInfo[],
 ): GatewayDelivery {
   if (!publishToGateway) {
     return 'off';
   }
-  if (files.length === 0) {
-    // Отправка была настроена, но доставлять нечего/ничего не записалось.
-    return 'failed';
-  }
+
   const sent = files.filter((file) => file.sentToGateway).length;
-  if (sent === 0) {
-    return 'notSent';
-  }
-  if (sent === files.length) {
+  const hasFailure = batches.some((batch) => batch.status === SenderBatchStatus.Failed);
+
+  // Реального сбоя нет: отправлять было нечего либо всё ушло — это успех, не тревога.
+  if (!hasFailure) {
     return 'delivered';
   }
-  return 'partial';
+
+  // Есть сбой отправки: «частично», если что-то всё же доставлено, иначе «ошибка».
+  return sent > 0 ? 'partial' : 'failed';
 }
 
 function buildRunMemberFiles(
   run: RunStatusInfo,
   correlationId: string,
   confirmedSentPaths: Set<string>,
+  index: ReturnType<typeof buildRunMemberIndex>,
 ): Record<string, HistoryFileRow[]> {
   const memberMap = new Map<string, HistoryFileRow[]>();
-  const index = buildRunMemberIndex(run);
 
   for (const artifact of run.outputArtifacts ?? []) {
     if (!artifact.filePath || !artifact.fileName) {
@@ -349,21 +375,21 @@ function collectRunMemberNames(run: RunStatusInfo, knownMemberNames: string[]): 
 }
 
 /**
- * Извлекает код скрипта и банк из относительного пути extra-файла
- * (`.../output-files/<scriptCode>/<bank>/<file>`). Поддерживает оба разделителя путей.
+ * Извлекает код скрипта и код банка (NrBank) из относительного пути extra-файла
+ * (`.../output-files/<scriptCode>/<bankCode>/<file>`). Поддерживает оба разделителя путей.
  */
 function parseExtraFilePath(
   filePath: string,
   fileName: string,
-): { scriptCode: string; bankName: string } {
+): { scriptCode: string; bankCode: string } {
   const segments = (filePath ?? '').split(/[\\/]/).filter((segment) => segment.length > 0);
   const anchor = segments.lastIndexOf('output-files');
   if (anchor >= 0 && segments.length >= anchor + 3) {
-    return { scriptCode: segments[anchor + 1], bankName: segments[anchor + 2] };
+    return { scriptCode: segments[anchor + 1], bankCode: segments[anchor + 2] };
   }
 
   // Фолбэк для неожиданной структуры: имя файла без расширения как код скрипта.
   const dotIndex = fileName.lastIndexOf('.');
   const fallback = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName || 'UNKNOWN';
-  return { scriptCode: fallback, bankName: 'UNKNOWN' };
+  return { scriptCode: fallback, bankCode: 'UNKNOWN' };
 }

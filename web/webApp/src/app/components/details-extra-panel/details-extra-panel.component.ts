@@ -55,12 +55,21 @@ export class DetailsExtraPanelComponent implements OnInit {
     return this.store.allExtraBanksSelected();
   }
 
+  /** Выбрана часть банков (не все и не пусто) — для indeterminate-состояния «Выбрать все». */
+  banksPartial(): boolean {
+    return this.store.someExtraBanksSelected();
+  }
+
   toggleBank(code: string, checked: boolean): void {
     this.store.toggleExtraBank(code, checked);
   }
 
-  selectAllBanks(): void {
-    this.store.selectAllExtraBanks();
+  toggleAllBanks(checked: boolean): void {
+    if (checked) {
+      this.store.selectAllExtraBanks();
+    } else {
+      this.store.deselectAllExtraBanks();
+    }
   }
 
   setPublishToGateway(enabled: boolean): void {

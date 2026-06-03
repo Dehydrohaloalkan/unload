@@ -79,7 +79,6 @@ export const ExtraStore = signalStore(
     const admin = inject(AdminStore);
     const errorStore = inject(WorkflowErrorStore);
     const dashboard = inject(DashboardStore);
-    const hub = inject(RealtimeHubService);
     const platformId = inject(PLATFORM_ID);
     const browser = isPlatformBrowser(platformId);
 
@@ -144,6 +143,11 @@ export const ExtraStore = signalStore(
       allBanksSelected(): boolean {
         return store.selectedBankCodes() === null;
       },
+      // Выбрана часть банков: не «все» (null) и не пусто.
+      someBanksSelected(): boolean {
+        const selected = store.selectedBankCodes();
+        return selected !== null && selected.length > 0;
+      },
       toggleBank(code: string, selected: boolean): void {
         const next = effectiveSelected();
         if (selected) {
@@ -160,6 +164,9 @@ export const ExtraStore = signalStore(
       selectAllBanks(): void {
         patchState(store, { selectedBankCodes: null });
       },
+      deselectAllBanks(): void {
+        patchState(store, { selectedBankCodes: [] });
+      },
 
       /** Подхватывает активную extra-выгрузку из списка сегодняшних запусков (bootstrap/refresh). */
       adoptActiveFromRuns(runs: RunStatusInfo[]): void {
@@ -168,6 +175,9 @@ export const ExtraStore = signalStore(
           .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))[0];
         if (active) {
           patchState(store, { trackedExtraId: active.correlationId, activeExtraRun: active });
+          // Снапшот из /runs/today мог устареть (часть событий хаба пропущена при перезагрузке),
+          // поэтому сразу дотягиваем актуальное состояние; дальше держит polling-эффект.
+          void refreshTrackedExtraAsync();
         }
       },
 
@@ -228,9 +238,13 @@ export const ExtraStore = signalStore(
       store._trackExtraStatus(hub.runStatusEvents$);
       destroyRef.onDestroy(() => store._stopPolling());
 
-      // Polling — только когда хаб отвалился и есть активная extra-выгрузка.
+      // Polling как гарантированный fallback на всё время активной extra-выгрузки.
+      // Хаб шлёт run_status широковещательно, но при перезагрузке страницы часть событий
+      // (в т.ч. финальное «завершено») может прийти в окно реконнекта и потеряться — тогда
+      // адоптированный снапшот «зависал». Поэтому опрашиваем сервер, пока выгрузка активна,
+      // независимо от состояния хаба: статус сходится к серверной правде максимум за интервал.
       effect(() => {
-        const shouldPoll = store.isExtraBusy() && !!store.trackedExtraId() && !hub.connectionReady();
+        const shouldPoll = store.isExtraBusy() && !!store.trackedExtraId();
         if (shouldPoll) {
           store._ensurePolling();
         } else {

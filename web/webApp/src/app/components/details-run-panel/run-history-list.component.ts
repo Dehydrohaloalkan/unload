@@ -55,6 +55,7 @@ export class RunHistoryListComponent {
       outputFilesByPath: this.store.outputFilesByPath() ?? {},
       knownMemberNames: this.store.historyMemberNames(),
       confirmedSentPaths: this.confirmedSentPaths(),
+      bankNamesByCode: this.store.extraBankNamesByCode(),
     });
     const filter = this.taskCodeFilter();
     return filter ? nodes.filter((node) => node.taskCode === filter) : nodes;

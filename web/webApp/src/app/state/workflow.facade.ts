@@ -67,6 +67,16 @@ export class WorkflowStore {
   readonly publishExtraToGateway = this.extraStore.publishExtraToGateway;
   readonly extraBanks = this.extraStore.banks;
   readonly extraBanksLoading = this.extraStore.banksLoading;
+  // Код банка (NrBank) → читаемое название; для подмены кода названием в истории extra.
+  readonly extraBankNamesByCode = computed<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const bank of this.extraStore.banks()) {
+      if (bank.nrBank) {
+        map[bank.nrBank] = bank.bankName;
+      }
+    }
+    return map;
+  });
 
   readonly activeRun = this.runStore.activeRun;
   readonly trackedCorrelationId = this.runStore.trackedCorrelationId;
@@ -184,12 +194,20 @@ export class WorkflowStore {
     return this.extraStore.allBanksSelected();
   }
 
+  someExtraBanksSelected(): boolean {
+    return this.extraStore.someBanksSelected();
+  }
+
   toggleExtraBank(code: string, selected: boolean): void {
     this.extraStore.toggleBank(code, selected);
   }
 
   selectAllExtraBanks(): void {
     this.extraStore.selectAllBanks();
+  }
+
+  deselectAllExtraBanks(): void {
+    this.extraStore.deselectAllBanks();
   }
 
   setAdminMode(enabled: boolean): void {

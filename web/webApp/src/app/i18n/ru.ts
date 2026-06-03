@@ -5,8 +5,8 @@
  */
 export const RU = {
   'app.title': 'Панель выгрузки',
-  'app.adminMode': 'Admin mode',
-  'app.adminModeOn': 'Admin mode: ON',
+  'app.adminMode': 'Админ-режим',
+  'app.adminModeOn': 'Админ-режим: ВКЛ',
   'app.more': 'Подробнее',
 
   'app.loading.title': 'Загружаю состояние API',
@@ -100,7 +100,7 @@ export const RU = {
   'details.task.banksSelectAll': 'Выбрать все банки',
 
   'activeRun.sectionTitle': 'Активная выгрузка',
-  'activeRun.correlation': 'Correlation',
+  'activeRun.correlation': 'Идентификатор запуска',
   'activeRun.startedAt': 'Старт',
   'activeRun.zeroFiles': 'выполнено, 0 файлов',
   'activeRun.status': 'Статус',
@@ -156,7 +156,35 @@ export const RU = {
 
   'runner.statusUpdated': 'Статус обновлен.',
   'runner.readyToStart': 'Готов к запуску.',
+  'runner.steps.requestAccepted': 'Запрос принят',
+  'runner.steps.targetsResolved': 'Цели определены',
+  'runner.steps.scriptDiscovered': 'Скрипт найден',
+  'runner.steps.queryStarted': 'Запрос выполняется',
+  'runner.steps.queryCompleted': 'Запрос завершён',
+  'runner.steps.chunkCreated': 'Чанк создан',
+  'runner.steps.fileWritten': 'Файл записан',
+  'runner.steps.scriptCompleted': 'Скрипт завершён',
   'runner.steps.publishedToGateway': 'Опубликован в шлюз',
+  'runner.steps.completed': 'Завершено',
+  'runner.steps.failed': 'Ошибка',
+
+  // Лейблы статусов (run/member/sender) — единые подписи для всех представлений.
+  'status.unknown': 'Неизвестно',
+  'status.run.running': 'Выполняется',
+  'status.run.completed': 'Завершено',
+  'status.run.failed': 'Ошибка',
+  'status.run.cancelled': 'Отменено',
+  'status.run.cancellationRequested': 'Запрошена отмена',
+  'status.member.pending': 'Ожидает',
+  'status.member.running': 'Выполняется',
+  'status.member.completed': 'Завершено',
+  'status.member.failed': 'Ошибка',
+  'status.member.cancelled': 'Отменено',
+  'status.sender.ready': 'Готово',
+  'status.sender.inProgress': 'Отправляется',
+  'status.sender.completed': 'Отправлено',
+  'status.sender.failed': 'Ошибка',
+  'status.sender.skipped': 'Пропущено',
 
   'files.one': 'файл',
   'files.few': 'файла',

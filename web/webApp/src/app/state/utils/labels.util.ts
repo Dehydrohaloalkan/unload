@@ -5,61 +5,63 @@ import {
   SenderBatchStatus,
 } from '../../app.models';
 import { t } from '../../i18n/i18n';
+import { I18nKey } from '../../i18n/ru';
 
-const RUN_STATUS_LABELS: Record<RunLifecycleStatus, string> = {
-  [RunLifecycleStatus.Running]: 'Running',
-  [RunLifecycleStatus.Completed]: 'Completed',
-  [RunLifecycleStatus.Failed]: 'Failed',
-  [RunLifecycleStatus.Cancelled]: 'Cancelled',
-  [RunLifecycleStatus.CancellationRequested]: 'Cancellation requested',
+// Лейблы статусов/шагов резолвятся через i18n. Здесь — только enum → ключ; текст в ru.ts.
+const RUN_STATUS_KEYS: Record<RunLifecycleStatus, I18nKey> = {
+  [RunLifecycleStatus.Running]: 'status.run.running',
+  [RunLifecycleStatus.Completed]: 'status.run.completed',
+  [RunLifecycleStatus.Failed]: 'status.run.failed',
+  [RunLifecycleStatus.Cancelled]: 'status.run.cancelled',
+  [RunLifecycleStatus.CancellationRequested]: 'status.run.cancellationRequested',
 };
 
-const MEMBER_STATUS_LABELS: Record<MemberRunLifecycleStatus, string> = {
-  [MemberRunLifecycleStatus.Pending]: 'Pending',
-  [MemberRunLifecycleStatus.Running]: 'Running',
-  [MemberRunLifecycleStatus.Completed]: 'Completed',
-  [MemberRunLifecycleStatus.Failed]: 'Failed',
-  [MemberRunLifecycleStatus.Cancelled]: 'Cancelled',
+const MEMBER_STATUS_KEYS: Record<MemberRunLifecycleStatus, I18nKey> = {
+  [MemberRunLifecycleStatus.Pending]: 'status.member.pending',
+  [MemberRunLifecycleStatus.Running]: 'status.member.running',
+  [MemberRunLifecycleStatus.Completed]: 'status.member.completed',
+  [MemberRunLifecycleStatus.Failed]: 'status.member.failed',
+  [MemberRunLifecycleStatus.Cancelled]: 'status.member.cancelled',
 };
 
-const SENDER_STATUS_LABELS: Record<SenderBatchStatus, string> = {
-  [SenderBatchStatus.Ready]: 'Ready',
-  [SenderBatchStatus.InProgress]: 'In progress',
-  [SenderBatchStatus.Completed]: 'Completed',
-  [SenderBatchStatus.Failed]: 'Failed',
-  [SenderBatchStatus.SkippedByRequest]: 'Skipped',
+const SENDER_STATUS_KEYS: Record<SenderBatchStatus, I18nKey> = {
+  [SenderBatchStatus.Ready]: 'status.sender.ready',
+  [SenderBatchStatus.InProgress]: 'status.sender.inProgress',
+  [SenderBatchStatus.Completed]: 'status.sender.completed',
+  [SenderBatchStatus.Failed]: 'status.sender.failed',
+  [SenderBatchStatus.SkippedByRequest]: 'status.sender.skipped',
 };
 
-const RUNNER_STEP_LABELS: Record<RunnerStep, string> = {
-  [RunnerStep.RequestAccepted]: 'Request accepted',
-  [RunnerStep.TargetsResolved]: 'Targets resolved',
-  [RunnerStep.ScriptDiscovered]: 'Script discovered',
-  [RunnerStep.QueryStarted]: 'Query started',
-  [RunnerStep.QueryCompleted]: 'Query completed',
-  [RunnerStep.ChunkCreated]: 'Chunk created',
-  [RunnerStep.FileWritten]: 'File written',
-  [RunnerStep.ScriptCompleted]: 'Script completed',
-  [RunnerStep.PublishedToGateway]: t('runner.steps.publishedToGateway'),
-  [RunnerStep.Completed]: 'Completed',
-  [RunnerStep.Failed]: 'Failed',
+const RUNNER_STEP_KEYS: Record<RunnerStep, I18nKey> = {
+  [RunnerStep.RequestAccepted]: 'runner.steps.requestAccepted',
+  [RunnerStep.TargetsResolved]: 'runner.steps.targetsResolved',
+  [RunnerStep.ScriptDiscovered]: 'runner.steps.scriptDiscovered',
+  [RunnerStep.QueryStarted]: 'runner.steps.queryStarted',
+  [RunnerStep.QueryCompleted]: 'runner.steps.queryCompleted',
+  [RunnerStep.ChunkCreated]: 'runner.steps.chunkCreated',
+  [RunnerStep.FileWritten]: 'runner.steps.fileWritten',
+  [RunnerStep.ScriptCompleted]: 'runner.steps.scriptCompleted',
+  [RunnerStep.PublishedToGateway]: 'runner.steps.publishedToGateway',
+  [RunnerStep.Completed]: 'runner.steps.completed',
+  [RunnerStep.Failed]: 'runner.steps.failed',
 };
 
 export function resolveRunStatusLabel(status: RunLifecycleStatus | null | undefined): string {
-  return status == null ? 'Unknown' : (RUN_STATUS_LABELS[status] ?? 'Unknown');
+  return status == null ? t('status.unknown') : t(RUN_STATUS_KEYS[status] ?? 'status.unknown');
 }
 
 export function resolveMemberStatusLabel(
   status: MemberRunLifecycleStatus | null | undefined,
 ): string {
-  return status == null ? 'Unknown' : (MEMBER_STATUS_LABELS[status] ?? 'Unknown');
+  return status == null ? t('status.unknown') : t(MEMBER_STATUS_KEYS[status] ?? 'status.unknown');
 }
 
 export function resolveSenderStatusLabel(status: SenderBatchStatus | null | undefined): string {
-  return status == null ? 'Unknown' : (SENDER_STATUS_LABELS[status] ?? 'Unknown');
+  return status == null ? t('status.unknown') : t(SENDER_STATUS_KEYS[status] ?? 'status.unknown');
 }
 
 export function resolveRunnerStepLabel(step: RunnerStep | null | undefined): string {
-  return step == null ? 'Unknown' : (RUNNER_STEP_LABELS[step] ?? 'Unknown');
+  return step == null ? t('status.unknown') : t(RUNNER_STEP_KEYS[step] ?? 'status.unknown');
 }
 
 export type SeveritySlug = 'success' | 'info' | 'warn' | 'danger' | 'secondary';

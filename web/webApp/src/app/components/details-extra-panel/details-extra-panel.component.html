@@ -8,15 +8,36 @@
     <p-tabpanel value="extra">
       <div class="details-section">
         <div class="details-section__title">{{ 'details.task.sectionBanks' | t }}</div>
+
+        <label class="details-check-row">
+          <p-checkbox
+            binary="true"
+            [ngModel]="publishToGateway()"
+            (onChange)="setPublishToGateway($event.checked)"
+          />
+          <span>{{ 'extraSettings.publishToGateway' | t }}</span>
+        </label>
+
         @if (banksLoading()) {
           <div class="details-empty">{{ 'details.task.banksLoading' | t }}</div>
         } @else if (banks().length === 0) {
           <div class="details-empty">{{ 'details.task.banksEmpty' | t }}</div>
         } @else {
+          <label class="details-check-row">
+            <p-checkbox
+              binary="true"
+              [ngModel]="allBanksSelected()"
+              [indeterminate]="banksPartial()"
+              (onChange)="toggleAllBanks($event.checked)"
+            />
+            <span>{{ 'memberSelection.selectAll' | t }}</span>
+          </label>
+
           <div class="details-item__message">
             {{ allBanksSelected() ? ('details.task.banksAllSelected' | t) : ('details.task.banksSubset' | t) }}
           </div>
-          <div class="bank-grid">
+
+          <div class="bank-list">
             @for (bank of banks(); track bank.nrBank) {
               <label class="bank-item">
                 <p-checkbox
@@ -29,23 +50,7 @@
               </label>
             }
           </div>
-          @if (!allBanksSelected()) {
-            <button type="button" class="bank-reset" (click)="selectAllBanks()">
-              {{ 'details.task.banksSelectAll' | t }}
-            </button>
-          }
         }
-      </div>
-
-      <div class="details-section">
-        <label class="extra-gateway-toggle">
-          <p-checkbox
-            binary="true"
-            [ngModel]="publishToGateway()"
-            (onChange)="setPublishToGateway($event.checked)"
-          />
-          <span>{{ 'extraSettings.publishToGateway' | t }}</span>
-        </label>
 
         <p-button
           [label]="'extraStage.runButton' | t"
