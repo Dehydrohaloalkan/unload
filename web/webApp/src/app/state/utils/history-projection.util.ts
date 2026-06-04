@@ -6,7 +6,6 @@ import {
   SenderBatchStatusInfo,
   TaskRecord,
 } from '../../app.models';
-import { t } from '../../i18n/i18n';
 import { byDescDate } from './compare.util';
 import { resolveRunStatusLabel } from './labels.util';
 import { buildRunMemberIndex, isFileSentViaBatch, memberKey } from './member-index.util';
@@ -117,41 +116,65 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
     });
   }
 
-  for (const record of todayHistory) {
-    if (record.taskCode !== 'extra' || !record.correlationId || !record.outputPath) {
+  // extra-узлы строим из ВСЕХ сегодняшних extra-запусков (любой статус), как main из todayRuns,
+  // — иначе завершённые/упавшие/отменённые выгрузки не попадали в Историю (todayHistory хранит
+  // только Completed) и после ухода из активного вида «пропадали» в никуда.
+  for (const run of allTodayRuns) {
+    const correlationId = (run.correlationId ?? '').trim();
+    if (!correlationId || (run.taskCode ?? '').trim().toLowerCase() !== 'extra') {
       continue;
     }
 
-    const correlationId = record.correlationId;
-    const files = outputFilesByPath[record.outputPath] ?? [];
-    const extraRun = allTodayRuns.find(
-      (run) => (run.correlationId ?? '').trim() === correlationId,
+    const extraIndex = buildRunMemberIndex(run);
+    // Запись из todayHistory (если есть) даёт точные времена старта/завершения и outputPath.
+    const record = todayHistory.find(
+      (item) => item.taskCode === 'extra' && item.correlationId === correlationId,
     );
-    const extraIndex = buildRunMemberIndex(extraRun ?? null);
+
+    // Источник файлов: диск-скан по outputPath (полный список для завершённых) ∪ артефакты событий
+    // (покрывают активные/упавшие выгрузки, для которых диск ещё не сканировался).
+    const outputPath = run.outputPath ?? record?.outputPath ?? null;
+    const fileEntries = new Map<string, { fileName: string; occurredAt: string }>();
+    if (outputPath) {
+      for (const file of outputFilesByPath[outputPath] ?? []) {
+        fileEntries.set(file.filePath, {
+          fileName: file.fileName,
+          occurredAt: file.modifiedAt || run.updatedAt,
+        });
+      }
+    }
+    for (const artifact of run.outputArtifacts ?? []) {
+      if (artifact.filePath && artifact.fileName && !fileEntries.has(artifact.filePath)) {
+        fileEntries.set(artifact.filePath, {
+          fileName: artifact.fileName,
+          occurredAt: artifact.occurredAt || run.updatedAt,
+        });
+      }
+    }
 
     // Группировка extra-файлов по скрипту и банку: путь вида
     // .../output-files/<scriptCode>/<bank>/<file>. Партия шлюза — на скрипт (MemberName=scriptCode).
     // Группируем по коду банка (NrBank из пути), но показываем читаемое название.
     const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
-    for (const file of files) {
-      const { scriptCode, bankCode } = parseExtraFilePath(file.filePath, file.fileName);
+    for (const [filePath, meta] of fileEntries) {
+      const { scriptCode, bankCode } = parseExtraFilePath(filePath, meta.fileName);
       const bankName = bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
       const batch = extraIndex.batches.get(memberKey(scriptCode));
       const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
       const bucket = bankMap.get(bankCode) ?? [];
       bucket.push({
-        key: `extra|${correlationId}|${file.filePath}`,
+        key: `extra|${correlationId}|${filePath}`,
         taskCode: 'extra',
         correlationId,
         memberName: scriptCode,
         scriptCode,
         bankName,
-        fileName: file.fileName,
-        filePath: file.filePath,
-        occurredAt: file.modifiedAt || record.completedAt,
+        fileName: meta.fileName,
+        filePath,
+        occurredAt: meta.occurredAt,
         sentToGateway:
-          confirmedSentPaths.has(file.filePath) ||
-          isFileSentViaBatch(file.filePath, batch?.sentFiles ?? null),
+          confirmedSentPaths.has(filePath) ||
+          isFileSentViaBatch(filePath, batch?.sentFiles ?? null),
       });
       bankMap.set(bankCode, bucket);
       scriptMap.set(scriptCode, bankMap);
@@ -174,15 +197,15 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
         };
       });
 
-    const extraPublishToGateway = extraRun?.publishToGateway ?? false;
+    const extraPublishToGateway = run.publishToGateway ?? false;
     nodeMap.set(`extra|${correlationId}`, {
       key: `extra|${correlationId}`,
       taskCode: 'extra',
       correlationId,
-      status: extraRun ? resolveRunStatusLabel(extraRun.status) : t('status.run.completed'),
-      startedAt: record.startedAt,
-      completedAt: record.completedAt,
-      occurredAt: record.completedAt,
+      status: resolveRunStatusLabel(run.status),
+      startedAt: record?.startedAt ?? run.createdAt,
+      completedAt: record?.completedAt ?? run.updatedAt,
+      occurredAt: run.updatedAt,
       publishToGateway: extraPublishToGateway,
       gatewayDelivery: resolveGatewayDelivery(
         extraPublishToGateway,

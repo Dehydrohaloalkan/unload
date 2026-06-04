@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
 using Unload.Tasks;
@@ -6,10 +7,12 @@ using Unload.Tasks;
 namespace Unload.Tasks.ExtraUnload;
 
 /// <summary>
-/// Движок extra-выгрузки. Аналог <c>MainUnloadEngine</c>: выполняет скрипты по одному и эмитит
-/// поток <see cref="RunnerEvent"/> (по скрипту: QueryStarted → FileWritten* → ScriptCompleted,
-/// в конце — Completed). Каждый скрипт проецируется как «мембер» (MemberName = код скрипта),
-/// что даёт пер-скриптовый статус в UI. Исключения пробрасываются наружу — их ловит хост-сервис.
+/// Движок extra-выгрузки. В отличие от <c>MainUnloadEngine</c>, все скрипты запускаются
+/// <b>одновременно</b> — по задаче на скрипт в отдельном потоке пула, — а их события
+/// (QueryStarted → FileWritten* → ScriptCompleted) сливаются в общий поток через
+/// <see cref="Channel{T}"/>. В конце эмитится один Completed. Каждый скрипт проецируется как
+/// «мембер» (MemberName = код скрипта), что даёт пер-скриптовый статус в UI. Исключения и отмена
+/// пробрасываются наружу — их ловит хост-сервис.
 /// </summary>
 public class ExtraUnloadEngine(
     ExtraUnloadOptions options,
@@ -25,58 +28,48 @@ public class ExtraUnloadEngine(
     private readonly ExtraOutputWriter _outputWriter = outputWriter;
     private readonly ILogger<ExtraUnloadEngine> _logger = logger;
 
-    /// <summary>Выполняет все скрипты запроса и возвращает поток событий прогресса.</summary>
+    /// <summary>Выполняет все скрипты запроса параллельно и возвращает поток событий прогресса.</summary>
     public async IAsyncEnumerable<RunnerEvent> RunAsync(
         ExtraRunRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var (runDirectory, filesDirectory) = _outputWriter.CreateRunDirectory(_options.OutputDirectory);
         _logger.LogInformation(
-            "Extra run started. CorrelationId: {CorrelationId}, Scripts: {ScriptCount}, OutputPath: {OutputPath}",
+            "Extra run started (parallel). CorrelationId: {CorrelationId}, Scripts: {ScriptCount}, OutputPath: {OutputPath}",
             request.CorrelationId,
             request.ScriptPaths.Count,
             runDirectory);
 
-        var totalFiles = 0;
-
-        foreach (var scriptPath in request.ScriptPaths)
+        // Канал-«воронка»: каждая скрипт-задача пишет свои события, потребитель ниже их транслирует.
+        var channel = Channel.CreateUnbounded<RunnerEvent>(new UnboundedChannelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
+            SingleReader = true,
+            SingleWriter = false,
+        });
 
-            yield return Event(request, RunnerStep.QueryStarted, scriptCode,
-                $"Выполняется скрипт {scriptCode}.");
+        // По задаче на скрипт. Task.Run уводит работу в пул, поэтому скрипты реально стартуют
+        // одновременно (стаб-БД блокирует поток Thread.Sleep'ом). ct НЕ передаём в Task.Run, чтобы
+        // отмена приходила как Faulted-исключение и доходила до потребителя через Complete(error).
+        var scriptTasks = request.ScriptPaths
+            .Select(scriptPath => Task.Run(
+                () => ProcessScriptAsync(scriptPath, request, filesDirectory, channel.Writer, cancellationToken)))
+            .ToArray();
 
-            var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
-            if (request.BanksFilter is not null)
-            {
-                if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
-                }
+        // Когда все скрипты завершатся — закрываем канал (с ошибкой, если хоть один упал).
+        _ = Task.WhenAll(scriptTasks).ContinueWith(
+            completed => channel.Writer.TryComplete(completed.Exception?.Flatten().InnerException),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
-                sql = sql.Replace(BanksPlaceholder, request.BanksFilter, StringComparison.OrdinalIgnoreCase);
-            }
-
-            var execResult = await _scriptExecutor.ExecuteAsync(scriptCode, sql, request.CorrelationId, cancellationToken);
-            var writeResult = await _outputWriter.WriteScriptAsync(
-                filesDirectory, request.CorrelationId, execResult, request.PublishToGateway, cancellationToken);
-
-            foreach (var file in writeResult.Files)
-            {
-                yield return Event(request, RunnerStep.FileWritten, scriptCode, file.FileName,
-                    filePath: file.FilePath);
-            }
-
-            totalFiles += writeResult.FilesWritten;
-            // #5: 0 файлов — явно сообщаем «выполнено, 0 файлов», а не просто «завершён».
-            var completedMessage = writeResult.FilesWritten == 0
-                ? $"Скрипт {scriptCode} выполнен, 0 файлов."
-                : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";
-            yield return Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage,
-                records: execResult.Records);
+        // Трансляция событий. Если канал закрыт с ошибкой/отменён — ReadAllAsync пробросит её наружу.
+        await foreach (var @event in channel.Reader.ReadAllAsync(cancellationToken))
+        {
+            yield return @event;
         }
+
+        // Сюда попадаем только при штатном завершении всех скриптов — суммируем файлы.
+        var totalFiles = scriptTasks.Sum(static task => task.Result);
 
         _logger.LogInformation(
             "Extra run finished. CorrelationId: {CorrelationId}, FilesWritten: {FilesWritten}",
@@ -91,6 +84,55 @@ public class ExtraUnloadEngine(
                 ? "Доп-выгрузка завершена, 0 файлов."
                 : $"Доп-выгрузка завершена. Файлов: {totalFiles}.",
             FilePath: runDirectory);
+    }
+
+    /// <summary>Выполняет один скрипт, пишет его события в <paramref name="writer"/> и возвращает число файлов.</summary>
+    private async Task<int> ProcessScriptAsync(
+        string scriptPath,
+        ExtraRunRequest request,
+        string filesDirectory,
+        ChannelWriter<RunnerEvent> writer,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
+
+        await writer.WriteAsync(
+            Event(request, RunnerStep.QueryStarted, scriptCode, $"Выполняется скрипт {scriptCode}."),
+            cancellationToken);
+
+        var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+        if (request.BanksFilter is not null)
+        {
+            if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
+            }
+
+            sql = sql.Replace(BanksPlaceholder, request.BanksFilter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var execResult = await _scriptExecutor.ExecuteAsync(scriptCode, sql, request.CorrelationId, cancellationToken);
+        var writeResult = await _outputWriter.WriteScriptAsync(
+            filesDirectory, request.CorrelationId, execResult, request.PublishToGateway, cancellationToken);
+
+        foreach (var file in writeResult.Files)
+        {
+            await writer.WriteAsync(
+                Event(request, RunnerStep.FileWritten, scriptCode, file.FileName, filePath: file.FilePath),
+                cancellationToken);
+        }
+
+        // #5: 0 файлов — явно сообщаем «выполнено, 0 файлов», а не просто «завершён».
+        var completedMessage = writeResult.FilesWritten == 0
+            ? $"Скрипт {scriptCode} выполнен, 0 файлов."
+            : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";
+        await writer.WriteAsync(
+            Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage, records: execResult.Records),
+            cancellationToken);
+
+        return writeResult.FilesWritten;
     }
 
     private static RunnerEvent Event(

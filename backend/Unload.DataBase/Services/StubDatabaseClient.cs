@@ -25,6 +25,13 @@ public class StubDatabaseClient : IDatabaseClient
     /// <summary>Количество синтетических строк на банк в extra-наборе.</summary>
     private const int StubExtraRowsPerBank = 50;
 
+    /// <summary>
+    /// Задержка на строку extra-набора, мс. Имитирует «большой и долгий» extra-скрипт
+    /// (по умолчанию extra-стаб отрабатывал мгновенно): 6 банков × 50 строк × 60мс ≈ 18с на скрипт.
+    /// Отмена проверяется в цикле, поэтому «Стоп» прерывает выгрузку, не дожидаясь конца набора.
+    /// </summary>
+    private const int StubExtraRowDelayMs = 60;
+
     /// <summary>Демонстрационный справочник банков (NrBank → читаемое имя).</summary>
     private static readonly (string NrBank, string BankName)[] StubBanks =
     [
@@ -102,7 +109,7 @@ public class StubDatabaseClient : IDatabaseClient
         if (!string.IsNullOrWhiteSpace(query) &&
             query.Contains("EXTRA_UNLOAD", StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult(CreateExtraUnloadReader(query));
+            return Task.FromResult(CreateExtraUnloadReader(query, cancellationToken));
         }
 
         var targetCode = "STUB";
@@ -155,7 +162,7 @@ public class StubDatabaseClient : IDatabaseClient
     /// Если в тексте присутствует <c>IN ('B01',...)</c> — эмитятся только перечисленные банки,
     /// чтобы снятие банков в UI реально уменьшало вывод.
     /// </summary>
-    private static DbDataReader CreateExtraUnloadReader(string query)
+    private static DbDataReader CreateExtraUnloadReader(string query, CancellationToken cancellationToken)
     {
         var allowedBanks = ParseInClauseBanks(query);
 
@@ -172,6 +179,7 @@ public class StubDatabaseClient : IDatabaseClient
 
             for (var i = 1; i <= StubExtraRowsPerBank; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var lineFile = string.Join(
                     '|',
                     nrBank,
@@ -181,6 +189,8 @@ public class StubDatabaseClient : IDatabaseClient
                     Math.Round((i * 1.137m) % 995, 2),
                     i % 2 == 0 ? "ACTIVE" : "PENDING");
                 table.Rows.Add(nrBank, lineFile);
+                // Имитация латентности «долгого» extra-скрипта (как у основного run-стаба).
+                Thread.Sleep(StubExtraRowDelayMs);
             }
         }
 
