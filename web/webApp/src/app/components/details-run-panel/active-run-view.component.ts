@@ -59,7 +59,7 @@ export class ActiveRunViewComponent {
   resolveMemberStatusLabel = resolveMemberStatusLabel;
   formatTimestamp = formatTimestamp;
 
-  /** #5: мембер завершён, но ни одного файла — подсветить «0 файлов», а не просто «завершён». */
+  /** Мембер завершён, но не записал ни одного файла — подсветить «0 файлов». */
   isCompletedWithoutFiles(member: MemberRunStatusInfo): boolean {
     return (
       member.status === MemberRunLifecycleStatus.Completed &&

@@ -124,7 +124,7 @@ public class ExtraUnloadEngine(
                 cancellationToken);
         }
 
-        // #5: 0 файлов — явно сообщаем «выполнено, 0 файлов», а не просто «завершён».
+        // 0 файлов — явно сообщаем «выполнено, 0 файлов».
         var completedMessage = writeResult.FilesWritten == 0
             ? $"Скрипт {scriptCode} выполнен, 0 файлов."
             : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";

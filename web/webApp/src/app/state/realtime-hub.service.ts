@@ -38,7 +38,6 @@ export class RealtimeHubService {
       .build();
 
     // Доставляем все события всем подписчикам; разделение run/extra делают сторы по taskCode/correlationId.
-    // (Раньше единый currentCorrelationId-фильтр глотал бы extra-события во время трекинга run.)
     connection.on('status', (event: RunnerEvent) => {
       this.statusEventsSubject.next(event);
     });

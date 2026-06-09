@@ -1,6 +1,6 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
-import { RequeueItem } from '../app.models';
+import { RequeueItem, RunLifecycleStatus } from '../app.models';
 import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
@@ -89,7 +89,20 @@ export class WorkflowStore {
   readonly hasRunToday = this.dashboardStore.hasRunToday;
   readonly hasExtraToday = this.dashboardStore.hasExtraToday;
   readonly runLastCompletedAt = this.dashboardStore.runLastCompletedAt;
-  readonly extraLastCompletedAt = this.dashboardStore.extraLastCompletedAt;
+  /**
+   * Время последнего успешного extra. Берём из активного run'а, как только тот завершился
+   * со статусом Completed: snapshot дашборда (источник extraLastCompletedAt) подтягивает запись
+   * истории через polling-цикл воркера и может отставать от события run_status, из-за чего карточка
+   * на миг показывала «красный крестик» при фактически успешной выгрузке. Активный run — тот же
+   * источник, что и флаг running, поэтому running и completedAt сходятся согласованно.
+   */
+  readonly extraLastCompletedAt = computed<string | null>(() => {
+    const run = this.activeExtraRun();
+    if (run && run.status === RunLifecycleStatus.Completed) {
+      return run.updatedAt;
+    }
+    return this.dashboardStore.extraLastCompletedAt();
+  });
   readonly todayHistory = this.dashboardStore.todayHistory;
   readonly todayRuns = this.dashboardStore.todayRuns;
   readonly allTodayRuns = this.dashboardStore.allTodayRuns;

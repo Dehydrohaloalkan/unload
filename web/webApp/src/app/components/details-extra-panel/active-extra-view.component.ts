@@ -66,7 +66,7 @@ export class ActiveExtraViewComponent {
     return this.index().batches.get(memberKey(scriptCode)) ?? null;
   }
 
-  /** #5: скрипт завершён, но ни одного файла. */
+  /** Скрипт завершён, но не записал ни одного файла. */
   isCompletedWithoutFiles(status: MemberRunStatusInfo): boolean {
     return (
       status.status === MemberRunLifecycleStatus.Completed &&

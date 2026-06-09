@@ -6,6 +6,10 @@ out/
 # Unload output
 output/
 observability/
+ftp-root/
+
+# Agent worktrees
+.claude/worktrees/
 
 # Local build scratch (do not commit)
 temp_build/
