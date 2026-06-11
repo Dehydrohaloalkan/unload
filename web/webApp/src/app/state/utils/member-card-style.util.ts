@@ -30,6 +30,11 @@ export function resolveMemberCardBorderClass(
   const batch = findSenderBatchForMember(latestRun, member.name);
   const sentToGateway =
     batch?.status === SenderBatchStatus.Completed || (batch?.sentFiles?.length ?? 0) > 0;
+  // Выгрузка без шлюза: партия помечается SkippedByRequest — мембер завершён успешно,
+  // и без этого правила его рамка осталась бы жёлтой навсегда.
+  const completedWithoutGateway =
+    batch?.status === SenderBatchStatus.SkippedByRequest &&
+    memberStatus?.status === MemberRunLifecycleStatus.Completed;
   const gatewayFailed = batch?.status === SenderBatchStatus.Failed;
   const memberFailed = memberStatus?.status === MemberRunLifecycleStatus.Failed;
   const memberCancelled = memberStatus?.status === MemberRunLifecycleStatus.Cancelled;
@@ -38,7 +43,7 @@ export function resolveMemberCardBorderClass(
     return 'member-card--border-green';
   }
 
-  if (sentToGateway && !memberFailed) {
+  if ((sentToGateway || completedWithoutGateway) && !memberFailed) {
     return 'member-card--border-green';
   }
 

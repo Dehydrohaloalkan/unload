@@ -62,11 +62,6 @@ export class App {
     return (preset?.readyForPreset ?? false) || (preset?.presetCompleted ?? false);
   });
 
-  readonly stage1CompletedAt = computed(() => {
-    const task = this.store.presetTask();
-    return task.result && task.completedAt ? task.completedAt : null;
-  });
-
   readonly stage2CompletedAt = computed(() => {
     const sorted = this.store
       .todayHistory()
@@ -130,14 +125,15 @@ export class App {
   }
 
   startRunFromMainCard(): void {
-    this.store.selectAllMembers();
     this.store.setPublishRunToGateway(true);
-    void this.store.startRunAsync();
+    // Главная карточка всегда запускает полную выгрузку, не трогая выбор мемберов в панели.
+    void this.store.startRunAsync(true);
   }
 
   startExtraFromMainCard(): void {
     this.store.setPublishExtraToGateway(true);
-    void this.store.runExtraAsync();
+    // Главная карточка всегда запускает полную выгрузку; подмножество банков — из панели деталей.
+    void this.store.runExtraAsync(null);
   }
 }
 

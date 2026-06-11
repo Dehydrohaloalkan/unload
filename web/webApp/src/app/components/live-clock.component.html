@@ -9,9 +9,6 @@
         <h2 class="clock-title">{{ 'liveClock.title' | t }}</h2>
       </div>
       <div class="clock-status">
-        @if (completedAt()) {
-          <div class="clock-status__completed">{{ formatTimeFromIso(completedAt()!) }}</div>
-        }
         <i
           class="app-icon"
           [class.app-icon--check-circle]="probeCompleted()"

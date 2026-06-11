@@ -181,9 +181,13 @@ export const ExtraStore = signalStore(
         }
       },
 
-      async runExtraAsync(): Promise<void> {
+      /**
+       * @param banksOverride явный набор банков вместо выбора из панели:
+       * null — все банки (главная карточка), undefined — использовать выбор из стора.
+       */
+      async runExtraAsync(banksOverride?: string[] | null): Promise<void> {
         errorStore.clear();
-        const selected = store.selectedBankCodes();
+        const selected = banksOverride !== undefined ? banksOverride : store.selectedBankCodes();
         // Все банки (null) → null; подмножество → массив выбранных кодов.
         const payloadBanks = selected === null ? null : selected;
         try {

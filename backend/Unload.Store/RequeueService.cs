@@ -82,10 +82,12 @@ public class RequeueService(
                 .Select(x => x.Trim()),
             StringComparer.OrdinalIgnoreCase);
         var hasMemberFilter = memberFilter.Count > 0;
+        // Пути храним как пришли (только trim): абсолютные сравниваются по полному пути,
+        // относительные (относительно output-корня) — по суффиксу. См. MatchesFileFilter.
         var fileFilter = new HashSet<string>(
             (item.FilePaths ?? Array.Empty<string>())
                 .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(static x => NormalizePath(x)),
+                .Select(static x => x.Trim()),
             StringComparer.OrdinalIgnoreCase);
         var hasFileFilter = fileFilter.Count > 0;
 
@@ -216,7 +218,7 @@ public class RequeueService(
                 .Select(x => x.FilePath)
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Select(path => path.Trim())
-                .Where(path => fileFilter is null || fileFilter.Contains(NormalizePath(path)))
+                .Where(path => MatchesFileFilter(path, fileFilter))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(CreateDescriptorOrThrow)
                 .ToArray();
@@ -253,13 +255,15 @@ public class RequeueService(
             throw new DirectoryNotFoundException($"Extra output files directory was not found: {filesDir}");
         }
 
-        var files = Directory.EnumerateFiles(filesDir, "*.*", SearchOption.TopDirectoryOnly)
-            .Where(path => fileFilter is null || fileFilter.Contains(NormalizePath(path)))
+        // Раскладка extra: output-files/<scriptCode>/<bank>/<file> — обходим вложенные каталоги.
+        var files = Directory.EnumerateFiles(filesDir, "*", SearchOption.AllDirectories)
+            .Where(path => MatchesFileFilter(path, fileFilter))
             .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        // Партия шлюза — на скрипт (MemberName = код скрипта), как при исходной публикации.
         var grouped = files.GroupBy(
-            path => Path.GetFileNameWithoutExtension(path)?.Trim() ?? "UNKNOWN",
+            path => ResolveExtraScriptCode(filesDir, path),
             StringComparer.OrdinalIgnoreCase);
 
         var batches = new List<(string, IReadOnlyCollection<SenderFileDescriptor>)>();
@@ -299,6 +303,46 @@ public class RequeueService(
     private static string NormalizePath(string path)
     {
         return Path.GetFullPath(path.Trim());
+    }
+
+    /// <summary>Код скрипта extra-файла — первый сегмент пути относительно <c>output-files</c>.</summary>
+    private static string ResolveExtraScriptCode(string filesDir, string filePath)
+    {
+        var relative = Path.GetRelativePath(filesDir, filePath);
+        var separatorIndex = relative.IndexOfAny(['\\', '/']);
+        var segment = separatorIndex > 0 ? relative[..separatorIndex] : Path.GetFileNameWithoutExtension(relative);
+        return string.IsNullOrWhiteSpace(segment) ? "UNKNOWN" : segment.Trim();
+    }
+
+    /// <summary>
+    /// Сопоставляет файл с фильтром. UI может прислать как абсолютный путь (из артефактов run'а),
+    /// так и путь относительно output-корня (из диск-скана) — относительные сравниваем по суффиксу.
+    /// </summary>
+    private static bool MatchesFileFilter(string filePath, HashSet<string>? fileFilter)
+    {
+        if (fileFilter is null)
+        {
+            return true;
+        }
+
+        var fullPath = NormalizePath(filePath);
+        var candidate = CanonicalPathKey(fullPath);
+        return fileFilter.Any(entry =>
+        {
+            if (Path.IsPathRooted(entry))
+            {
+                return string.Equals(NormalizePath(entry), fullPath, StringComparison.OrdinalIgnoreCase);
+            }
+
+            var key = CanonicalPathKey(entry);
+            return candidate.EndsWith("/" + key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    private static string CanonicalPathKey(string path)
+    {
+        return path.Trim().Replace('\\', '/').TrimStart('/');
     }
 
     private static void EvictExpired()

@@ -85,3 +85,26 @@ export function isFileSentViaBatch(
   const target = normalizeFilePath(filePath);
   return sentFiles.some((file) => normalizeFilePath(file.filePath) === target);
 }
+
+/**
+ * Канонический ключ extra-файла: хвост пути от `output-files/`.
+ * Один и тот же файл приходит в разном виде — абсолютным путём из артефактов run'а
+ * и путём относительно output-корня из диск-скана; общий у них только этот хвост.
+ */
+export function extraFilePathKey(filePath: string): string {
+  const normalized = normalizeFilePath(filePath);
+  const anchor = normalized.lastIndexOf('output-files/');
+  return anchor >= 0 ? normalized.slice(anchor) : normalized;
+}
+
+/** Как `isFileSentViaBatch`, но сравнивает по каноническому хвосту пути (для extra). */
+export function isExtraFileSentViaBatch(
+  filePath: string,
+  sentFiles: SenderFileDispatchStateInfo[] | null | undefined,
+): boolean {
+  if (!sentFiles?.length) {
+    return false;
+  }
+  const target = extraFilePathKey(filePath);
+  return sentFiles.some((file) => extraFilePathKey(file.filePath) === target);
+}

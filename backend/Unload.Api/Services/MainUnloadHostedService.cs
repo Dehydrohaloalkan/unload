@@ -121,6 +121,16 @@ public class MainUnloadHostedService(
                 return current;
             }
 
+            // Стоп во время досылки в шлюз: движок уже отработал, и из CancellationRequested
+            // статус сам не станет терминальным (промоушен идёт только из Running) —
+            // без явной фиксации отмены ожидание зависло бы навсегда вместе со слотом запуска.
+            if (current.Status == RunLifecycleStatus.CancellationRequested)
+            {
+                _runStateStore.SetCancelled(correlationId, "Run was cancelled while waiting for gateway delivery.");
+                await PublishRunStateAsync(correlationId, cancellationToken);
+                return _runStateStore.Get(correlationId);
+            }
+
             await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
         }
 

@@ -43,6 +43,17 @@ public class ExtraUnloadTask(
         CancellationToken cancellationToken)
     {
         var selectedBanks = NormalizeSelectedBanks(request.SelectedBanks);
+
+        // null — «все банки» (базовые скрипты); явно переданный пустой набор — ошибка выбора,
+        // иначе пользователь со снятыми галочками молча запустил бы выгрузку по всем банкам.
+        if (request.SelectedBanks is not null && selectedBanks.Length == 0)
+        {
+            throw new TaskLaunchException(
+                TaskLaunchFailureKind.Validation,
+                "EXTRA_NO_BANKS_SELECTED",
+                "No banks selected for extra unload. Select at least one bank or run with all banks.");
+        }
+
         var useAtomic = selectedBanks.Length > 0;
         var scriptsDirectory = useAtomic ? _options.AtomicScriptsDirectory : _options.ExtraScriptsDirectory;
 

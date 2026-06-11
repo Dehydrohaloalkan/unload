@@ -39,7 +39,6 @@
           [now]="store.currentTime()"
           [connected]="store.connectionReady()"
           [probeCompleted]="probeCompleted()"
-          [completedAt]="stage1CompletedAt()"
           [dayWindowSummary]="dayWindowSummary()"
         />
 
@@ -53,7 +52,7 @@
         />
 
         <app-run-card
-          [canStartRun]="store.canStartRun()"
+          [canStartRun]="store.canStartFullRun()"
           [runBusy]="store.isRunBusy()"
           [hasRunToday]="store.hasRunToday()"
           [lastCompletedAt]="store.runLastCompletedAt()"

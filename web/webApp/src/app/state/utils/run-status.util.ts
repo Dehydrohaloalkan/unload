@@ -17,3 +17,7 @@ export function isMainRunHistoryEntry(run: RunStatusInfo): boolean {
   const correlationId = (run.correlationId ?? '').trim().toLowerCase();
   return taskCode === 'run' && correlationId.startsWith('req-');
 }
+
+export function isExtraRunEntry(run: RunStatusInfo): boolean {
+  return (run.taskCode ?? '').trim().toLowerCase() === 'extra';
+}

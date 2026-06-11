@@ -62,8 +62,6 @@ public class ExtraOutputWriter(ExtraUnloadOptions options, IGatewayPublisher gat
         var scriptDirectory = Path.Combine(filesDirectory, scriptSegment);
 
         var scriptFiles = new List<SenderFileDescriptor>();
-        // Сквозная нумерация чанков в рамках скрипта (по всем банкам).
-        var chunkNumber = 0;
 
         foreach (var bank in script.LinesByBank.OrderBy(static x => x.Key, StringComparer.OrdinalIgnoreCase))
         {
@@ -73,6 +71,9 @@ public class ExtraOutputWriter(ExtraUnloadOptions options, IGatewayPublisher gat
 
             // Расширение файла — код банка (NrBank), напр. ~YW15201.B01
             var fileExtension = $".{bankSegment}";
+
+            // Нумерация чанков своя для каждого банка: первый файл банка всегда ...01.
+            var chunkNumber = 0;
 
             foreach (var chunkLines in SplitIntoChunks(bank.Value, stem, dayOfYear, fileExtension))
             {

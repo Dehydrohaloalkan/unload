@@ -16,7 +16,7 @@ import { ApiClientService } from './api-client.service';
 import { OutputFilesStore } from './output-files.store';
 import { PresetStore } from './preset.store';
 import { byDescDate } from './utils/compare.util';
-import { isMainRunHistoryEntry } from './utils/run-status.util';
+import { isExtraRunEntry, isMainRunHistoryEntry } from './utils/run-status.util';
 
 interface DashboardState {
   hasRunToday: boolean;
@@ -67,6 +67,20 @@ export const DashboardStore = signalStore(
       });
     };
 
+    // Снапшот дашборда строится из истории, которую бекенд пишет с задержкой после терминального
+    // статуса, — флаг «extra уже была» выводим и из сегодняшних запусков, чтобы кнопка гасла сразу.
+    const recalculateExtraFromRuns = (runs: RunStatusInfo[]): void => {
+      const completedExtra = runs
+        .filter((run) => isExtraRunEntry(run) && run.status === RunLifecycleStatus.Completed)
+        .sort(byDescDate<RunStatusInfo>((run) => run.updatedAt))[0];
+      if (completedExtra) {
+        patchState(store, {
+          hasExtraToday: true,
+          extraLastCompletedAt: completedExtra.updatedAt,
+        });
+      }
+    };
+
     return {
       applySnapshot(snapshot: WorkflowDashboardSnapshotResponse): void {
         patchState(store, {
@@ -85,6 +99,7 @@ export const DashboardStore = signalStore(
         const filtered = all.filter(isMainRunHistoryEntry);
         patchState(store, { allTodayRuns: all, todayRuns: filtered });
         recalculateFromRuns(filtered);
+        recalculateExtraFromRuns(all);
       },
 
       markRunCompleted(run: RunStatusInfo): void {

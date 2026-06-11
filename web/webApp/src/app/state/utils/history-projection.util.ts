@@ -8,7 +8,13 @@ import {
 } from '../../app.models';
 import { byDescDate } from './compare.util';
 import { resolveRunStatusLabel } from './labels.util';
-import { buildRunMemberIndex, isFileSentViaBatch, memberKey } from './member-index.util';
+import {
+  buildRunMemberIndex,
+  extraFilePathKey,
+  isExtraFileSentViaBatch,
+  isFileSentViaBatch,
+  memberKey,
+} from './member-index.util';
 import { sortNames } from './sort.util';
 
 export type HistoryTaskCode = 'run' | 'extra';
@@ -133,19 +139,23 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
 
     // Источник файлов: диск-скан по outputPath (полный список для завершённых) ∪ артефакты событий
     // (покрывают активные/упавшие выгрузки, для которых диск ещё не сканировался).
+    // Диск-скан отдаёт пути относительно output-корня, артефакты — пути writer'а, поэтому
+    // дедупликация идёт по каноническому хвосту пути, а не по сырой строке.
     const outputPath = run.outputPath ?? record?.outputPath ?? null;
-    const fileEntries = new Map<string, { fileName: string; occurredAt: string }>();
+    const fileEntries = new Map<string, { filePath: string; fileName: string; occurredAt: string }>();
     if (outputPath) {
       for (const file of outputFilesByPath[outputPath] ?? []) {
-        fileEntries.set(file.filePath, {
+        fileEntries.set(extraFilePathKey(file.filePath), {
+          filePath: file.filePath,
           fileName: file.fileName,
           occurredAt: file.modifiedAt || run.updatedAt,
         });
       }
     }
     for (const artifact of run.outputArtifacts ?? []) {
-      if (artifact.filePath && artifact.fileName && !fileEntries.has(artifact.filePath)) {
-        fileEntries.set(artifact.filePath, {
+      if (artifact.filePath && artifact.fileName && !fileEntries.has(extraFilePathKey(artifact.filePath))) {
+        fileEntries.set(extraFilePathKey(artifact.filePath), {
+          filePath: artifact.filePath,
           fileName: artifact.fileName,
           occurredAt: artifact.occurredAt || run.updatedAt,
         });
@@ -156,25 +166,25 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
     // .../output-files/<scriptCode>/<bank>/<file>. Партия шлюза — на скрипт (MemberName=scriptCode).
     // Группируем по коду банка (NrBank из пути), но показываем читаемое название.
     const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
-    for (const [filePath, meta] of fileEntries) {
-      const { scriptCode, bankCode } = parseExtraFilePath(filePath, meta.fileName);
+    for (const [pathKey, meta] of fileEntries) {
+      const { scriptCode, bankCode } = parseExtraFilePath(meta.filePath, meta.fileName);
       const bankName = bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
       const batch = extraIndex.batches.get(memberKey(scriptCode));
       const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
       const bucket = bankMap.get(bankCode) ?? [];
       bucket.push({
-        key: `extra|${correlationId}|${filePath}`,
+        key: `extra|${correlationId}|${pathKey}`,
         taskCode: 'extra',
         correlationId,
         memberName: scriptCode,
         scriptCode,
         bankName,
         fileName: meta.fileName,
-        filePath,
+        filePath: meta.filePath,
         occurredAt: meta.occurredAt,
         sentToGateway:
-          confirmedSentPaths.has(filePath) ||
-          isFileSentViaBatch(filePath, batch?.sentFiles ?? null),
+          confirmedSentPaths.has(meta.filePath) ||
+          isExtraFileSentViaBatch(meta.filePath, batch?.sentFiles ?? null),
       });
       bankMap.set(bankCode, bucket);
       scriptMap.set(scriptCode, bankMap);

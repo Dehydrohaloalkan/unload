@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using FluentFTP;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -24,7 +23,6 @@ public class FtpGatewayBackgroundService(
     private readonly IGatewayPublisher _gatewayPublisher = gatewayPublisher;
     private readonly GatewayOptions _options = options.Value;
     private readonly ILogger<FtpGatewayBackgroundService> _logger = logger;
-    private readonly ConcurrentDictionary<string, byte> _failedMembers = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -39,18 +37,6 @@ public class FtpGatewayBackgroundService(
         var memberName = (batch.MemberName ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(memberName))
             return;
-
-        if (_failedMembers.ContainsKey(memberName))
-        {
-            await PublishSafeAsync(new SenderFileDispatchFeedback(
-                OccurredAt: DateTimeOffset.UtcNow,
-                CorrelationId: batch.CorrelationId,
-                MemberName: memberName,
-                BatchId: batch.BatchId,
-                Kind: SenderFeedbackKind.BatchFailed,
-                Message: "Member dispatch is blocked due to a previous send failure."));
-            return;
-        }
 
         try
         {
@@ -127,7 +113,6 @@ public class FtpGatewayBackgroundService(
         }
         catch (Exception ex)
         {
-            _failedMembers.TryAdd(memberName, 0);
             _logger.LogError(
                 ex,
                 "Gateway sender failed batch. CorrelationId: {CorrelationId}, Member: {MemberName}",

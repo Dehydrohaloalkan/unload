@@ -151,14 +151,26 @@ export const RunStore = signalStore(
         }
       },
 
-      async startRunAsync(): Promise<void> {
+      /**
+       * @param runAllMembers запустить полную выгрузку по каталогу (главная карточка),
+       * не трогая сохранённый выбор мемберов; false — использовать выбор из панели.
+       */
+      async startRunAsync(runAllMembers = false): Promise<void> {
         errorStore.clear();
         patchState(store, { runEvents: [] });
 
+        const targets = catalog.catalog()?.targets ?? [];
+        const targetCodes = runAllMembers
+          ? targets.map((target) => target.targetCode)
+          : selection.selectedTargetCodes();
+        const memberCodes = runAllMembers
+          ? targets.map((target) => target.memberCode)
+          : selection.resolveSelectedMemberCodes(catalog.catalog());
+
         try {
           const response = await api.startRun({
-            targetCodes: selection.selectedTargetCodes(),
-            memberCodes: selection.resolveSelectedMemberCodes(catalog.catalog()),
+            targetCodes,
+            memberCodes,
             adminOverride: admin.adminMode(),
             publishToGateway: store.publishRunToGateway(),
           });

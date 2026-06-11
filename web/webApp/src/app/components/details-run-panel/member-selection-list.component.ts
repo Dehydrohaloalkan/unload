@@ -57,12 +57,30 @@ export class MemberSelectionListComponent {
     return selectedCount > 0 && selectedCount < group.members.length;
   }
 
+  /**
+   * Run-источник для рамок и времени карточек. Активный run обновляется живьём по SignalR
+   * (включая пофайловые подтверждения шлюза), а latestTodayRun — снапшот, который
+   * перечитывается только по завершении выгрузки; без живого источника рамки мемберов
+   * «зеленели» лишь в самом конце, хотя файлы уходили в шлюз по ходу выгрузки.
+   */
+  private readonly cardRun = computed(() => {
+    const live = this.store.activeRun();
+    const latest = this.store.latestTodayRun();
+    if (!live || !isTodayDate(live.createdAt)) {
+      return latest;
+    }
+    if (!latest || latest.correlationId === live.correlationId) {
+      return live;
+    }
+    return (live.createdAt ?? '') >= (latest.createdAt ?? '') ? live : latest;
+  });
+
   memberCardBorderClass(member: MemberViewModel): string {
-    return resolveMemberCardBorderClass(member, this.store.latestTodayRun());
+    return resolveMemberCardBorderClass(member, this.cardRun());
   }
 
   memberLastUploadToday(member: MemberViewModel): string | null {
-    const run = this.store.latestTodayRun();
+    const run = this.cardRun();
     if (!run) {
       return null;
     }

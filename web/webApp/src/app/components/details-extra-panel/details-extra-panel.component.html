@@ -34,7 +34,13 @@
           </label>
 
           <div class="details-item__message">
-            {{ allBanksSelected() ? ('details.task.banksAllSelected' | t) : ('details.task.banksSubset' | t) }}
+            @if (allBanksSelected()) {
+              {{ 'details.task.banksAllSelected' | t }}
+            } @else if (banksPartial()) {
+              {{ 'details.task.banksSubset' | t }}
+            } @else {
+              {{ 'details.task.banksNone' | t }}
+            }
           </div>
 
           <div class="bank-list">

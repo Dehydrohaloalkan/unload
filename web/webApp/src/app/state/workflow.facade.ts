@@ -138,6 +138,12 @@ export class WorkflowStore {
       !this.runStore.isRunBusy(),
   );
 
+  // Главная карточка запускает полную выгрузку, поэтому не зависит от выбора мемберов в панели.
+  readonly canStartFullRun = computed(
+    () =>
+      (this.canRunMainOrExtra() || this.adminStore.adminMode()) && !this.runStore.isRunBusy(),
+  );
+
   readonly canRunExtra = computed(
     () =>
       (this.canRunMainOrExtra() || this.adminStore.adminMode()) &&
@@ -236,9 +242,9 @@ export class WorkflowStore {
     await this.dashboardStore.refreshDashboardAsync();
   }
 
-  async runExtraAsync(): Promise<void> {
+  async runExtraAsync(banksOverride?: string[] | null): Promise<void> {
     try {
-      await this.extraStore.runExtraAsync();
+      await this.extraStore.runExtraAsync(banksOverride);
     } catch {
       return;
     }
@@ -249,8 +255,8 @@ export class WorkflowStore {
     return this.extraStore.stopExtraAsync();
   }
 
-  startRunAsync(): Promise<void> {
-    return this.runStore.startRunAsync();
+  startRunAsync(runAllMembers = false): Promise<void> {
+    return this.runStore.startRunAsync(runAllMembers);
   }
 
   stopRunAsync(): Promise<void> {
