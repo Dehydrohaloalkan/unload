@@ -16,6 +16,11 @@ temp_build/
 temp_build_*/
 backend/_build_tmp_api*/
 
+# Local code graph tooling and generated index
+.tools/
+graphify-out/
+graph.json
+
 # IDE
 .vs/
 *.user

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Check"
+  short_description: "Build and validate backend plus frontend"
+  default_prompt: "Use $build-check to validate the backend and frontend builds."

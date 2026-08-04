@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run and Test Unload"
+  short_description: "Run Unload and verify it in a browser"
+  default_prompt: "Use $run-and-test-app to start Unload and verify the UI in a browser."
