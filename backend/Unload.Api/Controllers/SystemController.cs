@@ -4,6 +4,7 @@ using Unload.Api.Models;
 using Unload.Api.Services;
 using Unload.Core;
 using Unload.Gateway;
+using Unload.Store;
 
 namespace Unload.Api.Controllers;
 
@@ -16,6 +17,8 @@ public class SystemController(
     GatewayUploadService gatewayUploadService,
     OutputFilesService outputFilesService,
     IGatewaySenderFeedbackConsumer gatewaySenderFeedbackConsumer,
+    RunStateStore runStateStore,
+    TaskExecutionHistoryStore taskExecutionHistoryStore,
     ILogger<SystemController> logger) : ControllerBase
 {
     /// <summary>Максимальный размер запроса загрузки файлов в gateway (200 МБ).</summary>
@@ -24,6 +27,8 @@ public class SystemController(
     private readonly GatewayUploadService _gatewayUploadService = gatewayUploadService;
     private readonly OutputFilesService _outputFilesService = outputFilesService;
     private readonly IGatewaySenderFeedbackConsumer _gatewaySenderFeedbackConsumer = gatewaySenderFeedbackConsumer;
+    private readonly RunStateStore _runStateStore = runStateStore;
+    private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ILogger<SystemController> _logger = logger;
 
     /// <summary>
@@ -39,6 +44,22 @@ public class SystemController(
             ServerUtcTime: localNow.ToUniversalTime(),
             UtcOffsetMinutes: (int)localNow.Offset.TotalMinutes,
             TimeZoneId: TimeZoneInfo.Local.Id));
+    }
+
+    [HttpGet("health")]
+    public IActionResult GetHealth()
+    {
+        var runState = _runStateStore.GetPersistenceHealth();
+        var taskHistory = _taskExecutionHistoryStore.GetPersistenceHealth();
+        var isHealthy = runState.IsWritable && taskHistory.IsWritable;
+        var response = new SystemHealthResponse(
+            Status: isHealthy ? "healthy" : "degraded",
+            RunState: MapPersistenceHealth(runState),
+            TaskHistory: MapPersistenceHealth(taskHistory));
+
+        return isHealthy
+            ? Ok(response)
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, response);
     }
 
     [HttpPost("sender-feedback")]
@@ -166,5 +187,13 @@ public class SystemController(
 
         var stream = new FileStream(zipFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return File(stream, "application/zip", archiveInfo.DownloadName, enableRangeProcessing: true);
+    }
+
+    private static PersistenceComponentHealthResponse MapPersistenceHealth(PersistenceHealthInfo health)
+    {
+        return new PersistenceComponentHealthResponse(
+            health.Status.ToString().ToLowerInvariant(),
+            health.IsWritable,
+            health.ChangedAt);
     }
 }

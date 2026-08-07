@@ -31,6 +31,9 @@ public class PersistenceDegradedModeTests
         Assert.Same(writeFailure, unavailable.InnerException);
         Assert.Same(retainedState, store.Get("run-1"));
         Assert.Equal(MemberRunLifecycleStatus.Pending, retainedState.MemberStatuses!["Member A"].Status);
+        var health = store.GetPersistenceHealth();
+        Assert.Equal(PersistenceHealthStatus.Degraded, health.Status);
+        Assert.False(health.IsWritable);
     }
 
     [Fact]
@@ -57,6 +60,9 @@ public class PersistenceDegradedModeTests
         Assert.Equal(path.StateFilePath, unavailable.FilePath);
         Assert.Same(writeFailure, unavailable.InnerException);
         Assert.Equal("run-1", Assert.Single(store.List(DateOnly.FromDateTime(completedAt.Date))).CorrelationId);
+        var health = store.GetPersistenceHealth();
+        Assert.Equal(PersistenceHealthStatus.Degraded, health.Status);
+        Assert.False(health.IsWritable);
     }
 
     private sealed class BlockedPersistencePath : IDisposable

@@ -350,6 +350,7 @@ CLI-клиент к API через HTTP + SignalR.
 - `GET /api/catalog` — структура каталога
 - `GET /api/members` — список мемберов с target-кодами и активным статусом
 - `GET /api/system/time` — серверное время и timezone для синхронизации UI
+- `GET /api/system/health` — состояние записи run-state и task history (`200` или `503`)
 - `GET /api/system/download?path=...` — скачивание файла из output
 - `GET /api/system/output-files?path=...` — листинг файлов в output-папке
 - `GET /api/system/download-archive?path=...` — скачивание ZIP-архива output-папки

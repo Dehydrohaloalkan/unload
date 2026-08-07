@@ -16,7 +16,7 @@ public class RunStateStorePersistenceTests
     }
 
     [Fact]
-    public void CorruptedSnapshot_StartsWithEmptyStateWithoutOverwritingFile()
+    public void CorruptedSnapshot_IsQuarantinedAndBlocksEmptyStateOverwrite()
     {
         using var fixture = new RunStateStoreFixture();
         const string corruptedJson = "{ this is not valid json";
@@ -25,7 +25,16 @@ public class RunStateStorePersistenceTests
         fixture.Restart();
 
         Assert.Empty(fixture.Store.List());
-        Assert.Equal(corruptedJson, File.ReadAllText(fixture.StateFilePath));
+        Assert.False(File.Exists(fixture.StateFilePath));
+        var quarantinePath = Assert.Single(Directory.GetFiles(
+            fixture.ScratchDirectory,
+            "runs.json.corrupt-*"));
+        Assert.Equal(corruptedJson, File.ReadAllText(quarantinePath));
+        var health = fixture.Store.GetPersistenceHealth();
+        Assert.Equal(PersistenceHealthStatus.Corrupted, health.Status);
+        Assert.False(health.IsWritable);
+        Assert.Throws<PersistenceUnavailableException>(() => fixture.Store.SetRunning("run-1"));
+        Assert.Empty(fixture.Store.List());
     }
 
     [Theory]
@@ -123,5 +132,29 @@ public class RunStateStorePersistenceTests
         Assert.Equal("run-1", run.GetProperty("CorrelationId").GetString());
         Assert.Equal("extra", run.GetProperty("TaskCode").GetString());
         Assert.False(run.GetProperty("PublishToGateway").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ConcurrentStarts_PersistEveryRunWithoutSnapshotRegression()
+    {
+        using var fixture = new RunStateStoreFixture();
+        const int runCount = 12;
+
+        await Task.WhenAll(Enumerable.Range(1, runCount).Select(index => Task.Run(() =>
+            fixture.Store.SetStarted(
+                $"run-{index}",
+                targetCodes: [$"TARGET-{index}"],
+                memberOrScriptNames: [$"Member {index}"],
+                publishToGateway: false))));
+
+        Assert.Equal(runCount, fixture.Store.List().Count);
+        fixture.Restart();
+        var recoveredIds = fixture.Store.List()
+            .Select(static run => run.CorrelationId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(runCount, recoveredIds.Count);
+        Assert.All(
+            Enumerable.Range(1, runCount),
+            index => Assert.Contains($"run-{index}", recoveredIds));
     }
 }

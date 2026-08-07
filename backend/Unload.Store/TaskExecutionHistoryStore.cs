@@ -113,6 +113,11 @@ public class TaskExecutionHistoryStore
         }
     }
 
+    public PersistenceHealthInfo GetPersistenceHealth()
+    {
+        return _store.GetHealth();
+    }
+
     public int Prune(DateOnly oldestDayToKeepInclusive)
     {
         lock (_sync)

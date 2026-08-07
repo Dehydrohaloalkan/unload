@@ -272,6 +272,44 @@
             }
           ],
           "response": []
+        },
+        {
+          "name": "Get Persistence Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/system/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status describes persistence availability', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test('Health response has safe component states', function () {",
+                  "  pm.expect(body).to.have.property('status');",
+                  "  pm.expect(body.runState).to.have.property('isWritable');",
+                  "  pm.expect(body.taskHistory).to.have.property('isWritable');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },

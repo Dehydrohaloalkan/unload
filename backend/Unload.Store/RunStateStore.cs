@@ -172,6 +172,11 @@ public class RunStateStore
             .ToArray();
     }
 
+    public PersistenceHealthInfo GetPersistenceHealth()
+    {
+        return _persistence.GetHealth();
+    }
+
     public int PruneTerminalRuns(DateOnly oldestDayToKeepInclusive)
     {
         lock (_mutationWriterSync)

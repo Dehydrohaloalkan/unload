@@ -19,3 +19,13 @@ public  record OutputFileInfo(
     string FilePath,
     DateTimeOffset ModifiedAt,
     long SizeBytes);
+
+public sealed record PersistenceComponentHealthResponse(
+    string Status,
+    bool IsWritable,
+    DateTimeOffset? ChangedAt);
+
+public sealed record SystemHealthResponse(
+    string Status,
+    PersistenceComponentHealthResponse RunState,
+    PersistenceComponentHealthResponse TaskHistory);

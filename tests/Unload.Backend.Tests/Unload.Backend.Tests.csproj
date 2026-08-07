@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../backend/Unload.Api/Unload.Api.csproj" />
+    <ProjectReference Include="../../backend/Unload.Gateway/Unload.Gateway.csproj" />
     <ProjectReference Include="../../backend/Unload.Tasks/Unload.Tasks.csproj" />
   </ItemGroup>
 

@@ -29,6 +29,11 @@ internal sealed class RunStatePersistence
         _store.EnsureWritable();
     }
 
+    public PersistenceHealthInfo GetHealth()
+    {
+        return _store.GetHealth();
+    }
+
     public void Save(Func<IReadOnlyCollection<RunStatusInfo>> captureRuns)
     {
         ArgumentNullException.ThrowIfNull(captureRuns);
