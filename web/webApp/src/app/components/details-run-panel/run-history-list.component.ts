@@ -1,9 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { ConfirmationService } from 'primeng/api';
-import { Button } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { RequeueItem } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { DownloadHintStore } from '../../download-hint.store';
@@ -22,11 +20,12 @@ import {
 import { resolveSenderStatusLabel } from '../../state/utils/labels.util';
 import { formatFileCount } from '../../state/utils/pluralize.util';
 import { formatTimestamp } from '../../state/utils/time.util';
+import { UiConfirmService } from '../../ui/ui-confirm.service';
 
 @Component({
   selector: 'app-run-history-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button, TPipe],
+  imports: [CommonModule, MatButtonModule, MatCheckboxModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-history-list.component.html',
   styleUrls: ['./details-shared.css', './run-history-list.component.css'],
@@ -34,7 +33,7 @@ import { formatTimestamp } from '../../state/utils/time.util';
 export class RunHistoryListComponent {
   readonly store = inject(WorkflowStore);
   private readonly downloadHint = inject(DownloadHintStore);
-  private readonly confirmationService = inject(ConfirmationService);
+  private readonly confirmationService = inject(UiConfirmService);
 
   readonly selectedHistoryFiles = signal<HistoryFileRow[]>([]);
   /** Снапшот выделения на момент инициирования requeue — основание для сверки ответа API. */
@@ -209,11 +208,11 @@ export class RunHistoryListComponent {
     }
 
     this.confirmationService.confirm({
-      header: t('confirm.header'),
+      title: t('confirm.header'),
       message: t('history.confirmMessage'),
       acceptLabel: t('history.confirmAccept'),
       rejectLabel: t('confirm.reject'),
-      accept: () => this.emitRequeue(),
+      onAccept: () => this.emitRequeue(),
     });
   }
 

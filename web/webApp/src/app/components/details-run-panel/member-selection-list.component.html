@@ -1,36 +1,33 @@
 <div class="details-section">
   <div class="details-section__title">{{ 'memberSelection.sectionTitle' | t }}</div>
 
-  <label class="details-check-row">
-    <p-checkbox
-      binary="true"
-      [ngModel]="store.publishRunToGateway()"
-      (onChange)="setPublishToGateway($event.checked)"
-    />
+  <div class="details-check-row">
+    <mat-checkbox
+      [checked]="store.publishRunToGateway()"
+      (change)="setPublishToGateway($event.checked)"
+    ></mat-checkbox>
     <span>{{ 'memberSelection.publishToGateway' | t }}</span>
-  </label>
+  </div>
 
-  <label class="details-check-row">
-    <p-checkbox
-      binary="true"
-      [ngModel]="allMembersSelected()"
+  <div class="details-check-row">
+    <mat-checkbox
+      [checked]="allMembersSelected()"
       [indeterminate]="allMembersPartial()"
-      (onChange)="toggleAll($event.checked)"
-    />
+      (change)="toggleAll($event.checked)"
+    ></mat-checkbox>
     <span>{{ 'memberSelection.selectAll' | t }}</span>
-  </label>
+  </div>
 
   @for (group of store.memberGroups(); track group.id) {
     <div class="details-group">
-      <label class="details-check-row details-check-row--group">
-        <p-checkbox
-          binary="true"
-          [ngModel]="groupAllSelected(group)"
+      <div class="details-check-row details-check-row--group">
+        <mat-checkbox
+          [checked]="groupAllSelected(group)"
           [indeterminate]="groupPartial(group)"
-          (onChange)="toggleGroup(group, $event.checked)"
-        />
+          (change)="toggleGroup(group, $event.checked)"
+        ></mat-checkbox>
         <span>{{ group.name }}</span>
-      </label>
+      </div>
 
       <div class="details-members">
         @for (member of group.members; track member.key) {
@@ -39,13 +36,12 @@
             [class.member-card--active]="selectedMemberKey() === member.key"
             [ngClass]="memberCardBorderClass(member)"
           >
-            <label class="details-check-row member-card__check">
-              <p-checkbox
-                binary="true"
-                [ngModel]="member.selected"
-                (onChange)="toggleMember(member, $event.checked)"
-              />
-            </label>
+            <div class="details-check-row member-card__check">
+              <mat-checkbox
+                [checked]="member.selected"
+                (change)="toggleMember(member, $event.checked)"
+              ></mat-checkbox>
+            </div>
             <button
               type="button"
               class="member-link member-card__button"
@@ -87,11 +83,14 @@
     </div>
   }
 
-  <p-button
-    [label]="'memberSelection.runSelected' | t"
-    icon="app-icon app-icon--play"
-    [fluid]="true"
+  <button
+    mat-flat-button
+    type="button"
+    class="details-primary-button"
     [disabled]="!store.canStartRun()"
-    (onClick)="startSelected()"
-  />
+    (click)="startSelected()"
+  >
+    <span class="app-icon app-icon--play" aria-hidden="true"></span>
+    {{ 'memberSelection.runSelected' | t }}
+  </button>
 </div>

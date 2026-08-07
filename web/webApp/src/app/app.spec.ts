@@ -1,5 +1,4 @@
 import { TestBed } from '@angular/core/testing';
-import { ConfirmationService } from 'primeng/api';
 import { App } from './app';
 import { RU } from './i18n/ru';
 
@@ -7,7 +6,6 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [ConfirmationService],
     }).compileComponents();
   });
 

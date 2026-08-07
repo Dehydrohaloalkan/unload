@@ -1,16 +1,16 @@
 import { CommonModule, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
-import { Button } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { ProgressSpinner } from 'primeng/progressspinner';
-import { ConfirmationService } from 'primeng/api';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { PresetGateState, TaskUiState } from '../app.models';
 import { TPipe, t } from '../i18n/i18n';
+import { UiConfirmService } from '../ui/ui-confirm.service';
 
 @Component({
   selector: 'app-preset-stage',
   standalone: true,
-  imports: [CommonModule, Button, Card, ProgressSpinner, TPipe],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatProgressSpinnerModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preset-stage.component.html',
   styleUrl: './preset-stage.component.css',
@@ -22,7 +22,7 @@ export class PresetStageComponent {
   readonly completedAt = input<string | null>(null);
   readonly startPreset = output<void>();
   readonly openDetails = output<void>();
-  private readonly confirmationService = inject(ConfirmationService);
+  private readonly confirmationService = inject(UiConfirmService);
 
   readonly statusIconClass = computed(() => {
     const task = this.presetTask();
@@ -46,10 +46,10 @@ export class PresetStageComponent {
     if (this.completedAt()) {
       this.confirmationService.confirm({
         message: t('preset.confirmRerun'),
-        header: t('confirm.header'),
+        title: t('confirm.header'),
         acceptLabel: t('confirm.accept'),
         rejectLabel: t('confirm.reject'),
-        accept: () => this.startPreset.emit(),
+        onAccept: () => this.startPreset.emit(),
       });
       return;
     }

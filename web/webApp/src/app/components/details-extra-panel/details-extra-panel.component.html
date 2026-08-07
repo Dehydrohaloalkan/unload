@@ -1,37 +1,29 @@
-<p-tabs value="extra">
-  <p-tablist>
-    <p-tab value="extra">{{ 'details.tabs.extra' | t }}</p-tab>
-    <p-tab value="history">{{ 'details.tabs.history' | t }}</p-tab>
-  </p-tablist>
-
-  <p-tabpanels>
-    <p-tabpanel value="extra">
+<mat-tab-group animationDuration="180ms" preserveContent>
+  <mat-tab [label]="'details.tabs.extra' | t">
       <div class="details-section">
         <div class="details-section__title">{{ 'details.task.sectionBanks' | t }}</div>
 
-        <label class="details-check-row">
-          <p-checkbox
-            binary="true"
-            [ngModel]="publishToGateway()"
-            (onChange)="setPublishToGateway($event.checked)"
-          />
+        <div class="details-check-row">
+          <mat-checkbox
+            [checked]="publishToGateway()"
+            (change)="setPublishToGateway($event.checked)"
+          ></mat-checkbox>
           <span>{{ 'extraSettings.publishToGateway' | t }}</span>
-        </label>
+        </div>
 
         @if (banksLoading()) {
           <div class="details-empty">{{ 'details.task.banksLoading' | t }}</div>
         } @else if (banks().length === 0) {
           <div class="details-empty">{{ 'details.task.banksEmpty' | t }}</div>
         } @else {
-          <label class="details-check-row">
-            <p-checkbox
-              binary="true"
-              [ngModel]="allBanksSelected()"
+          <div class="details-check-row">
+            <mat-checkbox
+              [checked]="allBanksSelected()"
               [indeterminate]="banksPartial()"
-              (onChange)="toggleAllBanks($event.checked)"
-            />
+              (change)="toggleAllBanks($event.checked)"
+            ></mat-checkbox>
             <span>{{ 'memberSelection.selectAll' | t }}</span>
-          </label>
+          </div>
 
           <div class="details-item__message">
             @if (allBanksSelected()) {
@@ -45,33 +37,34 @@
 
           <div class="bank-list">
             @for (bank of banks(); track bank.nrBank) {
-              <label class="bank-item">
-                <p-checkbox
-                  binary="true"
-                  [ngModel]="isBankSelected(bank.nrBank)"
-                  (onChange)="toggleBank(bank.nrBank, $event.checked)"
-                />
+              <div class="bank-item">
+                <mat-checkbox
+                  [checked]="isBankSelected(bank.nrBank)"
+                  (change)="toggleBank(bank.nrBank, $event.checked)"
+                ></mat-checkbox>
                 <span class="bank-item__name">{{ bank.bankName }}</span>
                 <span class="bank-item__code">{{ bank.nrBank }}</span>
-              </label>
+              </div>
             }
           </div>
         }
 
-        <p-button
-          [label]="'extraStage.runButton' | t"
-          icon="app-icon app-icon--bolt"
-          [fluid]="true"
+        <button
+          mat-flat-button
+          type="button"
+          class="details-primary-button"
           [disabled]="!canRun()"
-          (onClick)="handleRunClick()"
-        />
+          (click)="handleRunClick()"
+        >
+          <span class="app-icon app-icon--bolt" aria-hidden="true"></span>
+          {{ 'extraStage.runButton' | t }}
+        </button>
       </div>
 
       <app-active-extra-view />
-    </p-tabpanel>
+  </mat-tab>
 
-    <p-tabpanel value="history">
+  <mat-tab [label]="'details.tabs.history' | t">
       <app-run-history-list [taskCodeFilter]="'extra'" />
-    </p-tabpanel>
-  </p-tabpanels>
-</p-tabs>
+  </mat-tab>
+</mat-tab-group>

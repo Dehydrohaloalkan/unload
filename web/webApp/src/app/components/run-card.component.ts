@@ -1,14 +1,14 @@
 import { CommonModule, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { ConfirmationService } from 'primeng/api';
-import { Button } from 'primeng/button';
-import { Card } from 'primeng/card';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { TPipe, t } from '../i18n/i18n';
+import { UiConfirmService } from '../ui/ui-confirm.service';
 
 @Component({
   selector: 'app-run-card',
   standalone: true,
-  imports: [CommonModule, Button, Card, TPipe],
+  imports: [CommonModule, MatButtonModule, MatCardModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-card.component.html',
   styleUrl: './run-card.component.css',
@@ -22,7 +22,7 @@ export class RunCardComponent {
   readonly startRun = output<void>();
   readonly openDetails = output<void>();
 
-  private readonly confirmationService = inject(ConfirmationService);
+  private readonly confirmationService = inject(UiConfirmService);
 
   formatMoment(value: string): string {
     return formatDate(value, 'HH:mm:ss', 'ru-RU');
@@ -36,10 +36,10 @@ export class RunCardComponent {
 
     this.confirmationService.confirm({
       message: t('confirm.runPrompt'),
-      header: t('confirm.header'),
+      title: t('confirm.header'),
       acceptLabel: t('confirm.accept'),
       rejectLabel: t('confirm.reject'),
-      accept: () => this.startRun.emit(),
+      onAccept: () => this.startRun.emit(),
     });
   }
 }

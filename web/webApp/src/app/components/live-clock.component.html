@@ -1,9 +1,10 @@
-<p-card
-  [styleClass]="connected() ? 'clock-card clock-card--online' : 'clock-card clock-card--offline'"
-  [pTooltip]="connected() ? ('liveClock.tooltipConnected' | t) : ('liveClock.tooltipOffline' | t)"
-  tooltipPosition="top"
+<mat-card
+  class="clock-card"
+  [class.clock-card--online]="connected()"
+  [class.clock-card--offline]="!connected()"
+  [matTooltip]="connected() ? ('liveClock.tooltipConnected' | t) : ('liveClock.tooltipOffline' | t)"
+  matTooltipPosition="above"
 >
-  <ng-template #header>
     <div class="clock-head">
       <div>
         <h2 class="clock-title">{{ 'liveClock.title' | t }}</h2>
@@ -18,7 +19,6 @@
         ></i>
       </div>
     </div>
-  </ng-template>
 
   <div class="clock-body">
     <div class="clock-value">{{ formatTime(now()) }}</div>
@@ -26,4 +26,4 @@
       {{ dayWindowSummary() }}
     </div>
   </div>
-</p-card>
+</mat-card>

@@ -74,13 +74,10 @@
           </div>
         }
 
-        <p-button
-          [label]="'activeRun.stop' | t"
-          icon="app-icon app-icon--stop"
-          severity="secondary"
-          [outlined]="true"
-          (onClick)="stopExtra()"
-        />
+        <button mat-stroked-button type="button" class="details-secondary-button" (click)="stopExtra()">
+          <span class="app-icon app-icon--stop" aria-hidden="true"></span>
+          {{ 'activeRun.stop' | t }}
+        </button>
       </div>
     } @else {
       <div class="details-empty">{{ 'extraActive.noActive' | t }}</div>

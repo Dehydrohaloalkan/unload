@@ -3,6 +3,13 @@
 
 :root {
   --app-icon-size: 1.15rem;
+  --app-primary: #1d4ed8;
+  --app-primary-strong: #1e40af;
+  --app-surface: rgba(255, 255, 255, 0.82);
+  --app-border: rgba(203, 213, 225, 0.78);
+  --app-focus: #2563eb;
+  --app-radius-card: 1.25rem;
+  --app-shadow-card: 0 16px 45px rgba(30, 64, 175, 0.09);
 }
 
 .app-icon {
@@ -81,45 +88,138 @@ body {
   min-width: 320px;
   color: #0f172a;
   background: transparent;
+  isolation: isolate;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  width: min(42vw, 34rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(12px);
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+body::before {
+  top: -18rem;
+  left: -10rem;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.34), transparent 68%);
+}
+
+body::after {
+  right: -12rem;
+  bottom: -18rem;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.2), transparent 68%);
 }
 
 * {
   box-sizing: border-box;
 }
 
-.p-card {
-  border-radius: 1.75rem;
-  border: 1px solid rgba(226, 232, 240, 0.82);
-  background: rgba(255, 255, 255, 0.74);
+.mat-mdc-card {
+  border-radius: var(--app-radius-card) !important;
+  border: 1px solid var(--app-border) !important;
+  background: var(--app-surface) !important;
   backdrop-filter: blur(20px);
-  box-shadow: 0 20px 60px rgba(148, 163, 184, 0.12);
-}
-
-.p-card .p-card-body {
-  padding: 1.5rem;
-}
-
-.p-card .p-card-content {
-  padding: 0;
-}
-
-.p-panel {
-  border-radius: 1.25rem;
+  box-shadow: var(--app-shadow-card) !important;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.82);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
-.p-panel-header {
-  background: rgba(248, 250, 252, 0.86);
+.stage-card,
+.clock-card {
+  min-height: 9.35rem;
+  position: relative;
 }
 
-.p-panel-content {
-  background: transparent;
+.stage-card::before,
+.clock-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.24rem;
+  border-radius: inherit;
+  background: var(--stage-accent, linear-gradient(#2563eb, #7c3aed));
 }
 
-.p-tooltip .p-tooltip-text {
+.mat-mdc-dialog-container {
+  --mdc-dialog-container-shape: 1.25rem;
+}
+
+.mat-mdc-dialog-surface {
+  border: 1px solid var(--app-border);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24) !important;
+}
+
+.mat-mdc-tab-body-content {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.mat-mdc-tooltip .mdc-tooltip__surface {
   max-width: 24rem;
   white-space: pre-line;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.mat-mdc-button-base {
+  touch-action: manipulation;
+}
+
+.stage-action-button,
+.details-primary-button,
+.details-secondary-button {
+  min-height: 44px;
+}
+
+.stage-action-button,
+.details-primary-button {
+  width: 100%;
+}
+
+.app-message {
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.app-message--error {
+  color: #991b1b;
+  background: rgba(254, 226, 226, 0.88);
+  border: 1px solid rgba(220, 38, 38, 0.28);
+}
+
+:where(button, a, summary, input):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--app-focus) 65%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (hover: hover) {
+  .stage-card:hover,
+  .clock-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(147, 197, 253, 0.82) !important;
+    box-shadow: 0 22px 56px rgba(30, 64, 175, 0.16) !important;
+  }
 }

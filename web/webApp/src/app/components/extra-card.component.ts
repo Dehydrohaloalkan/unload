@@ -1,15 +1,15 @@
 import { CommonModule, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { ConfirmationService } from 'primeng/api';
-import { Button } from 'primeng/button';
-import { Card } from 'primeng/card';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { TaskUiState } from '../app.models';
 import { TPipe, t } from '../i18n/i18n';
+import { UiConfirmService } from '../ui/ui-confirm.service';
 
 @Component({
   selector: 'app-extra-card',
   standalone: true,
-  imports: [CommonModule, Button, Card, TPipe],
+  imports: [CommonModule, MatButtonModule, MatCardModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './extra-card.component.html',
   styleUrl: './extra-card.component.css',
@@ -23,7 +23,7 @@ export class ExtraCardComponent {
   readonly start = output<void>();
   readonly openDetails = output<void>();
 
-  private readonly confirmationService = inject(ConfirmationService);
+  private readonly confirmationService = inject(UiConfirmService);
 
   completedLabel(): string {
     const value = this.lastCompletedAt();
@@ -38,10 +38,10 @@ export class ExtraCardComponent {
 
     this.confirmationService.confirm({
       message: t('confirm.runPrompt'),
-      header: t('confirm.header'),
+      title: t('confirm.header'),
       acceptLabel: t('confirm.accept'),
       rejectLabel: t('confirm.reject'),
-      accept: () => this.start.emit(),
+      onAccept: () => this.start.emit(),
     });
   }
 }

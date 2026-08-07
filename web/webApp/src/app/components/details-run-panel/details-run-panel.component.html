@@ -1,17 +1,10 @@
-<p-tabs value="run">
-  <p-tablist>
-    <p-tab value="run">{{ 'details.tabs.run' | t }}</p-tab>
-    <p-tab value="history">{{ 'details.tabs.history' | t }}</p-tab>
-  </p-tablist>
-
-  <p-tabpanels>
-    <p-tabpanel value="run">
+<mat-tab-group animationDuration="180ms" preserveContent>
+  <mat-tab [label]="'details.tabs.run' | t">
       <app-member-selection-list />
       <app-active-run-view />
-    </p-tabpanel>
+  </mat-tab>
 
-    <p-tabpanel value="history">
+  <mat-tab [label]="'details.tabs.history' | t">
       <app-run-history-list [taskCodeFilter]="'run'" />
-    </p-tabpanel>
-  </p-tabpanels>
-</p-tabs>
+  </mat-tab>
+</mat-tab-group>

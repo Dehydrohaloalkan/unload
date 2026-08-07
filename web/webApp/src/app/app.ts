@@ -1,12 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { Button } from 'primeng/button';
-import { ConfirmDialog } from 'primeng/confirmdialog';
-import { Dialog } from 'primeng/dialog';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
-import { ProgressSpinner } from 'primeng/progressspinner';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppErrorStore } from './app.error-store';
 import { WorkflowStore } from './app.store';
 import { TPipe, t } from './i18n/i18n';
@@ -19,19 +15,15 @@ import { ExtraCardComponent } from './components/extra-card.component';
 import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
+import { AdminLoginDialogComponent } from './ui/admin-login-dialog.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
-    Button,
-    ConfirmDialog,
-    Dialog,
-    InputText,
-    Message,
-    ProgressSpinner,
+    MatButtonModule,
+    MatProgressSpinnerModule,
     TPipe,
     DetailsRunPanelComponent,
     DetailsExtraPanelComponent,
@@ -49,13 +41,10 @@ import { RunCardComponent } from './components/run-card.component';
 export class App {
   readonly store = inject(WorkflowStore);
   readonly appErrorStore = inject(AppErrorStore);
+  private readonly dialog = inject(MatDialog);
 
   readonly detailsPanelOpen = signal(false);
   readonly detailsPanelStage = signal<DrawerStage>('run');
-
-  readonly adminDialogVisible = signal(false);
-  readonly adminPassword = signal('');
-  readonly adminError = signal<string | null>(null);
 
   readonly probeCompleted = computed(() => {
     const preset = this.store.presetState();
@@ -90,29 +79,22 @@ export class App {
   toggleAdminMode(): void {
     if (this.store.adminMode()) {
       this.store.setAdminMode(false);
-      this.adminDialogVisible.set(false);
-      this.adminPassword.set('');
-      this.adminError.set(null);
       return;
     }
 
-    this.adminDialogVisible.set(true);
-    this.adminPassword.set('');
-    this.adminError.set(null);
-  }
-
-  confirmAdminMode(): void {
-    const now = new Date();
-    const expected = `${pad2(now.getHours())}${pad2(now.getMinutes())}`;
-    if (this.adminPassword() !== expected) {
-      this.adminError.set(t('app.admin.wrongPassword'));
-      return;
-    }
-
-    this.store.setAdminMode(true);
-    this.adminDialogVisible.set(false);
-    this.adminPassword.set('');
-    this.adminError.set(null);
+    this.dialog
+      .open(AdminLoginDialogComponent, {
+        width: '26rem',
+        maxWidth: 'calc(100vw - 2rem)',
+        autoFocus: '#admin-password',
+        restoreFocus: true,
+      })
+      .afterClosed()
+      .subscribe((enabled) => {
+        if (enabled) {
+          this.store.setAdminMode(true);
+        }
+      });
   }
 
   openDetails(stage: DrawerStage): void {
@@ -138,7 +120,3 @@ export class App {
 }
 
 type DrawerStage = 'run' | 'preset' | 'extra';
-
-function pad2(value: number): string {
-  return value.toString().padStart(2, '0');
-}

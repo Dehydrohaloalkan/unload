@@ -440,8 +440,8 @@ npm start
 ./tools/verify.sh
 ```
 
-Команда использует зафиксированные версии SDK и lockfile, запускает format/analyzers, обе сборки,
-backend/frontend tests и проверку актуальности сгенерированного API client.
+Команда использует зафиксированные версии SDK и lockfile, запускает format/analyzers, dependency
+audit, обе сборки, backend/frontend tests и проверку актуальности сгенерированного API client.
 
 ## Ограничения
 

@@ -119,14 +119,16 @@
           </div>
         }
 
-        <p-button
-          [label]="'activeRun.stop' | t"
-          icon="app-icon app-icon--stop"
-          severity="secondary"
-          [outlined]="true"
+        <button
+          mat-stroked-button
+          type="button"
+          class="details-secondary-button"
           [disabled]="!store.isRunBusy()"
-          (onClick)="stopRun()"
-        />
+          (click)="stopRun()"
+        >
+          <span class="app-icon app-icon--stop" aria-hidden="true"></span>
+          {{ 'activeRun.stop' | t }}
+        </button>
       </div>
     } @else {
       <div class="details-empty">{{ 'activeRun.noActive' | t }}</div>

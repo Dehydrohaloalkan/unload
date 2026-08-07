@@ -44,23 +44,24 @@ async function enableAdmin(page) {
   log('bank items:', await drawer.locator('.bank-item').count());
   await shot(page, '02-extra-panel');
 
-  await drawer.locator('.bank-item').nth(0).locator('.p-checkbox').click();
-  await drawer.locator('.bank-item').nth(1).locator('.p-checkbox').click();
+  await drawer.locator('.bank-item').nth(0).locator('mat-checkbox').click();
+  await drawer.locator('.bank-item').nth(1).locator('mat-checkbox').click();
   await page.waitForTimeout(300);
   await shot(page, '03-indeterminate');
-  await drawer.locator('label.details-check-row', { hasText: 'Выбрать все' }).locator('.p-checkbox').click();
+  await drawer.locator('.details-check-row', { hasText: 'Выбрать все' }).locator('mat-checkbox').click();
 
-  await drawer.locator('label.details-check-row', { hasText: 'Отправлять в шлюз' }).locator('.p-checkbox').click();
+  await drawer.locator('.details-check-row', { hasText: 'Отправлять в шлюз' }).locator('mat-checkbox').click();
   const idsBefore = await page.evaluate(async () => (await (await fetch('/api/runs/today')).json())
     .filter((item) => (item.taskCode || '').toLowerCase() === 'extra')
     .map((item) => item.correlationId));
   await drawer.getByRole('button', { name: 'Запустить extra' }).click();
 
   try {
-    const accept = page.locator('p-confirmdialog').getByRole('button', { name: 'Запустить', exact: true });
+    const dialog = page.getByRole('dialog');
+    const accept = dialog.getByRole('button', { name: 'Запустить', exact: true });
     await accept.waitFor({ timeout: 3000 });
     await accept.click();
-    await page.locator('.p-dialog-mask').waitFor({ state: 'detached', timeout: 5000 });
+    await dialog.waitFor({ state: 'detached', timeout: 5000 });
   } catch {}
 
   for (let index = 0; index < 80; index++) {
@@ -81,6 +82,30 @@ async function enableAdmin(page) {
   await page.waitForTimeout(300);
   await shot(page, '05-history');
   log('HISTORY TEXT >>>\n' + await drawer.locator('app-run-history-list').innerText() + '\n<<<');
+
+  await drawer.getByRole('button', { name: 'Закрыть панель' }).click();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const adminButton = page.getByRole('button', { name: /Админ-режим/i }).first();
+  await adminButton.click();
+  await adminButton.click();
+  const adminDialog = page.getByRole('dialog');
+  await adminDialog.waitFor();
+  await page.waitForTimeout(250);
+  const focusedField = await page.evaluate(() => document.activeElement?.id);
+  if (focusedField !== 'admin-password') throw new Error(`Unexpected dialog focus: ${focusedField}`);
+  await shot(page, '06-mobile-admin-dialog');
+  await page.keyboard.press('Escape');
+  await adminDialog.waitFor({ state: 'detached' });
+  if (!(await adminButton.evaluate((element) => element === document.activeElement))) {
+    throw new Error('Admin button focus was not restored after closing the dialog');
+  }
+
+  await page.locator('app-extra-card').getByLabel('Подробнее').click();
+  await page.locator('aside.details-drawer .bank-item').first().waitFor();
+  await page.waitForTimeout(250);
+  const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  if (hasHorizontalOverflow) throw new Error('Mobile layout has horizontal overflow');
+  await shot(page, '07-mobile-extra-panel');
 
   await browser.close();
   log('done');

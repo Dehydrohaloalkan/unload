@@ -3,31 +3,42 @@
 
   <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen()">
     <div class="app-header">
-      <div>
-        <h1 class="app-title">{{ 'app.title' | t }}</h1>
+      <div class="app-brand">
+        <span class="app-brand__mark" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+        <div class="app-header__copy">
+          <div class="app-eyebrow">{{ 'app.eyebrow' | t }}</div>
+          <h1 class="app-title">{{ 'app.title' | t }}</h1>
+        </div>
       </div>
 
       <div class="app-header__actions">
-        <p-button
-          [label]="store.adminMode() ? ('app.adminModeOn' | t) : ('app.adminMode' | t)"
-          [severity]="store.adminMode() ? 'danger' : 'secondary'"
-          [outlined]="!store.adminMode()"
-          icon="app-icon app-icon--shield"
-          (onClick)="toggleAdminMode()"
-        />
+        <button
+          mat-stroked-button
+          type="button"
+          class="admin-mode-button"
+          [class.admin-mode-button--active]="store.adminMode()"
+          (click)="toggleAdminMode()"
+        >
+          <span class="app-icon app-icon--shield" aria-hidden="true"></span>
+          {{ store.adminMode() ? ('app.adminModeOn' | t) : ('app.adminMode' | t) }}
+        </button>
       </div>
     </div>
 
     @if (store.errorMessage(); as error) {
-      <p-message severity="error" [text]="error" />
+      <div class="app-message app-message--error" role="alert">{{ error }}</div>
     }
     @if (appErrorStore.unhandledErrorMessage(); as unhandledError) {
-      <p-message severity="error" [text]="unhandledError" />
+      <div class="app-message app-message--error" role="alert">{{ unhandledError }}</div>
     }
 
     @if (!store.ready() && store.loading()) {
       <div class="loading-state">
-        <p-progress-spinner strokeWidth="4" />
+        <mat-spinner diameter="42" aria-label="Загрузка"></mat-spinner>
         <div class="loading-state__text">
           <div class="font-medium text-slate-800">{{ 'app.loading.title' | t }}</div>
           <div class="text-sm text-slate-500">{{ 'app.loading.subtitle' | t }}</div>
@@ -87,12 +98,9 @@
           }
         }
       </div>
-      <p-button
-        icon="app-icon app-icon--close"
-        [rounded]="true"
-        [text]="true"
-        (onClick)="closeDetails()"
-      />
+      <button mat-icon-button type="button" aria-label="Закрыть панель" (click)="closeDetails()">
+        <span class="app-icon app-icon--close" aria-hidden="true"></span>
+      </button>
     </div>
 
     @if (detailsPanelOpen()) {
@@ -102,21 +110,21 @@
             @defer (when detailsPanelOpen()) {
               <app-details-run-panel />
             } @loading (minimum 100ms) {
-              <p-progress-spinner strokeWidth="4" />
+              <mat-spinner diameter="32" aria-label="Загрузка панели"></mat-spinner>
             }
           }
           @case ('preset') {
             @defer (when detailsPanelOpen()) {
               <app-details-task-panel kind="preset" />
             } @loading (minimum 100ms) {
-              <p-progress-spinner strokeWidth="4" />
+              <mat-spinner diameter="32" aria-label="Загрузка панели"></mat-spinner>
             }
           }
           @default {
             @defer (when detailsPanelOpen()) {
               <app-details-extra-panel />
             } @loading (minimum 100ms) {
-              <p-progress-spinner strokeWidth="4" />
+              <mat-spinner diameter="32" aria-label="Загрузка панели"></mat-spinner>
             }
           }
         }
@@ -124,39 +132,4 @@
     }
   </aside>
 
-  <p-dialog
-    [visible]="adminDialogVisible()"
-    [modal]="true"
-    [draggable]="false"
-    [resizable]="false"
-    [header]="'app.admin.dialogHeader' | t"
-    [style]="{ width: '26rem', maxWidth: '92vw' }"
-    (onHide)="adminDialogVisible.set(false)"
-  >
-    <div class="admin-dialog">
-      <label class="admin-dialog__label" for="admin-password">{{ 'app.admin.passwordLabel' | t }}</label>
-      <input
-        id="admin-password"
-        type="password"
-        maxlength="4"
-        pInputText
-        [ngModel]="adminPassword()"
-        (ngModelChange)="adminPassword.set($event)"
-        class="w-full"
-      />
-      @if (adminError(); as error) {
-        <p-message severity="error" [text]="error" />
-      }
-      <div class="admin-dialog__actions">
-        <p-button
-          [label]="'app.admin.submit' | t"
-          icon="app-icon app-icon--check"
-          [disabled]="adminPassword().length !== 4"
-          (onClick)="confirmAdminMode()"
-        />
-      </div>
-    </div>
-  </p-dialog>
-
-  <p-confirmdialog [style]="{ width: '28rem', maxWidth: '92vw' }" />
 </main>

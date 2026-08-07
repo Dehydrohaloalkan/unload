@@ -52,12 +52,11 @@
                               @if (isHistoryBankOpen(bankKey(node, script, bank.bankName))) {
                                 <div class="history-member__body">
                                   @for (file of bank.files; track file.key) {
-                                    <label class="history-member-file">
-                                      <p-checkbox
-                                        binary="true"
-                                        [ngModel]="isHistoryFileSelected(file.key)"
-                                        (onChange)="toggleHistoryFile(file, $event.checked)"
-                                      />
+                                    <div class="history-member-file">
+                                      <mat-checkbox
+                                        [checked]="isHistoryFileSelected(file.key)"
+                                        (change)="toggleHistoryFile(file, $event.checked)"
+                                      ></mat-checkbox>
                                       <a
                                         class="history-file-link"
                                         [href]="buildDownloadUrl(file.filePath)"
@@ -81,7 +80,7 @@
                                           >{{ 'history.gatewayPending' | t }}</span
                                         >
                                       }
-                                    </label>
+                                    </div>
                                   }
                                 </div>
                               }
@@ -109,12 +108,11 @@
                             <div class="details-empty">{{ 'history.emptyFiles' | t }}</div>
                           } @else {
                             @for (file of member.files; track file.key) {
-                              <label class="history-member-file">
-                                <p-checkbox
-                                  binary="true"
-                                  [ngModel]="isHistoryFileSelected(file.key)"
-                                  (onChange)="toggleHistoryFile(file, $event.checked)"
-                                />
+                              <div class="history-member-file">
+                                <mat-checkbox
+                                  [checked]="isHistoryFileSelected(file.key)"
+                                  (change)="toggleHistoryFile(file, $event.checked)"
+                                ></mat-checkbox>
                                 <a
                                   class="history-file-link"
                                   [href]="buildDownloadUrl(file.filePath)"
@@ -138,7 +136,7 @@
                                     >{{ 'history.gatewayPending' | t }}</span
                                   >
                                 }
-                              </label>
+                              </div>
                             }
                           }
                         </div>
@@ -154,14 +152,22 @@
     </div>
   }
 
-  <p-button
-    [label]="'history.sendSelected' | t"
-    icon="app-icon app-icon--play"
-    [fluid]="true"
-    [loading]="store.requeueRunning()"
+  <button
+    mat-flat-button
+    type="button"
+    class="details-primary-button"
     [disabled]="!canRequeue() || store.requeueRunning()"
-    (onClick)="confirmRequeue()"
-  />
+    (click)="confirmRequeue()"
+  >
+    <span
+      class="app-icon"
+      [class.app-icon--play]="!store.requeueRunning()"
+      [class.app-icon--spinner]="store.requeueRunning()"
+      [class.app-icon--spin]="store.requeueRunning()"
+      aria-hidden="true"
+    ></span>
+    {{ 'history.sendSelected' | t }}
+  </button>
 
   @if (store.requeueResult(); as result) {
     <div class="details-item__message">

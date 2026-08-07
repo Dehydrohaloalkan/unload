@@ -1,5 +1,4 @@
-<p-card styleClass="stage-card">
-  <ng-template #header>
+<mat-card class="stage-card">
     <div class="stage-head">
       <div>
         <h2 class="stage-title">{{ 'runStage.title' | t }}</h2>
@@ -21,30 +20,37 @@
         [class.stage-icon--danger]="!runBusy() && !lastCompletedAt()"
       ></i>
     </div>
-  </ng-template>
 
   <div class="stage-body">
     <div class="stage-actions">
       <div class="stage-main-action">
-      <p-button
-        [label]="'runStage.runButton' | t"
-        icon="app-icon app-icon--play"
-        size="small"
-        [fluid]="true"
-        [loading]="runBusy()"
+      <button
+        mat-flat-button
+        type="button"
+        class="stage-action-button"
         [disabled]="!canStartRun()"
-        [styleClass]="hasRunToday() ? 'stage-button--done' : 'pulse-button'"
-        (onClick)="handleStartRunClick()"
-      />
+        [class.stage-button--done]="hasRunToday()"
+        [class.pulse-button]="!hasRunToday() && canStartRun()"
+        (click)="handleStartRunClick()"
+      >
+        <span
+          class="app-icon"
+          [class.app-icon--play]="!runBusy()"
+          [class.app-icon--spinner]="runBusy()"
+          [class.app-icon--spin]="runBusy()"
+          aria-hidden="true"
+        ></span>
+        {{ 'runStage.runButton' | t }}
+      </button>
       </div>
-      <p-button
-        icon="app-icon app-icon--arrow-forward"
-        [rounded]="true"
-        [outlined]="true"
-        severity="secondary"
+      <button
+        mat-icon-button
+        type="button"
         [attr.aria-label]="'app.more' | t"
-        (onClick)="openDetails.emit()"
-      />
+        (click)="openDetails.emit()"
+      >
+        <span class="app-icon app-icon--arrow-forward" aria-hidden="true"></span>
+      </button>
     </div>
   </div>
-</p-card>
+</mat-card>

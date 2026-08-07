@@ -1,7 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { Checkbox } from 'primeng/checkbox';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ExtraBankInfo, TaskRecord, TaskUiState } from '../app.models';
 import { WorkflowStore } from '../app.store';
 import { DownloadHintStore } from '../download-hint.store';
@@ -43,7 +42,7 @@ const COPY = buildCopy();
 @Component({
   selector: 'app-details-task-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, TPipe],
+  imports: [CommonModule, MatCheckboxModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './details-task-panel.component.html',
   styleUrl: './details-task-panel.component.css',

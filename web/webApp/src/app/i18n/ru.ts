@@ -5,6 +5,7 @@
  */
 export const RU = {
   'app.title': 'Панель выгрузки',
+  'app.eyebrow': 'UNLOAD · ЦЕНТР УПРАВЛЕНИЯ',
   'app.adminMode': 'Админ-режим',
   'app.adminModeOn': 'Админ-режим: ВКЛ',
   'app.more': 'Подробнее',

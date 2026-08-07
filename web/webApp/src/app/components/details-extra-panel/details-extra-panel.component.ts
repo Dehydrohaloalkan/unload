@@ -1,15 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { ConfirmationService } from 'primeng/api';
-import { Button } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
-import { TabsModule } from 'primeng/tabs';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTabsModule } from '@angular/material/tabs';
 import { ExtraBankInfo } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { TPipe, t } from '../../i18n/i18n';
 import { ActiveExtraViewComponent } from './active-extra-view.component';
 import { RunHistoryListComponent } from '../details-run-panel/run-history-list.component';
+import { UiConfirmService } from '../../ui/ui-confirm.service';
 
 /**
  * Панель extra-выгрузки по образцу панели main run (вкладки «Выгрузка» / «История»).
@@ -21,10 +20,9 @@ import { RunHistoryListComponent } from '../details-run-panel/run-history-list.c
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
-    TabsModule,
-    Button,
-    Checkbox,
+    MatTabsModule,
+    MatButtonModule,
+    MatCheckboxModule,
     TPipe,
     ActiveExtraViewComponent,
     RunHistoryListComponent,
@@ -35,7 +33,7 @@ import { RunHistoryListComponent } from '../details-run-panel/run-history-list.c
 })
 export class DetailsExtraPanelComponent implements OnInit {
   private readonly store = inject(WorkflowStore);
-  private readonly confirmationService = inject(ConfirmationService);
+  private readonly confirmationService = inject(UiConfirmService);
 
   readonly banks = computed<ExtraBankInfo[]>(() => this.store.extraBanks());
   readonly banksLoading = computed<boolean>(() => this.store.extraBanksLoading());
@@ -84,10 +82,10 @@ export class DetailsExtraPanelComponent implements OnInit {
 
     this.confirmationService.confirm({
       message: t('confirm.runPrompt'),
-      header: t('confirm.header'),
+      title: t('confirm.header'),
       acceptLabel: t('confirm.accept'),
       rejectLabel: t('confirm.reject'),
-      accept: () => void this.store.runExtraAsync(),
+      onAccept: () => void this.store.runExtraAsync(),
     });
   }
 }

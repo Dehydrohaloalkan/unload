@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Button } from 'primeng/button';
+import { MatButtonModule } from '@angular/material/button';
 import {
   MemberRunLifecycleStatus,
   MemberRunStatusInfo,
@@ -31,7 +31,7 @@ import { formatTimestamp } from '../../state/utils/time.util';
 @Component({
   selector: 'app-active-run-view',
   standalone: true,
-  imports: [CommonModule, Button, TPipe],
+  imports: [CommonModule, MatButtonModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './active-run-view.component.html',
   styleUrls: ['./details-shared.css', './active-run-view.component.css'],

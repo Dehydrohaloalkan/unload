@@ -1,5 +1,4 @@
-<p-card styleClass="stage-card">
-  <ng-template #header>
+<mat-card class="stage-card">
     <div class="stage-head">
       <div>
         <h2 class="stage-title">{{ 'preset.title' | t }}</h2>
@@ -12,36 +11,38 @@
       }
       <i [class]="statusIconClass()"></i>
     </div>
-  </ng-template>
 
   <div class="stage-body">
     @if (presetTask().running) {
       <div class="stage-running">
-        <p-progress-spinner strokeWidth="4" [style]="{ width: '1.25rem', height: '1.25rem' }" />
+        <mat-spinner diameter="20" aria-label="Выполняется"></mat-spinner>
         <span>{{ 'preset.running' | t }}</span>
       </div>
     } @else {
       <div class="stage-actions">
         <div class="stage-main-action">
-        <p-button
-          [label]="'preset.runButton' | t"
-          icon="app-icon app-icon--play"
-          size="small"
-          [fluid]="true"
+        <button
+          mat-flat-button
+          type="button"
+          class="stage-action-button"
           [disabled]="!canRunPreset()"
-          [styleClass]="completedAt() ? 'stage-button--done' : (canRunPreset() ? 'preset-pulse-button' : '')"
-          (onClick)="onStartClick()"
-        />
+          [class.stage-button--done]="!!completedAt()"
+          [class.preset-pulse-button]="!completedAt() && canRunPreset()"
+          (click)="onStartClick()"
+        >
+          <span class="app-icon app-icon--play" aria-hidden="true"></span>
+          {{ 'preset.runButton' | t }}
+        </button>
         </div>
-        <p-button
-          icon="app-icon app-icon--arrow-forward"
-          [rounded]="true"
-          [outlined]="true"
-          severity="secondary"
+        <button
+          mat-icon-button
+          type="button"
           [attr.aria-label]="'app.more' | t"
-          (onClick)="openDetails.emit()"
-        />
+          (click)="openDetails.emit()"
+        >
+          <span class="app-icon app-icon--arrow-forward" aria-hidden="true"></span>
+        </button>
       </div>
     }
   </div>
-</p-card>
+</mat-card>

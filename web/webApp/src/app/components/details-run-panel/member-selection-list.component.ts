@@ -1,8 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { Button } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MemberGroupViewModel, MemberViewModel } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { TPipe } from '../../i18n/i18n';
@@ -14,7 +13,7 @@ import { formatTimestamp, isTodayDate } from '../../state/utils/time.util';
 @Component({
   selector: 'app-member-selection-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, Checkbox, Button, TPipe],
+  imports: [CommonModule, MatButtonModule, MatCheckboxModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './member-selection-list.component.html',
   styleUrls: ['./details-shared.css', './member-selection-list.component.css'],

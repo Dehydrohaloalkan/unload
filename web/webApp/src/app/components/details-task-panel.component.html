@@ -11,15 +11,14 @@
       </div>
       <div class="bank-list">
         @for (bank of banks(); track bank.nrBank) {
-          <label class="bank-item">
-            <p-checkbox
-              binary="true"
-              [ngModel]="isBankSelected(bank.nrBank)"
-              (onChange)="toggleBank(bank.nrBank, $event.checked)"
-            />
+          <div class="bank-item">
+            <mat-checkbox
+              [checked]="isBankSelected(bank.nrBank)"
+              (change)="toggleBank(bank.nrBank, $event.checked)"
+            ></mat-checkbox>
             <span class="bank-item__name">{{ bank.bankName }}</span>
             <span class="bank-item__code">{{ bank.nrBank }}</span>
-          </label>
+          </div>
         }
       </div>
       @if (!allBanksSelected()) {

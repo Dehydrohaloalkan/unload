@@ -82,7 +82,7 @@ Use `selectedBanks: null` for all banks or an array such as `["B01", "B02"]` for
 - Admin button: `Админ-режим`; password input: `#admin-password`; submit: `Войти`.
 - Details button within `app-extra-card` or `app-run-card`: aria-label `Подробнее`.
 - Drawer: `aside.details-drawer`; tabs: `Выгрузка` and `История`.
-- Checkbox row: `label.details-check-row`; PrimeNG checkbox: `.p-checkbox`.
+- Checkbox row: `.details-check-row`; Material checkbox: `mat-checkbox`.
 - Bank rows: `.bank-item`; launch: `Запустить extra`; stop: `Остановить выгрузку`.
 - History hierarchy: `.history-run__summary`, then `.history-script .history-member__summary`, then `.history-bank .history-member__summary`.
 

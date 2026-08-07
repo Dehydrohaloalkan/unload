@@ -494,6 +494,15 @@ in-memory состояния и его записи. Если несколько
 
 ### 13.1. Слои Angular
 
+Frontend использует Angular 22.1, TypeScript 6.0, Angular Material 22 и NgRx Signal Store.
+Material отвечает за доступное поведение диалогов, вкладок, checkbox, tooltip и индикаторов;
+визуальный слой карточек, статусов и рабочих действий задаётся проектными CSS-токенами.
+Единый `UiConfirmService` изолирует компоненты от API конкретной реализации диалога. Stable-релиз
+`@ngrx/signals` пока ограничен Angular 21, поэтому версия `22.0.0-rc.0` зафиксирована точно и не обновляется
+неявно. Angular CLI 22.1.3 напрямую фиксирует уязвимый MCP SDK 1.29.0, поэтому `package.json`
+временно переопределяет его на совместимый 1.30.0; override следует убрать, когда исправление
+войдёт в сам Angular CLI. Lockfile разрешает MCP SDK на исправленный `@hono/node-server` 2.x.
+
 | Компонент | Ответственность |
 |---|---|
 | `ApiClientService` | Все HTTP-вызовы и построение download URL |
@@ -686,9 +695,10 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 
 Каноническая проверка чистой рабочей копии запускается из корня командой
 `./tools/verify.sh`. Она последовательно выполняет restore, format/analyzer check, build и tests
-для решения .NET, затем `npm ci`, frontend tests вместе с проверкой generated API client и
-production build Angular. Локальная команда и `.github/workflows/verify.yml` используют один и тот
-же скрипт, поэтому CI не содержит отдельной, постепенно расходящейся последовательности команд.
+для решения .NET, затем `npm ci`, `npm audit --audit-level=moderate`, frontend tests вместе с
+проверкой generated API client и production build Angular. Локальная команда и
+`.github/workflows/verify.yml` используют один и тот же скрипт, поэтому CI не содержит отдельной,
+постепенно расходящейся последовательности команд.
 
 Общие .NET-настройки находятся в `Directory.Build.props`, версии NuGet-пакетов — в
 `Directory.Packages.props`, версия SDK — в `global.json`, версия Node.js — в `.node-version`.

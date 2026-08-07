@@ -36,6 +36,7 @@ run_step "backend tests" dotnet test unload.slnx --no-build --no-restore
 
 cd "$frontend_dir"
 run_step "frontend dependencies" npm ci
+run_step "frontend dependency audit" npm audit --audit-level=moderate
 run_step "frontend tests and API contract" npm test -- --watch=false
 run_step "frontend build" npm run build
 

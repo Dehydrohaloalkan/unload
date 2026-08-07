@@ -101,7 +101,7 @@ Angular-клиент для `Unload.Api`.
 ## Стек
 
 - Angular 21 standalone
-- PrimeNG 21
+- Angular Material 22
 - Tailwind CSS 4
 - SignalR client `@microsoft/signalr`
 

@@ -1,5 +1,6 @@
 :host {
   display: block;
+  --stage-accent: linear-gradient(180deg, #10b981 0%, #06b6d4 100%);
 }
 
 .clock-head {
@@ -21,6 +22,7 @@
   display: grid;
   gap: 0.45rem;
   padding: 0.55rem 0.9rem 0.9rem;
+  margin-top: auto;
 }
 
 .clock-value {
@@ -32,11 +34,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-:host ::ng-deep .clock-card--online {
+.clock-card--online {
   border: 2px solid rgba(16, 185, 129, 0.55);
 }
 
-:host ::ng-deep .clock-card--offline {
+.clock-card--offline {
   border: 2px solid rgba(239, 68, 68, 0.55);
 }
 

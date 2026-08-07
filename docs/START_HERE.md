@@ -24,8 +24,9 @@ Development-сборка использует `StubDatabaseClient`, поэтом
 ```
 
 Скрипт восстанавливает backend-зависимости, проверяет формат и analyzers, собирает backend,
-запускает оба backend test project, устанавливает frontend-зависимости через `npm ci`, проверяет
-frontend tests и актуальность сгенерированного API client, затем выполняет production-сборку Angular.
+запускает оба backend test project, устанавливает frontend-зависимости через `npm ci`, выполняет
+dependency audit, проверяет frontend tests и актуальность сгенерированного API client, затем
+выполняет production-сборку Angular.
 Успешный признак — сообщение `Verification passed.` и exit code `0`.
 
 `npm ci` использует зафиксированный lockfile и не должен переписывать версии зависимостей.
