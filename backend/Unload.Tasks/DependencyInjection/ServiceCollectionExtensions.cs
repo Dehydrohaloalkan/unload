@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         // Хост может заранее зарегистрировать управляемое время; runtime по умолчанию использует системное.
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<DailyWindowPolicy>();
+        services.AddSingleton<PresetCompletionRecovery>();
         services.AddSingleton<RunActivationChannel>();
         services.AddSingleton<ExtraActivationChannel>();
 

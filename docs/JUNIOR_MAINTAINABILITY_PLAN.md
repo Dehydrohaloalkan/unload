@@ -114,6 +114,17 @@ Baseline пока не считается завершённым: остаютс
 Все файловые fixtures для `TaskExecutionHistoryStore` должны создаваться в отдельном scratch-каталоге;
 реальный `output/` в этих тестах не используется.
 
+`PresetCompletionRecovery`:
+
+- [x] выполненный сегодня `preset` восстанавливает открытое дневное окно после рестарта;
+- [x] вчерашний `preset` не восстанавливает окно;
+- [x] disabled gate игнорирует историю;
+- [x] повторное восстановление идемпотентно.
+
+Реализовано 2026-08-07: правило извлечено из бесконечного цикла `ProbeSchedulerHostedService`,
+использует общий `TimeProvider` и тестовый scratch-файл истории. Scheduler также использует
+`TimeProvider` вместо прямого `DateTime.Now` при проверке времени запуска probe.
+
 ## 4. Этап 1 — автоматическая страховочная сетка
 
 Приоритет: критический. Выполняется до архитектурного рефакторинга.
@@ -123,7 +134,7 @@ Baseline пока не считается завершённым: остаютс
 Создать один тестовый проект `tests/Unload.Backend.Tests` и покрыть:
 
 - [x] `DailyWindowPolicy`: время до окна, начало окна, конец дня, смена даты;
-- [ ] восстановление выполненного `preset` после рестарта;
+- [x] восстановление выполненного `preset` после рестарта;
 - [x] `TaskWorkflow`: зависимости задач;
 - [x] конфликты `preset`, `run`, `extra`;
 - [x] single-active для `run` и `extra`;
@@ -382,7 +393,7 @@ tests/
 
 - [x] Покрыть `TaskWorkflow`.
 - [x] Покрыть single-active и конкурентные запуски.
-- [ ] Добавить тесты restart recovery.
+- [x] Добавить тесты restart recovery.
 - [ ] Создать `START_HERE.md` и `GLOSSARY.md`.
 
 ### Итерация 3
@@ -412,7 +423,7 @@ tests/
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07 после characterization-тестов `TaskWorkflow`:
+Состояние на 2026-08-07 после characterization-тестов restart recovery:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
@@ -425,8 +436,10 @@ tests/
 - `TaskWorkflow` получает тот же `TimeProvider`; прямой `DateTime.Now` заменён без изменения правил.
 - Добавлены 16 test cases для validation, gate, dependencies, active run/extra, симметричных
   конфликтов, конкурентного запуска, освобождения foreground-слота, deferred и `AdminOverride`.
+- Добавлены 4 test cases `PresetCompletionRecovery`: today, yesterday, disabled и idempotency.
+- `ProbeSchedulerHostedService` использует общий `TimeProvider` для восстановления и расписания.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 31/31 относящихся к плану tests passed.
+- Штатный VSTest проходит: 35/35 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -434,12 +447,11 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Добавить characterization-тест восстановления выполненного `preset` после рестарта,
-> затем создать `docs/START_HERE.md` и `docs/GLOSSARY.md`.
+> Создать `docs/START_HERE.md` и `docs/GLOSSARY.md`, затем перейти к тестам
+> `RunStateProjector` и completion rules.
 
-Текущая логика восстановления находится в `ProbeSchedulerHostedService`: она проверяет
-`TaskExecutionHistoryStore.HasRunToday(...)` и восстанавливает `DailyWindowPolicy`. До изменения
-этой логики сначала зафиксировать сценарии «preset сегодня», «preset вчера» и disabled gate.
+Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
+обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
 
 Не перезаписывать изменения пользователя, которые уже находились или появились в рабочем дереве:
 
@@ -451,9 +463,11 @@ tests/
 Файлы текущей итерации:
 
 - `backend/Unload.Tasks/DailyWindowPolicy.cs`;
+- `backend/Unload.Tasks/PresetCompletionRecovery.cs`;
 - `backend/Unload.Tasks/TaskWorkflow.cs`;
 - `backend/Unload.Tasks/UnloadTask.cs`;
 - `backend/Unload.Tasks/DependencyInjection/ServiceCollectionExtensions.cs`;
+- `backend/Unload.Api/Services/ProbeSchedulerHostedService.cs`;
 - `tests/Unload.Backend.Tests/*`;
 - `README.md`;
 - `unload.slnx`;

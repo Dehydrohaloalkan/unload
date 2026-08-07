@@ -93,6 +93,7 @@ flowchart LR
 | `Unload.Store` / `RequeueService` | Повторно публикует выбранные существующие файлы в gateway | Повторная доставка не должна повторно выполнять SQL-выгрузку |
 | `Unload.Tasks` / `TaskWorkflow` | Проверяет окно, зависимости, конфликты и single-active, читая текущую локальную дату через `TimeProvider`, затем вызывает задачу | Одна точка бизнес-решения предотвращает разные правила в API, Console и scheduler; тесты даты не зависят от системных часов |
 | `Unload.Tasks` / `DailyWindowPolicy` | Хранит in-memory состояние текущего дня, читает локальное время через `TimeProvider` и отвечает, можно ли выполнять `preset`, `run`, `extra` | Временные правила не размазаны по UI и задачам, а границы дня воспроизводятся в тестах |
+| `Unload.Tasks` / `PresetCompletionRecovery` | Проверяет историю за текущую локальную дату и восстанавливает выполненный `preset` после рестарта | Правило today/yesterday/disabled проверяется отдельно от бесконечного цикла scheduler |
 | `Unload.Tasks` / activation channels | Держит один активный `run` и один активный `extra`, передаёт их фоновым workers и маршрутизирует отмену | HTTP не должен оставаться открытым на всё время долгой выгрузки |
 | `Unload.Tasks.MainUnload` | Преобразует выбор пользователя в `RunRequest` и выполняет многопоточную основную выгрузку | Сложная логика workers, big/light очередей и чанков изолирована от API |
 | `Unload.Tasks.ExtraUnload` | Выбирает обычные или atomic SQL-скрипты, фильтрует банки и создаёт extra-файлы | `Extra` имеет другую единицу выбора и другой формат агрегации, чем main run |
@@ -202,7 +203,7 @@ flowchart TD
 После запуска API scheduler:
 
 1. применяет `PresetGateOptions`;
-2. проверяет `TaskExecutionHistoryStore`: если `preset` уже успешно выполнен сегодня, восстанавливает `PresetCompleted`;
+2. вызывает `PresetCompletionRecovery`: если `preset` уже успешно выполнен сегодня, восстанавливает `PresetCompleted`;
 3. до настроенного `StartHour:StartMinute` ничего не запускает;
 4. после начала окна по `PollIntervalSeconds` вызывает `TaskWorkflow.LaunchAsync(probe)`;
 5. `ProbeTask` выполняет `ProbeSql`, берёт первое значение первой строки и трактует только `1` как готовность;
