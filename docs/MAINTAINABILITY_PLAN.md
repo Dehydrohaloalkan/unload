@@ -125,6 +125,30 @@ Baseline пока не считается завершённым: остаютс
 использует общий `TimeProvider` и тестовый scratch-файл истории. Scheduler также использует
 `TimeProvider` вместо прямого `DateTime.Now` при проверке времени запуска probe.
 
+`RunStateStore` перед разделением:
+
+- [x] `SetStarted` создаёт pending members и idle workers;
+- [x] runner events проецируют worker, member и artifact без дубликатов;
+- [x] `Completed`, `Failed`, `Cancelled` фиксируют terminal-состояние и сбрасывают workers;
+- [x] запрос отмены игнорирует промежуточный progress, но принимает terminal event;
+- [x] terminal state игнорирует поздние runner events и `SetRunning`;
+- [x] при `PublishToGateway = false` запуск завершается сразу и создаёт skipped batches;
+- [x] при включённом gateway runner completion ждёт полного sender feedback;
+- [x] `FileSent` без `BatchCompleted` и `BatchCompleted` без `FileSent` оставляют запуск активным;
+- [x] все artifacts всех members должны иметь завершённую доставку;
+- [x] failed sender batch переводит запуск в `Failed`;
+- [x] повторный `FileSent` идемпотентен;
+- [x] неизвестный correlation ID получает task code по текущему правилу префиксов;
+- [x] отсутствующий snapshot даёт пустое состояние;
+- [x] повреждённый snapshot не перезаписывается автоматически;
+- [x] `Running` и `CancellationRequested` после рестарта становятся `Cancelled`;
+- [x] terminal snapshots сохраняют бизнес-поля после JSON round-trip;
+- [x] persistence сохраняет version, task code и `PublishToGateway`.
+
+Реализовано 2026-08-07: добавлены 27 test cases через публичный API `RunStateStore`.
+Fixtures используют отдельный scratch-каталог; `output/` и `output/_state` не читаются и не очищаются.
+Вложенный `RunStateProjector` и completion rules пока не перемещались и не переписывались.
+
 ## 4. Этап 1 — автоматическая страховочная сетка
 
 Приоритет: критический. Выполняется до архитектурного рефакторинга.
@@ -141,12 +165,12 @@ Baseline пока не считается завершённым: остаютс
 - [x] `AdminOverride`;
 - [x] конкурентные попытки запуска;
 - [ ] отмену deferred-задач;
-- [ ] `RunStateProjector`: все terminal-переходы;
-- [ ] завершение после sender-feedback;
-- [ ] `PublishToGateway = false`;
-- [ ] failed и неполный sender-feedback;
-- [ ] восстановление state после рестарта;
-- [ ] повреждённый или отсутствующий JSON snapshot;
+- [x] `RunStateProjector`: все terminal-переходы;
+- [x] завершение после sender-feedback;
+- [x] `PublishToGateway = false`;
+- [x] failed и неполный sender-feedback;
+- [x] восстановление state после рестарта;
+- [x] повреждённый или отсутствующий JSON snapshot;
 - [ ] правила формирования имён и output-путей;
 - [ ] catalog/script resolution.
 
@@ -398,7 +422,7 @@ tests/
 
 ### Итерация 3
 
-- [ ] Покрыть `RunStateProjector` и completion rules.
+- [x] Покрыть `RunStateProjector` и completion rules.
 - [ ] Вынести projector и completion policy без изменения поведения.
 - [ ] Проверить gateway success/failure live-сценариями.
 
@@ -423,7 +447,7 @@ tests/
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07 после characterization-тестов restart recovery:
+Состояние на 2026-08-07 перед разделением `RunStateStore`:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
@@ -438,8 +462,10 @@ tests/
   конфликтов, конкурентного запуска, освобождения foreground-слота, deferred и `AdminOverride`.
 - Добавлены 4 test cases `PresetCompletionRecovery`: today, yesterday, disabled и idempotency.
 - `ProbeSchedulerHostedService` использует общий `TimeProvider` для восстановления и расписания.
+- Добавлены 27 test cases `RunStateStore`: runner projection, terminal transitions, gateway
+  completion, sender feedback и persistence/restart recovery.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 35/35 относящихся к плану tests passed.
+- Штатный VSTest проходит: 62/62 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -447,7 +473,10 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Перейти к characterization-тестам `RunStateProjector` и completion rules.
+> Обсудить и начать механическое выделение `RunStateProjector` и чистого
+> `RunCompletionPolicy` без изменения защищённого тестами поведения.
+
+Граница достигнута: до отдельного подтверждения не начинать перенос классов из `RunStateStore`.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
