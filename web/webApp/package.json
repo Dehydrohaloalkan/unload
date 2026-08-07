@@ -50,7 +50,7 @@
     "ng-openapi-gen": "1.0.5",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.10"
   }
 }
