@@ -96,20 +96,20 @@ Baseline пока не считается завершённым: остаютс
 
 `TaskWorkflow`:
 
-- [ ] неизвестный task code возвращает `VALIDATION_ERROR` и не вызывает задачу;
-- [ ] закрытое дневное окно возвращает `PRESET_GATE_BLOCKED` для main/extra;
-- [ ] закрытое preset-окно возвращает `PRESET_GATE_BLOCKED` с причиной policy;
-- [ ] отсутствующие `RequiresCompleted` возвращаются в `requiredTaskCodes`;
-- [ ] зависимости считаются только за текущую локальную дату;
-- [ ] активный main run блокирует второй run и задачи, конфликтующие с run;
-- [ ] активный extra блокирует второй extra и задачи, конфликтующие с extra;
-- [ ] foreground-конфликт проверяется симметрично по обеим декларациям `ConflictsWith`;
-- [ ] из двух конкурентных foreground-запусков конфликтующих задач проходит только один;
-- [ ] foreground-слот освобождается после success, exception и cancellation;
-- [ ] deferred-задача не удерживает foreground-слот после `ExecuteAsync` и полагается на activation channel;
-- [ ] `AdminOverride` обходит gate/dependency/conflict проверки, сохраняя фактическое выполнение задачи;
-- [ ] task code и конфликтные коды сравниваются без учёта регистра;
-- [ ] исходные request, cancellation token и execution result передаются без подмены.
+- [x] неизвестный task code возвращает `VALIDATION_ERROR` и не вызывает задачу;
+- [x] закрытое дневное окно возвращает `PRESET_GATE_BLOCKED` для main/extra;
+- [x] закрытое preset-окно возвращает `PRESET_GATE_BLOCKED` с причиной policy;
+- [x] отсутствующие `RequiresCompleted` возвращаются в `requiredTaskCodes`;
+- [x] зависимости считаются только за текущую локальную дату;
+- [x] активный main run блокирует второй run и задачи, конфликтующие с run;
+- [x] активный extra блокирует второй extra и задачи, конфликтующие с extra;
+- [x] foreground-конфликт проверяется симметрично по обеим декларациям `ConflictsWith`;
+- [x] из двух конкурентных foreground-запусков конфликтующих задач проходит только один;
+- [x] foreground-слот освобождается после success, exception и cancellation;
+- [x] deferred-задача не удерживает foreground-слот после `ExecuteAsync` и полагается на activation channel;
+- [x] `AdminOverride` обходит gate/dependency/conflict проверки, сохраняя фактическое выполнение задачи;
+- [x] task code и конфликтные коды сравниваются без учёта регистра;
+- [x] исходные request, cancellation token и execution result передаются без подмены.
 
 Все файловые fixtures для `TaskExecutionHistoryStore` должны создаваться в отдельном scratch-каталоге;
 реальный `output/` в этих тестах не используется.
@@ -124,11 +124,11 @@ Baseline пока не считается завершённым: остаютс
 
 - [x] `DailyWindowPolicy`: время до окна, начало окна, конец дня, смена даты;
 - [ ] восстановление выполненного `preset` после рестарта;
-- [ ] `TaskWorkflow`: зависимости задач;
-- [ ] конфликты `preset`, `run`, `extra`;
-- [ ] single-active для `run` и `extra`;
-- [ ] `AdminOverride`;
-- [ ] конкурентные попытки запуска;
+- [x] `TaskWorkflow`: зависимости задач;
+- [x] конфликты `preset`, `run`, `extra`;
+- [x] single-active для `run` и `extra`;
+- [x] `AdminOverride`;
+- [x] конкурентные попытки запуска;
 - [ ] отмену deferred-задач;
 - [ ] `RunStateProjector`: все terminal-переходы;
 - [ ] завершение после sender-feedback;
@@ -172,7 +172,7 @@ Baseline пока не считается завершённым: остаютс
 
 Приоритет: высокий.
 
-- [ ] Исправить описание deferred-поведения `extra` в `README.md` и `docs/ARCHITECTURE.md`.
+- [x] Исправить описание deferred-поведения `extra` в `README.md` и `docs/ARCHITECTURE.md`.
 - [ ] Создать `docs/START_HERE.md` с первым запуском и точками входа.
 - [ ] Создать `docs/GLOSSARY.md` с терминами `run`, `main unload`, `runner`, `workflow`, `activation`, `preset gate`.
 - [ ] Создать `docs/TROUBLESHOOTING.md`.
@@ -373,15 +373,15 @@ tests/
 ### Итерация 1
 
 - [ ] Проверить build и live-сценарии.
-- [ ] Исправить документацию про deferred `extra`.
+- [x] Исправить документацию про deferred `extra`.
 - [x] Создать test project.
 - [x] Покрыть `DailyWindowPolicy`.
 - [x] Внедрить `TimeProvider` только в `DailyWindowPolicy` и связанные тесты.
 
 ### Итерация 2
 
-- [ ] Покрыть `TaskWorkflow`.
-- [ ] Покрыть single-active и конкурентные запуски.
+- [x] Покрыть `TaskWorkflow`.
+- [x] Покрыть single-active и конкурентные запуски.
 - [ ] Добавить тесты restart recovery.
 - [ ] Создать `START_HERE.md` и `GLOSSARY.md`.
 
@@ -412,18 +412,21 @@ tests/
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07, перед перезапуском Codex:
+Состояние на 2026-08-07 после characterization-тестов `TaskWorkflow`:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
 восстанавливать контекст нужно отсюда.
 
-- Базовый HEAD перед фиксацией итерации: `eedd1b1` (`master`).
+- Первая тестовая итерация зафиксирована коммитом `a48ac04` (`test: cover daily window policy`).
 - Создан `tests/Unload.Backend.Tests` и подключён к `unload.slnx`.
 - `DailyWindowPolicy` получает `TimeProvider`; DI по умолчанию регистрирует `TimeProvider.System`.
 - Добавлены 15 test cases для `DailyWindowPolicy` и `ManualTimeProvider`.
+- `TaskWorkflow` получает тот же `TimeProvider`; прямой `DateTime.Now` заменён без изменения правил.
+- Добавлены 16 test cases для validation, gate, dependencies, active run/extra, симметричных
+  конфликтов, конкурентного запуска, освобождения foreground-слота, deferred и `AdminOverride`.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 15/15 относящихся к итерации tests passed.
+- Штатный VSTest проходит: 31/31 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -431,12 +434,12 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Начать тесты `TaskWorkflow`: неизвестная задача, gate, зависимости, active run/extra,
-> симметричные конфликты, конкурентный запуск и освобождение foreground-слота.
+> Добавить characterization-тест восстановления выполненного `preset` после рестарта,
+> затем создать `docs/START_HERE.md` и `docs/GLOSSARY.md`.
 
-Для детерминированной проверки зависимостей «выполнено сегодня» сначала передать уже
-зарегистрированный `TimeProvider` в `TaskWorkflow` и заменить только его прямой `DateTime.Now`,
-не меняя бизнес-правила.
+Текущая логика восстановления находится в `ProbeSchedulerHostedService`: она проверяет
+`TaskExecutionHistoryStore.HasRunToday(...)` и восстанавливает `DailyWindowPolicy`. До изменения
+этой логики сначала зафиксировать сценарии «preset сегодня», «preset вчера» и disabled gate.
 
 Не перезаписывать изменения пользователя, которые уже находились или появились в рабочем дереве:
 
@@ -448,16 +451,19 @@ tests/
 Файлы текущей итерации:
 
 - `backend/Unload.Tasks/DailyWindowPolicy.cs`;
+- `backend/Unload.Tasks/TaskWorkflow.cs`;
+- `backend/Unload.Tasks/UnloadTask.cs`;
 - `backend/Unload.Tasks/DependencyInjection/ServiceCollectionExtensions.cs`;
 - `tests/Unload.Backend.Tests/*`;
+- `README.md`;
 - `unload.slnx`;
-- дополнения в `docs/JUNIOR_MAINTAINABILITY_PLAN.md` про тесты и время.
+- дополнения в `docs/JUNIOR_MAINTAINABILITY_PLAN.md` и `docs/ARCHITECTURE.md` про тесты и время.
 
 Перед началом изменений проверить:
 
 ```bash
 git status --short
-./.tools/bin/graphify query "Какие ветки TaskWorkflow нужно покрыть тестами и как он связан с DailyWindowPolicy, TaskExecutionHistoryStore, RunActivationChannel и ExtraActivationChannel?"
+./.tools/bin/graphify query "Как после рестарта восстанавливается выполненный preset и какие классы и методы нужно покрыть characterization-тестом?"
 ```
 
 После добавления тестов выполнить:

@@ -322,7 +322,7 @@ CLI-клиент к API через HTTP + SignalR.
 1. Добавить новый код задачи в `backend/Unload.Tasks/TaskCodes.cs`.
 2. Создать новый класс-наследник `UnloadTask` (в существующем или новом проекте задачи).
 3. Объявить `RequiresCompleted`, `ConflictsWith`, `RequiresDailyWindowOpen` на классе.
-4. Реализовать `ExecuteAsync` — либо синхронно (как preset/extra), либо deferred (как run).
+4. Реализовать `ExecuteAsync` — либо синхронно (как preset/probe), либо deferred (как run/extra).
 5. Зарегистрировать задачу как `UnloadTask` в DI (добавить в `AddUnload*` метод проекта задачи).
 6. Если задача deferred — добавить фоновый воркер в `Unload.Api`.
 7. Добавить transport-вход: API endpoint и/или Console/WebConsole режим.

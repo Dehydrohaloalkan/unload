@@ -17,6 +17,7 @@ public class TaskWorkflow
     private readonly RunActivationChannel _runWorkflow;
     private readonly ExtraActivationChannel _extraWorkflow;
     private readonly ILogger<TaskWorkflow> _logger;
+    private readonly TimeProvider _timeProvider;
 
     // Потокобезопасный набор активных foreground-задач (preset).
     private readonly object _sync = new();
@@ -28,7 +29,8 @@ public class TaskWorkflow
         TaskExecutionHistoryStore historyStore,
         RunActivationChannel runWorkflow,
         ExtraActivationChannel extraWorkflow,
-        ILogger<TaskWorkflow> logger)
+        ILogger<TaskWorkflow> logger,
+        TimeProvider timeProvider)
     {
         _tasks = tasks.ToDictionary(static t => t.Code, StringComparer.OrdinalIgnoreCase);
         _window = window;
@@ -36,6 +38,7 @@ public class TaskWorkflow
         _runWorkflow = runWorkflow;
         _extraWorkflow = extraWorkflow;
         _logger = logger;
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     /// <summary>
@@ -89,7 +92,7 @@ public class TaskWorkflow
 
     private void EnsureCanLaunch(UnloadTask task)
     {
-        var now = DateTime.Now;
+        var now = _timeProvider.GetLocalNow().DateTime;
 
         // Дневное окно.
         if (task.RequiresDailyWindowOpen && !_window.IsOpen(now))

@@ -33,14 +33,14 @@ public abstract class UnloadTask
 
     /// <summary>
     /// Задача deferred: <see cref="ExecuteAsync"/> только стартует фоновую обработку и сразу
-    /// возвращает Accepted (main-выгрузка). Синхронные задачи (preset/extra/probe) — <c>false</c>.
+    /// возвращает Accepted (main- и extra-выгрузка). Синхронные задачи (preset/probe) — <c>false</c>.
     /// Воркфлоу по этому признаку решает, занимать ли foreground-слот.
     /// </summary>
     public virtual bool IsDeferred => false;
 
     /// <summary>
-    /// Выполняет задачу. Для синхронных задач (preset/extra/probe) завершается полностью;
-    /// для deferred (main-выгрузка) стартует фоновую обработку и сразу возвращает Accepted.
+    /// Выполняет задачу. Для синхронных задач (preset/probe) завершается полностью;
+    /// для deferred (main- и extra-выгрузка) стартует фоновую обработку и сразу возвращает Accepted.
     /// </summary>
     public abstract Task<TaskExecutionResult> ExecuteAsync(
         TaskLaunchRequest request,
