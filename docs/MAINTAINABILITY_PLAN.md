@@ -250,7 +250,7 @@ RunCompletionPolicy        — чистое правило terminal-перехо
 
 - [x] Перенести nested `RunStateProjector` в отдельный файл без изменения поведения.
 - [x] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
-- [ ] Выделить gateway feedback projection.
+- [x] Выделить gateway feedback projection.
 - [ ] Выделить member, artifact и worker projection только если итоговые классы остаются простыми.
 - [ ] Оставить один публичный способ изменения state.
 - [ ] Убрать распознавание task type по префиксу correlation ID или изолировать его в одном месте.
@@ -466,8 +466,10 @@ tests/
   completion, sender feedback и persistence/restart recovery.
 - `RunStateProjector` механически перенесён из nested-класса в отдельный internal-файл.
 - Чистый `RunCompletionPolicy` выделен отдельно и покрыт таблицей из 10 test cases.
+- `GatewayFeedbackProjector` выделен отдельно и покрыт 7 test cases для mapping, путей,
+  дедупликации, terminal feedback и неизменности исходной карты.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 72/72 относящихся к плану tests passed.
+- Штатный VSTest проходит: 79/79 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -475,7 +477,8 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Следующим отдельным шагом выделить gateway feedback projection, не смешивая его с persistence.
+> Оценить оставшиеся member/artifact/worker projections: выносить только те части, которые
+> образуют простые самостоятельные правила; persistence оставить отдельным следующим этапом.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

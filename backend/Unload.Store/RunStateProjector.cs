@@ -93,7 +93,7 @@ internal sealed class RunStateProjector
             MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
             WorkerStatuses: CreateInitialWorkerStatuses(now),
-            SenderBatches: ApplySenderFeedbackCore(
+            SenderBatches: GatewayFeedbackProjector.Apply(
                 source: null,
                 feedback,
                 now));
@@ -104,7 +104,7 @@ internal sealed class RunStateProjector
         var updated = current with
         {
             UpdatedAt = now,
-            SenderBatches = ApplySenderFeedbackCore(current.SenderBatches, feedback, now)
+            SenderBatches = GatewayFeedbackProjector.Apply(current.SenderBatches, feedback, now)
         };
         return RunCompletionPolicy.Apply(updated, now);
     }
@@ -199,23 +199,6 @@ internal sealed class RunStateProjector
     private static bool IsTerminalStatus(RunLifecycleStatus status)
     {
         return status is RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled;
-    }
-
-    private static string NormalizePathSafe(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            return Path.GetFullPath(path.Trim());
-        }
-        catch
-        {
-            return path.Trim();
-        }
     }
 
     private static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyMemberEvent(
@@ -371,48 +354,6 @@ internal sealed class RunStateProjector
                 MemberName = null,
                 UpdatedAt = now
             });
-    }
-
-    private static IReadOnlyDictionary<string, SenderBatchStatusInfo> ApplySenderFeedbackCore(
-        IReadOnlyDictionary<string, SenderBatchStatusInfo>? source,
-        SenderFileDispatchFeedback feedback,
-        DateTimeOffset now)
-    {
-        var map = source is null
-            ? new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, SenderBatchStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
-
-        map.TryGetValue(feedback.BatchId, out var currentBatch);
-        var sentFiles = currentBatch?.SentFiles?.ToList() ?? [];
-
-        if (feedback.Kind == SenderFeedbackKind.FileSent && !string.IsNullOrWhiteSpace(feedback.FilePath))
-        {
-            var normalizedPath = NormalizePathSafe(feedback.FilePath);
-            if (sentFiles.All(x => !string.Equals(x.FilePath, normalizedPath, StringComparison.OrdinalIgnoreCase)))
-            {
-                sentFiles.Add(new SenderFileDispatchStateInfo(normalizedPath, feedback.OccurredAt));
-            }
-        }
-
-        var status = feedback.Kind switch
-        {
-            SenderFeedbackKind.FileSent => SenderBatchStatus.InProgress,
-            SenderFeedbackKind.BatchCompleted => SenderBatchStatus.Completed,
-            SenderFeedbackKind.BatchFailed => SenderBatchStatus.Failed,
-            _ => SenderBatchStatus.InProgress
-        };
-
-        map[feedback.BatchId] = new SenderBatchStatusInfo(
-            BatchId: feedback.BatchId,
-            MemberName: feedback.MemberName,
-            Status: status,
-            UpdatedAt: now,
-            SentFiles: sentFiles
-                .OrderBy(static x => x.FilePath, StringComparer.OrdinalIgnoreCase)
-                .ToArray(),
-            Message: feedback.Message);
-
-        return map;
     }
 
     private static int? TryExtractWorkerId(string? message)

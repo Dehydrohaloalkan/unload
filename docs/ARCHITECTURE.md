@@ -92,7 +92,8 @@ flowchart LR
 | `Unload.FileWriter` / `PipeSeparatedFileChunkWriter` | Записывает чанки, заголовки и строки с разделителем `|`; синхронизирует запись в один файл | Движок отвечает за процесс, writer — только за корректный формат и конкурентную запись |
 | `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
 | `Unload.Store` / `RunStateStore` | Координирует конкурентные обновления, persistence и публичный доступ к состоянию `run`/`extra` | Это серверный источник истины и небольшой фасад над правилами проекции |
-| `Unload.Store` / `RunStateProjector` | Применяет runner events и sender feedback к immutable `RunStatusInfo` | Правила изменения members, workers, artifacts и batches читаются отдельно от хранения |
+| `Unload.Store` / `RunStateProjector` | Применяет runner events к immutable `RunStatusInfo` и координирует специализированные projections | Правила изменения members, workers и artifacts читаются отдельно от хранения |
+| `Unload.Store` / `GatewayFeedbackProjector` | Проецирует `FileSent`, `BatchCompleted` и `BatchFailed` в карту sender batches | Нормализация путей, дедупликация и статусы доставки изолированы от runner events |
 | `Unload.Store` / `RunCompletionPolicy` | Чисто вычисляет terminal status после runner completion и gateway feedback | Условия `Completed`/`Failed` и режим без gateway покрываются отдельной таблицей тестов |
 | `Unload.Store` / `TaskExecutionHistoryStore` | Хранит завершённые `probe`, `preset`, `run`, `extra` | Нужен для зависимостей «выполнено сегодня», dashboard и восстановления `preset` после рестарта |
 | `Unload.Store` / `JsonFileStore<T>` | Загружает и сохраняет JSON через временный файл и `File.Move` | Одинаковая атомарная персистентность используется обоими хранилищами |
@@ -603,6 +604,6 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 - Activation channels не persisted, поэтому активная работа после рестарта отменяется, а не продолжается.
 - Ошибка записи JSON логируется, но не прерывает run; состояние на диске может отстать от памяти.
 - SignalR events транслируются всем клиентам; авторизация и изоляция клиентов в текущем контракте не описаны.
-- `RunStateStore` всё ещё совмещает конкурентные mutations, persistence и recovery; runner projection и completion policy уже вынесены и защищены characterization-тестами.
+- `RunStateStore` всё ещё совмещает конкурентные mutations, persistence и recovery; runner projection, gateway feedback projection и completion policy уже вынесены и защищены characterization-тестами.
 
 Эти пункты описывают текущие технические свойства, а не обещание будущего рефакторинга.
