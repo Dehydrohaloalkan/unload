@@ -12,6 +12,7 @@ public class RunStateStore
 {
     private const string TaskCodeRun = "run";
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _mutationWriterSync = new();
     private readonly RunStatePersistence _persistence;
     private readonly RunStateProjector _projector;
 
@@ -50,8 +51,7 @@ public class RunStateStore
             taskCode,
             now);
 
-        _runs[correlationId] = snapshot;
-        PersistSnapshot();
+        ApplyPersistedMutation(() => _runs[correlationId] = snapshot);
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public class RunStateStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             correlationId,
             addFactory: () => _projector.CreateStarted(
                 correlationId,
@@ -71,8 +71,7 @@ public class RunStateStore
                 publishToGateway: true,
                 taskCode: TaskCodeRun,
                 now),
-            updateFactory: current => _projector.UpdateForRunning(current, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.UpdateForRunning(current, now)));
     }
 
     /// <summary>
@@ -85,11 +84,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(@event.CorrelationId);
 
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             @event.CorrelationId,
             addFactory: () => _projector.CreateFromEvent(@event, now),
-            updateFactory: current => _projector.ApplyRunnerEvent(current, @event, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.ApplyRunnerEvent(current, @event, now)));
     }
 
     public void ApplySenderFeedback(SenderFileDispatchFeedback feedback)
@@ -99,11 +97,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(feedback.BatchId);
 
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             feedback.CorrelationId,
             addFactory: () => _projector.CreateFromSenderFeedback(feedback, now),
-            updateFactory: current => _projector.ApplySenderFeedback(current, feedback, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.ApplySenderFeedback(current, feedback, now)));
     }
 
     /// <summary>
@@ -116,11 +113,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             correlationId,
             addFactory: null,
-            updateFactory: current => _projector.UpdateToFailed(current, message, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.UpdateToFailed(current, message, now)));
     }
 
     /// <summary>
@@ -133,11 +129,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             correlationId,
             addFactory: null,
-            updateFactory: current => _projector.UpdateToCancellationRequested(current, message, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.UpdateToCancellationRequested(current, message, now)));
     }
 
     /// <summary>
@@ -150,11 +145,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        MutateRun(
+        ApplyPersistedMutation(() => MutateRun(
             correlationId,
             addFactory: null,
-            updateFactory: current => _projector.UpdateToCancelled(current, message, now));
-        PersistSnapshot();
+            updateFactory: current => _projector.UpdateToCancelled(current, message, now)));
     }
 
     /// <summary>
@@ -180,33 +174,47 @@ public class RunStateStore
 
     public int PruneTerminalRuns(DateOnly oldestDayToKeepInclusive)
     {
-        var removed = 0;
-        foreach (var pair in _runs.ToArray())
+        lock (_mutationWriterSync)
         {
-            var run = pair.Value;
-            if (run.Status is not (RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled))
+            _persistence.EnsureWritable();
+            var removed = 0;
+            foreach (var pair in _runs.ToArray())
             {
-                continue;
+                var run = pair.Value;
+                if (run.Status is not (RunLifecycleStatus.Completed or RunLifecycleStatus.Failed or RunLifecycleStatus.Cancelled))
+                {
+                    continue;
+                }
+
+                var runDay = DateOnly.FromDateTime(run.CreatedAt.LocalDateTime);
+                if (runDay >= oldestDayToKeepInclusive)
+                {
+                    continue;
+                }
+
+                if (_runs.TryRemove(pair.Key, out _))
+                {
+                    removed++;
+                }
             }
 
-            var runDay = DateOnly.FromDateTime(run.CreatedAt.LocalDateTime);
-            if (runDay >= oldestDayToKeepInclusive)
+            if (removed > 0)
             {
-                continue;
+                PersistSnapshot();
             }
 
-            if (_runs.TryRemove(pair.Key, out _))
-            {
-                removed++;
-            }
+            return removed;
         }
+    }
 
-        if (removed > 0)
+    private void ApplyPersistedMutation(Action mutation)
+    {
+        lock (_mutationWriterSync)
         {
+            _persistence.EnsureWritable();
+            mutation();
             PersistSnapshot();
         }
-
-        return removed;
     }
 
     private RunStatusInfo MutateRun(

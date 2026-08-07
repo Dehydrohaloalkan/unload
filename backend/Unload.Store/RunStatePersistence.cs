@@ -24,6 +24,11 @@ internal sealed class RunStatePersistence
         return _store.Load();
     }
 
+    public void EnsureWritable()
+    {
+        _store.EnsureWritable();
+    }
+
     public void Save(Func<IReadOnlyCollection<RunStatusInfo>> captureRuns)
     {
         ArgumentNullException.ThrowIfNull(captureRuns);

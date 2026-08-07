@@ -45,6 +45,7 @@ public class TaskExecutionHistoryStore
             outputPath);
         lock (_sync)
         {
+            _store.EnsureWritable();
             _records.Add(record);
             PersistLocked();
         }
@@ -116,6 +117,7 @@ public class TaskExecutionHistoryStore
     {
         lock (_sync)
         {
+            _store.EnsureWritable();
             var beforeCount = _records.Count;
             _records.RemoveAll(record => DateOnly.FromDateTime(record.CompletedAt.LocalDateTime) < oldestDayToKeepInclusive);
             var removed = beforeCount - _records.Count;

@@ -16,6 +16,7 @@ public sealed class JsonFileStore<T>
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly ILogger? _logger;
     private readonly object _sync = new();
+    private Exception? _writeFailure;
 
     public JsonFileStore(string filePath, JsonSerializerOptions jsonOptions, ILogger? logger = null)
     {
@@ -54,9 +55,10 @@ public sealed class JsonFileStore<T>
     public void Save(T value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        try
+        lock (_sync)
         {
-            lock (_sync)
+            ThrowIfWriteUnavailable();
+            try
             {
                 var directory = Path.GetDirectoryName(_filePath);
                 if (!string.IsNullOrWhiteSpace(directory))
@@ -69,11 +71,28 @@ public sealed class JsonFileStore<T>
                 File.WriteAllText(tempPath, json);
                 File.Move(tempPath, _filePath, overwrite: true);
             }
+            catch (Exception ex)
+            {
+                _writeFailure = ex;
+                _logger?.LogError(ex, "Failed to save store to '{FilePath}'.", _filePath);
+                throw;
+            }
         }
-        catch (Exception ex)
+    }
+
+    public void EnsureWritable()
+    {
+        lock (_sync)
         {
-            _logger?.LogError(ex, "Failed to save store to '{FilePath}'.", _filePath);
-            throw;
+            ThrowIfWriteUnavailable();
+        }
+    }
+
+    private void ThrowIfWriteUnavailable()
+    {
+        if (_writeFailure is not null)
+        {
+            throw new PersistenceUnavailableException(_filePath, _writeFailure);
         }
     }
 }

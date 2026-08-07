@@ -266,10 +266,10 @@ RunTaskCodeResolver        — fallback task code для неизвестног�
 
 Приоритет: высокий.
 
-- [x] Сериализовать snapshot capture и сохранения через один writer.
+- [x] Сериализовать RunState mutation, snapshot capture и save через одну writer-границу.
 - [x] Гарантировать порядок сохранения snapshots.
 - [x] Не скрывать ошибку записи от приложения.
-- [ ] Определить rollback или degraded-health поведение после failed save уже применённой mutation.
+- [x] Сохранить первую failed-save mutation в памяти и блокировать следующие mutations в degraded mode.
 - [ ] Добавить backup последнего корректного snapshot.
 - [ ] Повреждённый файл перемещать в quarantine с диагностикой.
 - [ ] Не перезаписывать повреждённый state пустым snapshot автоматически.
@@ -489,8 +489,11 @@ tests/
   ждёт завершения первого и последним на диске остаётся более новый snapshot.
 - `JsonFileStore.Save` после обязательного `Error` log повторно выбрасывает исходное исключение.
   Прямой test case проверяет одновременно log level, путь, экземпляр исключения и rethrow.
+- После первого failed save `JsonFileStore` сохраняет первопричину и отклоняет следующие записи
+  через `PersistenceUnavailableException`. Два store-level test cases подтверждают, что run-state
+  и task history сохраняют первую mutation в памяти, остаются читаемыми и не применяют следующую.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 101/101 относящихся к плану tests passed.
+- Штатный VSTest проходит: 103/103 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -498,8 +501,8 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Зафиксировать store-level тестом состояние памяти после failed save и выбрать явную стратегию:
-> transactional rollback либо degraded persistence health без потери актуального in-memory state.
+> Добавить read-only persistence health для run-state и task history, затем вывести его в общий
+> health check API без раскрытия stack trace или внутренних путей клиенту.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

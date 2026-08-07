@@ -25,6 +25,12 @@ public class JsonFileStoreTests
             Assert.Equal(LogLevel.Error, entry.Level);
             Assert.Same(exception, entry.Exception);
             Assert.Contains(stateFilePath, entry.Message);
+
+            var unavailable = Assert.Throws<PersistenceUnavailableException>(store.EnsureWritable);
+            Assert.Equal(stateFilePath, unavailable.FilePath);
+            Assert.Same(exception, unavailable.InnerException);
+            Assert.Throws<PersistenceUnavailableException>(() => store.Save(new TestSnapshot("second")));
+            Assert.Single(logger.Entries);
         }
         finally
         {
