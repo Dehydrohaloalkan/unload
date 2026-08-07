@@ -1,0 +1,102 @@
+using Unload.ProjectSync;
+
+namespace Unload.ProjectSync.Tests;
+
+public sealed class SyncPlannerTests
+{
+    [Fact]
+    public void CreatePlan_TransformsPathAndTextBeforeComparing()
+    {
+        using var workspace = new TemporaryWorkspace();
+        workspace.WriteSource("backend/Unload.Api/Program.cs", "namespace Unload.Api;\n");
+        workspace.WriteTarget("backend/IIU.Api/Program.cs", "namespace IIU.Api;\n");
+
+        var plan = workspace.CreatePlan(CreateConfiguration());
+
+        Assert.Empty(plan.Items);
+        Assert.Equal(1, plan.SameCount);
+    }
+
+    [Fact]
+    public void CreatePlan_DoesNotOfferProtectedOrTargetOnlyFilesForApply()
+    {
+        using var workspace = new TemporaryWorkspace();
+        workspace.WriteSource("backend/Unload.Api/Program.cs", "namespace Unload.Api;\n");
+        workspace.WriteSource("backend/Unload.Api/appsettings.Production.json", "{ \"source\": true }");
+        workspace.WriteSource("backend/Unload.Api/bin/ignored.dll", "not a real dll");
+        workspace.WriteTarget("backend/IIU.Api/Program.cs", "namespace IIU.Api; // old\n");
+        workspace.WriteTarget("backend/IIU.Api/appsettings.Production.json", "{ \"target\": true }");
+        workspace.WriteTarget("backend/IIU.Api/ProductionOnly.cs", "// keep me\n");
+
+        var plan = workspace.CreatePlan(CreateConfiguration());
+
+        Assert.Collection(
+            plan.ApplicableItems,
+            item =>
+            {
+                Assert.Equal(SyncAction.Update, item.Action);
+                Assert.Equal("backend/IIU.Api/Program.cs", item.TargetRelativePath);
+            });
+        Assert.Contains(plan.Items, static item =>
+            item.Action == SyncAction.Protected &&
+            item.TargetRelativePath == "backend/IIU.Api/appsettings.Production.json");
+        Assert.Contains(plan.Items, static item =>
+            item.Action == SyncAction.TargetOnly &&
+            item.TargetRelativePath == "backend/IIU.Api/ProductionOnly.cs");
+        Assert.DoesNotContain(plan.Items, static item => item.TargetRelativePath.Contains("bin", StringComparison.Ordinal));
+    }
+
+    private static SyncConfiguration CreateConfiguration() => new()
+    {
+        Renames = [new RenameRule("Unload.", "IIU.")],
+        Protected = ["**/appsettings.Production.json"],
+        TransformTextIn = ["**/*.cs", "**/*.json"]
+    };
+}
+
+internal sealed class TemporaryWorkspace : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), $"unload-project-sync-tests-{Guid.NewGuid():N}");
+
+    public TemporaryWorkspace()
+    {
+        SourceRoot = Path.Combine(_root, "source");
+        TargetRoot = Path.Combine(_root, "target");
+        Directory.CreateDirectory(SourceRoot);
+        Directory.CreateDirectory(TargetRoot);
+    }
+
+    public string SourceRoot { get; }
+
+    public string TargetRoot { get; }
+
+    public void WriteSource(string relativePath, string content) => Write(SourceRoot, relativePath, content);
+
+    public void WriteTarget(string relativePath, string content) => Write(TargetRoot, relativePath, content);
+
+    public string ReadTarget(string relativePath) => File.ReadAllText(Resolve(TargetRoot, relativePath));
+
+    public bool TargetExists(string relativePath) => File.Exists(Resolve(TargetRoot, relativePath));
+
+    public SyncPlan CreatePlan(SyncConfiguration configuration) =>
+        new SyncPlanner(new GlobMatcher(), new TextFileTransformer())
+            .CreatePlan(SourceRoot, TargetRoot, configuration);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private static void Write(string root, string relativePath, string content)
+    {
+        var path = Resolve(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
+
+    private static string Resolve(string root, string relativePath) =>
+        Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+}

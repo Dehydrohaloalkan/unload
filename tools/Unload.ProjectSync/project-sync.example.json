@@ -1,0 +1,41 @@
+{
+  "renames": [
+    {
+      "from": "Unload.",
+      "to": "IIU."
+    },
+    {
+      "from": "unload.slnx",
+      "to": "iiu.slnx"
+    }
+  ],
+  "ignore": [
+    ".vs/**",
+    ".agents/**",
+    ".claude/**",
+    "tools/Unload.ProjectSync/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "**/*.user",
+    "**/*.suo",
+    "**/*.log",
+    "**/*.tmp"
+  ],
+  "protected": [
+    "**/appsettings.Production.json",
+    "backend/IIU.DataBase/Services/ProductionDatabaseClient.cs",
+    "backend/IIU.Cryptography/Services/ProductionPasswordStore.cs"
+  ],
+  "transformTextIn": [
+    "**/*.cs",
+    "**/*.csproj",
+    "**/*.sln",
+    "**/*.slnx",
+    "**/*.json",
+    "**/*.ts",
+    "**/*.html",
+    "**/*.css",
+    "**/*.md"
+  ],
+  "backupDirectoryName": "_sync-backups"
+}
