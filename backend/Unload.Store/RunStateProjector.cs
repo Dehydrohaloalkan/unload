@@ -20,12 +20,12 @@ internal sealed class RunStateProjector
     public RunStatusInfo CreateStarted(
         string correlationId,
         IReadOnlyCollection<string> targetCodes,
-        IReadOnlyCollection<string> memberNames,
+        IReadOnlyCollection<string> memberOrScriptNames,
         bool publishToGateway,
         string taskCode,
         DateTimeOffset now)
     {
-        var memberStatuses = memberNames
+        var memberStatuses = memberOrScriptNames
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 static memberName => memberName,

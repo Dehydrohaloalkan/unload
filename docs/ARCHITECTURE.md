@@ -111,6 +111,12 @@ flowchart LR
 | `Unload.Bootstrapper` / `AddUnloadRuntime` | Загружает конфигурацию, вычисляет пути и регистрирует runtime в DI | API и Console получают одинаковый набор сервисов |
 | `Unload.Api` | HTTP, SignalR, обработка ошибок, hosted services | Транспорт отделён от бизнес-правил и движков |
 
+Правило терминологии: `execution` означает один запуск задачи любого типа; `main run` — только
+задачу с `TaskCode = run`; `extra` — задачу с `TaskCode = extra`. Имена `RunStateStore`,
+`RunStatusInfo`, endpoint `/api/runs`, SignalR event `run_status` и файл `runs.json` обозначают
+общий исторически сложившийся контракт состояния для `main run` и `extra`, поэтому тип внутри
+этого контракта всегда различается по `TaskCode`.
+
 ### 4.2. Клиенты и вспомогательные процессы
 
 | Проект | Роль |

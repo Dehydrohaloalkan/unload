@@ -36,7 +36,7 @@ internal sealed class RunStateStoreFixture : IDisposable
         Store.SetStarted(
             correlationId,
             targetCodes: ["TARGET-1"],
-            memberNames: members ?? ["Member A"],
+            memberOrScriptNames: members ?? ["Member A"],
             publishToGateway,
             taskCode);
     }

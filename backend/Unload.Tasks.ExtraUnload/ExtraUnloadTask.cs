@@ -115,7 +115,7 @@ public class ExtraUnloadTask(
             _runStateStore.SetStarted(
                 correlationId,
                 targetCodes: Array.Empty<string>(),
-                memberNames: scriptCodes!,
+                memberOrScriptNames: scriptCodes!,
                 publishToGateway: request.PublishToGateway,
                 taskCode: Code);
         }

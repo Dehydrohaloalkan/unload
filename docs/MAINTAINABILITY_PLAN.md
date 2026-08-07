@@ -258,7 +258,7 @@ RunTaskCodeResolver        — fallback task code для неизвестног�
 - [x] Выделить простые member, artifact и worker projections.
 - [x] Оставить `RunStateStore` единственным публичным фасадом изменения state и один CAS-путь для upsert/update.
 - [x] Изолировать распознавание task type по префиксу correlation ID в одном месте.
-- [ ] Привести внутренние имена к единой терминологии execution/run/extra.
+- [x] Зафиксировать единую терминологию execution/main run/extra и исправить неоднозначные локальные имена.
 
 Критерий готовности: каждый класс решает одну задачу, правила завершения читаются отдельно и полностью покрыты тестами.
 
@@ -479,6 +479,9 @@ tests/
   mutation по-прежнему явно отклоняют неизвестный correlation ID.
 - Prefix fallback для feedback неизвестного запуска изолирован в `RunTaskCodeResolver` и покрыт
   5 прямыми test cases, включая регистр, пробелы и неизвестный префикс.
+- Аудит терминологии подтвердил, что `RunStateStore`, `RunStatusInfo`, `/api/runs`, `run_status`
+  и `runs.json` образуют совместимый общий контракт для main run и extra; косметически ломать его
+  не нужно. Неоднозначный параметр `memberNames` переименован в `memberOrScriptNames`.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
 - Штатный VSTest проходит: 99/99 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
@@ -488,8 +491,8 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Перед persistence провести узкий аудит внутренней терминологии execution/run/extra и менять
-> только действительно неоднозначные имена. Затем перейти к отдельному этапу persistence.
+> Начать этап persistence с сериализации mutations и сохранений через один writer, предварительно
+> добавив конкурентный тест, который воспроизводит требуемый порядок snapshots.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

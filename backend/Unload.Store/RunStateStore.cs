@@ -37,21 +37,21 @@ public class RunStateStore
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="targetCodes">Target-коды запуска.</param>
-    /// <param name="memberNames">Мемберы, выбранные для выгрузки (для extra — коды скриптов).</param>
+    /// <param name="memberOrScriptNames">Мемберы основной выгрузки или коды скриптов extra.</param>
     /// <param name="publishToGateway">Публиковать ли результаты в шлюз.</param>
     /// <param name="taskCode">Код задачи (<c>run</c> по умолчанию, <c>extra</c> для доп-выгрузки).</param>
-    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberNames, bool publishToGateway = true, string taskCode = TaskCodeRun)
+    public void SetStarted(string correlationId, IReadOnlyCollection<string> targetCodes, IReadOnlyCollection<string> memberOrScriptNames, bool publishToGateway = true, string taskCode = TaskCodeRun)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentNullException.ThrowIfNull(targetCodes);
-        ArgumentNullException.ThrowIfNull(memberNames);
+        ArgumentNullException.ThrowIfNull(memberOrScriptNames);
         ArgumentException.ThrowIfNullOrWhiteSpace(taskCode);
 
         var now = DateTimeOffset.UtcNow;
         var snapshot = _projector.CreateStarted(
             correlationId,
             targetCodes,
-            memberNames,
+            memberOrScriptNames,
             publishToGateway,
             taskCode,
             now);
@@ -73,7 +73,7 @@ public class RunStateStore
             addFactory: () => _projector.CreateStarted(
                 correlationId,
                 targetCodes: Array.Empty<string>(),
-                memberNames: Array.Empty<string>(),
+                memberOrScriptNames: Array.Empty<string>(),
                 publishToGateway: true,
                 taskCode: TaskCodeRun,
                 now),
