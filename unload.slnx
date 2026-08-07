@@ -22,5 +22,9 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Unload.Backend.Tests/Unload.Backend.Tests.csproj" />
+    <Project Path="tests/Unload.ProjectSync.Tests/Unload.ProjectSync.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Unload.ProjectSync/Unload.ProjectSync.csproj" />
   </Folder>
 </Solution>
