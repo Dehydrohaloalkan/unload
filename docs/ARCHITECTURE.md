@@ -91,7 +91,9 @@ flowchart LR
 | `Unload.DataBase` / `DatabaseClientFactory` | Создаёт независимый клиент БД для каждого worker и выполняет SQL | Изолирует конкретное подключение к БД от задач и движков |
 | `Unload.FileWriter` / `PipeSeparatedFileChunkWriter` | Записывает чанки, заголовки и строки с разделителем `|`; синхронизирует запись в один файл | Движок отвечает за процесс, writer — только за корректный формат и конкурентную запись |
 | `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
-| `Unload.Store` / `RunStateStore` | Хранит полную проекцию `run` и `extra`: lifecycle, workers, scripts/members, artifacts, sender batches | Это серверный источник истины для активного состояния и истории файлов |
+| `Unload.Store` / `RunStateStore` | Координирует конкурентные обновления, persistence и публичный доступ к состоянию `run`/`extra` | Это серверный источник истины и небольшой фасад над правилами проекции |
+| `Unload.Store` / `RunStateProjector` | Применяет runner events и sender feedback к immutable `RunStatusInfo` | Правила изменения members, workers, artifacts и batches читаются отдельно от хранения |
+| `Unload.Store` / `RunCompletionPolicy` | Чисто вычисляет terminal status после runner completion и gateway feedback | Условия `Completed`/`Failed` и режим без gateway покрываются отдельной таблицей тестов |
 | `Unload.Store` / `TaskExecutionHistoryStore` | Хранит завершённые `probe`, `preset`, `run`, `extra` | Нужен для зависимостей «выполнено сегодня», dashboard и восстановления `preset` после рестарта |
 | `Unload.Store` / `JsonFileStore<T>` | Загружает и сохраняет JSON через временный файл и `File.Move` | Одинаковая атомарная персистентность используется обоими хранилищами |
 | `Unload.Store` / `RequeueService` | Повторно публикует выбранные существующие файлы в gateway | Повторная доставка не должна повторно выполнять SQL-выгрузку |
@@ -367,7 +369,7 @@ Feedback имеет три ключевых вида:
 - `BATCH_COMPLETED` — вся партия завершена;
 - `BATCH_FAILED` — партия завершилась ошибкой.
 
-`RunStateStore.TryPromoteToCompleted` сопоставляет финал движка и состояния sender batches. Поэтому серверным источником истины о доставке является feedback, а не сам факт существования output-файла.
+`RunCompletionPolicy` сопоставляет финал движка и состояния sender batches. Поэтому серверным источником истины о доставке является feedback, а не сам факт существования output-файла.
 
 `RequeueService` создаёт новые партии из уже существующих файлов. Он не меняет исходные данные и не выполняет SQL повторно.
 
@@ -601,6 +603,6 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 - Activation channels не persisted, поэтому активная работа после рестарта отменяется, а не продолжается.
 - Ошибка записи JSON логируется, но не прерывает run; состояние на диске может отстать от памяти.
 - SignalR events транслируются всем клиентам; авторизация и изоляция клиентов в текущем контракте не описаны.
-- `RunStateStore` совмещает хранение, persistence, проекцию runner events, gateway feedback и completion policy; изменения требуют особенно осторожных characterization tests.
+- `RunStateStore` всё ещё совмещает конкурентные mutations, persistence и recovery; runner projection и completion policy уже вынесены и защищены characterization-тестами.
 
 Эти пункты описывают текущие технические свойства, а не обещание будущего рефакторинга.

@@ -19,7 +19,7 @@
 - backend практически не покрыт автоматическими тестами;
 - frontend имеет только минимальные smoke-тесты приложения;
 - документация уже расходится с кодом: `extra` описан как синхронный, но фактически выполняется как deferred-задача;
-- `RunStateStore.cs` совмещает хранение, конкурентные обновления, persistence и сложную проекцию статусов;
+- `RunStateStore.cs` изначально совмещал хранение, конкурентные обновления, persistence и сложную проекцию статусов;
 - существует много отдельных приложений и способов запуска;
 - бизнес-логика напрямую использует системные часы;
 - C# и TypeScript вручную дублируют API-контракты;
@@ -147,7 +147,7 @@ Baseline пока не считается завершённым: остаютс
 
 Реализовано 2026-08-07: добавлены 27 test cases через публичный API `RunStateStore`.
 Fixtures используют отдельный scratch-каталог; `output/` и `output/_state` не читаются и не очищаются.
-Вложенный `RunStateProjector` и completion rules пока не перемещались и не переписывались.
+Этот набор стал страховочной сеткой для последующего механического выделения projector и policy.
 
 ## 4. Этап 1 — автоматическая страховочная сетка
 
@@ -248,8 +248,8 @@ RunCompletionPolicy        — чистое правило terminal-перехо
 
 Шаги:
 
-- [ ] Перенести nested `RunStateProjector` в отдельный файл без изменения поведения.
-- [ ] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
+- [x] Перенести nested `RunStateProjector` в отдельный файл без изменения поведения.
+- [x] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
 - [ ] Выделить gateway feedback projection.
 - [ ] Выделить member, artifact и worker projection только если итоговые классы остаются простыми.
 - [ ] Оставить один публичный способ изменения state.
@@ -423,7 +423,7 @@ tests/
 ### Итерация 3
 
 - [x] Покрыть `RunStateProjector` и completion rules.
-- [ ] Вынести projector и completion policy без изменения поведения.
+- [x] Вынести projector и completion policy без изменения поведения.
 - [ ] Проверить gateway success/failure live-сценариями.
 
 ### Итерация 4
@@ -447,7 +447,7 @@ tests/
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07 перед разделением `RunStateStore`:
+Состояние на 2026-08-07 после первого шага разделения `RunStateStore`:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
@@ -464,8 +464,10 @@ tests/
 - `ProbeSchedulerHostedService` использует общий `TimeProvider` для восстановления и расписания.
 - Добавлены 27 test cases `RunStateStore`: runner projection, terminal transitions, gateway
   completion, sender feedback и persistence/restart recovery.
+- `RunStateProjector` механически перенесён из nested-класса в отдельный internal-файл.
+- Чистый `RunCompletionPolicy` выделен отдельно и покрыт таблицей из 10 test cases.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 62/62 относящихся к плану tests passed.
+- Штатный VSTest проходит: 72/72 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -473,10 +475,7 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Обсудить и начать механическое выделение `RunStateProjector` и чистого
-> `RunCompletionPolicy` без изменения защищённого тестами поведения.
-
-Граница достигнута: до отдельного подтверждения не начинать перенос классов из `RunStateStore`.
+> Следующим отдельным шагом выделить gateway feedback projection, не смешивая его с persistence.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
