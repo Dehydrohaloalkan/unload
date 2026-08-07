@@ -29,7 +29,8 @@ public static class ServiceCollectionExtensions
     /// <returns>Та же коллекция сервисов для цепочки вызовов.</returns>
     public static IServiceCollection AddUnloadRuntime(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool registerBackgroundServices = true)
     {
         var config = UnloadConfigurationLoader.Load(configuration);
 
@@ -59,7 +60,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGatewayPublisher>(static x => x.GetRequiredService<FtpGatewayPublisher>());
         services.AddSingleton<IGatewayBatchSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
         services.AddSingleton<IGatewaySenderFeedbackSource>(static x => x.GetRequiredService<FtpGatewayPublisher>());
-        services.AddHostedService<FtpGatewayBackgroundService>();
+        if (registerBackgroundServices)
+        {
+            services.AddHostedService<FtpGatewayBackgroundService>();
+        }
         services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
 
         var stateDirectory = Path.Combine(config.Paths.OutputDirectory, "_state");

@@ -323,11 +323,34 @@ GatewayRequeueController
 
 Приоритет: средний.
 
-- [ ] Включить публикацию OpenAPI schema.
-- [ ] Генерировать TypeScript DTO и API client из OpenAPI.
-- [ ] Исключить generated-файлы из ручного форматирования и review шума.
-- [ ] Зафиксировать совместимость SignalR event names и payloads тестами.
-- [ ] Добавить contract-тесты API/frontend.
+- [x] Включить публикацию OpenAPI schema.
+- [x] Генерировать TypeScript DTO и API client из OpenAPI.
+- [x] Исключить generated-файлы из ручного форматирования и review шума.
+- [x] Зафиксировать совместимость SignalR event names и payloads тестами.
+- [x] Добавить contract-тесты API/frontend.
+
+Реализовано 2026-08-07:
+
+- Development API публикует OpenAPI 3.1 по `/openapi/v1.json`; зафиксированная schema содержит
+  21 path и типизированные success/error responses.
+- `tools/export-openapi.sh` запускает API в изолированном режиме без всех hosted services,
+  обновляет `openapi/Unload.Api.json` и останавливает только созданный им процесс. Контрольные
+  суммы подтвердили отсутствие изменений в `output/_state`.
+- `ng-openapi-gen` создаёт 39 DTO и функциональный Angular client в `src/app/generated/api`;
+  `ApiClientService` использует generated operations, а ручной `app.models.ts` реэкспортирует
+  wire models и содержит только UI-модели, SignalR payload и именованные числовые константы.
+- Generated-файлы имеют `DO NOT EDIT`, исключены из Prettier и помечены
+  `linguist-generated=true`.
+- `RunStatusHubContract` централизует hub/event names и типизированную публикацию payloads.
+  Backend tests фиксируют имена, payload types и JSON shape `RunnerEvent`; frontend test фиксирует
+  те же публичные имена. Удалено несуществующее backend-поле `targetCode` из frontend `RunnerEvent`.
+- `OpenApiContractTests` строит текущую Development schema без background workers и сравнивает её
+  с committed-файлом, поэтому забытая регенерация ломает тест до попадания рассинхронизации в UI.
+- Frontend `check:api` генерирует client во временный каталог и сравнивает все файлы с committed
+  `src/app/generated/api`; проверка включена в обычный `npm test`.
+- Неоднозначный legacy-ответ `/api/runs/active` нормализован: endpoint возвращает
+  `200 RunStatusInfo` или `404`, что уже поддерживали Angular и WebConsole; два теста фиксируют оба
+  варианта вместо прежнего второго `200` с неполным anonymous payload.
 
 Критерий готовности: C# и TypeScript модели не расходятся при ручном редактировании.
 
@@ -452,7 +475,7 @@ tests/
 
 - [ ] Добавить frontend projection/store tests.
 - [ ] Разделить крупные frontend projections.
-- [ ] Настроить OpenAPI generation.
+- [x] Настроить OpenAPI generation.
 
 ### Итерация 6
 
@@ -462,7 +485,7 @@ tests/
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07 после первого шага разделения `RunStateStore`:
+Состояние на 2026-08-07 после завершения единого API-контракта:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
@@ -525,16 +548,18 @@ tests/
   bank name map, extra completion timestamp, доступность main/extra и UI phase. Семь test cases
   фиксируют эти правила; orchestration и координация stores остались в facade.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 114/114 относящихся к плану test cases, 116/116 во всём проекте.
-- Production frontend `npm run build` проходит.
+- Штатный VSTest проходит: 122/122 test cases во всём backend test project.
+- Штатный frontend runner проходит 17/17, production `npm run build` проходит.
+- Live browser smoke после перехода на generated client загрузил Angular без page errors и
+  получил `200` для catalog, members, dashboard, today, active run и server time.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
 - `output/` и `output/_state` не очищались.
 
-Этап 6 завершён. Штатный frontend test runner проходит 16/16. Следующая рекомендуемая задача:
+Этап 7 завершён. Следующая рекомендуемая задача:
 
-> Перейти к этапу 7: сначала включить публикацию OpenAPI schema и зафиксировать существующие
-> HTTP/SignalR contracts тестами до генерации TypeScript client.
+> Перейти к этапу 8: определить статус `Unload.Api`, Angular `webApp`, Console/WebConsole,
+> FTP Server и GatewayHandler как production, diagnostic, development-only или obsolete.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

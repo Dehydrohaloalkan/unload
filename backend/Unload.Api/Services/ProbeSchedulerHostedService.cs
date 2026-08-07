@@ -144,7 +144,7 @@ public class ProbeSchedulerHostedService(
 
     private async Task PublishStateAsync(CancellationToken cancellationToken)
     {
-        await _hubContext.Clients.All.SendAsync("preset_state", _dailyWindowPolicy.Get(), cancellationToken);
+        await _hubContext.Clients.All.SendPresetStateAsync(_dailyWindowPolicy.Get(), cancellationToken);
     }
 
     private static int Clamp(int value, int min, int max)

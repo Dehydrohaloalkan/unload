@@ -33,6 +33,10 @@ public record RunAcceptedResponse(
     string RunStatusEventName,
     string StopPath);
 
+public sealed record RunCancellationAcceptedResponse(
+    string CorrelationId,
+    string Status);
+
 /// <summary>
 /// Контракт мембера для запуска выгрузки.
 /// </summary>

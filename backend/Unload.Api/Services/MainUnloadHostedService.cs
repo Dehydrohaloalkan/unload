@@ -57,9 +57,7 @@ public class MainUnloadHostedService(
                 {
                     _runStateStore.ApplyEvent(@event);
 
-                    await _hubContext.Clients
-                        .All
-                        .SendAsync("status", @event, stoppingToken);
+                    await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
 
                     await PublishRunStateAsync(@event.CorrelationId, stoppingToken);
                 }
@@ -157,6 +155,6 @@ public class MainUnloadHostedService(
             return;
         }
 
-        await _hubContext.Clients.All.SendAsync("run_status", state, cancellationToken);
+        await _hubContext.Clients.All.SendRunStatusAsync(state, cancellationToken);
     }
 }

@@ -40,7 +40,8 @@ export function buildMemberGroups(
 
   return catalog.groups
     .map((group) => {
-      const groupTargets = catalog.targets.filter((target) => target.groupId === group.id);
+      const groupId = Number(group.id);
+      const groupTargets = catalog.targets.filter((target) => Number(target.groupId) === groupId);
       const memberBuckets = new Map<string, typeof groupTargets>();
 
       for (const target of groupTargets) {
@@ -81,7 +82,7 @@ export function buildMemberGroups(
           );
 
           return {
-            key: buildMemberKey(group.id, primaryTarget.memberCode, memberName),
+            key: buildMemberKey(groupId, primaryTarget.memberCode, memberName),
             memberCode: primaryTarget.memberCode,
             memberFileExtension: primaryTarget.memberFileExtension?.trim() || null,
             name: memberName,
@@ -103,7 +104,7 @@ export function buildMemberGroups(
         );
 
       return {
-        id: group.id,
+        id: groupId,
         name: group.name,
         folder: group.folder,
         members: groupMembers,

@@ -33,7 +33,7 @@ public class CatalogController(
     /// <param name="cancellationToken">Токен отмены HTTP-запроса.</param>
     /// <returns>Текущее состояние каталога.</returns>
     [HttpGet("catalog")]
-    public async Task<IActionResult> GetCatalogAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<CatalogInfo>> GetCatalogAsync(CancellationToken cancellationToken)
     {
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
         return Ok(catalog);
@@ -45,7 +45,7 @@ public class CatalogController(
     /// <param name="cancellationToken">Токен отмены HTTP-запроса.</param>
     /// <returns>Нормализованный список мемберов для UI-клиентов.</returns>
     [HttpGet("members")]
-    public async Task<IActionResult> GetMembersAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<MemberCatalogItem[]>> GetMembersAsync(CancellationToken cancellationToken)
     {
         var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
         var activeCorrelationId = _runWorkflow.GetActiveCorrelationId();

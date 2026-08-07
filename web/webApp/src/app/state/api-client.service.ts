@@ -1,6 +1,24 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import {
+  catalogGetCatalog$Json,
+  catalogGetMembers$Json,
+  gatewayRequeueRequeueToGateway$Json,
+  runHistoryGetTodayRuns$Json,
+  runHistoryGetWorkflowDashboard$Json,
+  runLaunchGetExtraBanks$Json,
+  runLaunchGetPresetState$Json,
+  runLaunchRunExtra$Json,
+  runLaunchRunPreset$Json,
+  runLaunchStartRun$Json,
+  runLaunchStopRun$Json,
+  runStatusGetActiveRun$Json,
+  runStatusGetRunByCorrelationId$Json,
+  systemGetServerTime$Json,
+  systemListOutputFiles$Json,
+} from '../generated/api/functions';
+import { UnloadApi } from '../generated/api/unload-api';
 import {
   CatalogInfo,
   ExtraBankInfo,
@@ -19,17 +37,15 @@ import { API_BASE_URL } from './api-base-url.token';
 import { ID_GENERATOR } from './id-generator.token';
 import { joinApiUrl } from './utils/api-url.util';
 
-export interface ActiveRunPayload {
-  correlationId: string | null;
-  status?: RunStatusInfo['status'];
-  createdAt?: string;
-}
-
 @Injectable({ providedIn: 'root' })
 export class ApiClientService {
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(UnloadApi);
   private readonly baseUrl = inject(API_BASE_URL);
   private readonly newId = inject(ID_GENERATOR);
+
+  constructor() {
+    this.api.rootUrl = this.baseUrl;
+  }
 
   url(path: string): string {
     return joinApiUrl(this.baseUrl, path);
@@ -42,41 +58,35 @@ export class ApiClientService {
     this.url(`/api/system/download-archive?path=${encodeURIComponent(path)}`);
 
   fetchCatalog(): Promise<CatalogInfo> {
-    return firstValueFrom(this.http.get<CatalogInfo>(this.url('/api/catalog')));
+    return firstValueFrom(this.api.invoke(catalogGetCatalog$Json));
   }
 
   async fetchMembers(): Promise<MemberCatalogItem[]> {
-    const items = await firstValueFrom(
-      this.http.get<MemberCatalogItem[]>(this.url('/api/members')),
-    );
+    const items = await firstValueFrom(this.api.invoke(catalogGetMembers$Json));
     return items ?? [];
   }
 
   fetchPresetState(): Promise<PresetGateState> {
-    return firstValueFrom(this.http.get<PresetGateState>(this.url('/api/runs/preset/state')));
+    return firstValueFrom(this.api.invoke(runLaunchGetPresetState$Json));
   }
 
   fetchServerTime(): Promise<ServerTimeResponse> {
-    return firstValueFrom(this.http.get<ServerTimeResponse>(this.url('/api/system/time')));
+    return firstValueFrom(this.api.invoke(systemGetServerTime$Json));
   }
 
   fetchDashboardSnapshot(): Promise<WorkflowDashboardSnapshotResponse> {
-    return firstValueFrom(
-      this.http.get<WorkflowDashboardSnapshotResponse>(this.url('/api/runs/dashboard')),
-    );
+    return firstValueFrom(this.api.invoke(runHistoryGetWorkflowDashboard$Json));
   }
 
   async fetchTodayRuns(): Promise<RunStatusInfo[]> {
-    const runs = await firstValueFrom(
-      this.http.get<RunStatusInfo[]>(this.url('/api/runs/today')),
-    );
+    const runs = await firstValueFrom(this.api.invoke(runHistoryGetTodayRuns$Json));
     return runs ?? [];
   }
 
-  async fetchActiveRun(): Promise<RunStatusInfo | ActiveRunPayload | null> {
+  async fetchActiveRun(): Promise<RunStatusInfo | null> {
     try {
       const payload = await firstValueFrom(
-        this.http.get<RunStatusInfo | ActiveRunPayload>(this.url('/api/runs/active')),
+        this.api.invoke(runStatusGetActiveRun$Json),
       );
       return payload ?? null;
     } catch (error) {
@@ -90,9 +100,7 @@ export class ApiClientService {
   async fetchRunStatus(correlationId: string): Promise<RunStatusInfo | null> {
     try {
       return await firstValueFrom(
-        this.http.get<RunStatusInfo>(
-          this.url(`/api/runs/${encodeURIComponent(correlationId)}`),
-        ),
+        this.api.invoke(runStatusGetRunByCorrelationId$Json, { correlationId }),
       );
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 404) {
@@ -103,11 +111,7 @@ export class ApiClientService {
   }
 
   async fetchOutputFiles(path: string): Promise<OutputFileInfo[]> {
-    const files = await firstValueFrom(
-      this.http.get<OutputFileInfo[]>(
-        this.url(`/api/system/output-files?path=${encodeURIComponent(path)}`),
-      ),
-    );
+    const files = await firstValueFrom(this.api.invoke(systemListOutputFiles$Json, { path }));
     return files ?? [];
   }
 
@@ -117,25 +121,21 @@ export class ApiClientService {
     adminOverride: boolean;
     publishToGateway: boolean;
   }): Promise<RunAcceptedResponse> {
-    return firstValueFrom(this.http.post<RunAcceptedResponse>(this.url('/api/runs'), payload));
+    return firstValueFrom(this.api.invoke(runLaunchStartRun$Json, { body: payload }));
   }
 
   stopRun(correlationId: string): Promise<unknown> {
-    return firstValueFrom(
-      this.http.post(this.url(`/api/runs/${encodeURIComponent(correlationId)}/stop`), null),
-    );
+    return firstValueFrom(this.api.invoke(runLaunchStopRun$Json, { correlationId }));
   }
 
   runPreset(adminOverride: boolean): Promise<ScriptTaskRunResult> {
     return firstValueFrom(
-      this.http.post<ScriptTaskRunResult>(this.url('/api/runs/preset'), { adminOverride }),
+      this.api.invoke(runLaunchRunPreset$Json, { body: { adminOverride } }),
     );
   }
 
   async fetchExtraBanks(): Promise<ExtraBankInfo[]> {
-    const banks = await firstValueFrom(
-      this.http.get<ExtraBankInfo[]>(this.url('/api/runs/extra/banks')),
-    );
+    const banks = await firstValueFrom(this.api.invoke(runLaunchGetExtraBanks$Json));
     return banks ?? [];
   }
 
@@ -146,20 +146,16 @@ export class ApiClientService {
   ): Promise<RunAcceptedResponse> {
     // Extra — deferred: API возвращает 202 Accepted + correlationId, статус трекается отдельно.
     return firstValueFrom(
-      this.http.post<RunAcceptedResponse>(this.url('/api/runs/extra'), {
-        adminOverride,
-        publishToGateway,
-        selectedBanks,
+      this.api.invoke(runLaunchRunExtra$Json, {
+        body: { adminOverride, publishToGateway, selectedBanks },
       }),
     );
   }
 
   requeueToGateway(items: RequeueItem[]): Promise<RequeueToGatewayResponse> {
     return firstValueFrom(
-      this.http.post<RequeueToGatewayResponse>(this.url('/api/runs/requeue'), {
-        idempotencyKey: this.newId(),
-        items,
-        dryRun: false,
+      this.api.invoke(gatewayRequeueRequeueToGateway$Json, {
+        body: { idempotencyKey: this.newId(), items, dryRun: false },
       }),
     );
   }

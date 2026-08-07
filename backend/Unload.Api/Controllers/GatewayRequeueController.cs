@@ -13,7 +13,7 @@ public class GatewayRequeueController(RequeueService requeueService) : Controlle
     private readonly RequeueService _requeueService = requeueService;
 
     [HttpPost("requeue")]
-    public async Task<IActionResult> RequeueToGatewayAsync(
+    public async Task<ActionResult<RequeueToGatewayResponse>> RequeueToGatewayAsync(
         [FromBody] RequeueToGatewayRequest request,
         CancellationToken cancellationToken)
     {

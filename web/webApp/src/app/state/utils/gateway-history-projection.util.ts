@@ -70,7 +70,7 @@ export function summarizeRequeue(
     }
 
     const failed =
-      (itemResult.failedBatches ?? 0) > 0 ||
+      Number(itemResult.failedBatches ?? 0) > 0 ||
       itemResult.batches.some((batch) => batch.status === SenderBatchStatus.Failed);
     if (failed) {
       continue;

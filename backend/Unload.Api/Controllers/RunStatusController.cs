@@ -17,28 +17,30 @@ public class RunStatusController(
     private readonly RunStateStore _runStateStore = runStateStore;
 
     [HttpGet]
-    public IActionResult GetRuns()
+    public ActionResult<IReadOnlyCollection<RunStatusInfo>> GetRuns()
     {
         return Ok(_runStateStore.List());
     }
 
     [HttpGet("active")]
-    public IActionResult GetActiveRun()
+    [ProducesResponseType<RunStatusInfo>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<RunStatusInfo> GetActiveRun()
     {
         var correlationId = _runWorkflow.GetActiveCorrelationId();
         if (string.IsNullOrWhiteSpace(correlationId))
         {
-            return Ok(new { correlationId = (string?)null });
+            return NotFound();
         }
 
         var run = _runStateStore.Get(correlationId);
-        return run is null
-            ? Ok(new { correlationId })
-            : Ok(run);
+        return run is null ? NotFound() : Ok(run);
     }
 
     [HttpGet("{correlationId}")]
-    public IActionResult GetRunByCorrelationId(string correlationId)
+    [ProducesResponseType<RunStatusInfo>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public ActionResult<RunStatusInfo> GetRunByCorrelationId(string correlationId)
     {
         var run = _runStateStore.Get(correlationId);
         return run is null ? NotFound() : Ok(run);

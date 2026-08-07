@@ -536,6 +536,19 @@ Browser storage хранит только локальные UI-настройк
 
 ## 14. HTTP и SignalR contracts
 
+OpenAPI schema публикуется API только в `Development` по `/openapi/v1.json`. Зафиксированная
+копия находится в `openapi/Unload.Api.json`; `tools/export-openapi.sh` обновляет её в специальном
+режиме `OpenApiGenerationOnly`, в котором не запускаются scheduler, workflow, projection и FTP
+hosted services. Поэтому обновление контракта не должно менять `output/` или `output/_state`.
+
+Angular transport-код генерируется командой `npm run generate:api` в
+`web/webApp/src/app/generated/api/`. Эти файлы содержат `DO NOT EDIT`, исключены из Prettier и
+помечены в Git как generated. Ручной `ApiClientService` является только UI-facing адаптером над
+`UnloadApi`, а транспортные DTO в `app.models.ts` реэкспортируются из generated models. Порядок
+изменения HTTP-контракта: C# DTO/controller, экспорт schema, генерация client, contract tests.
+Обычный `npm test` сначала генерирует client во временный каталог и сравнивает его с committed
+версией, поэтому устаревший или вручную исправленный generated-файл не проходит проверку.
+
 ### 14.1. Основные endpoints
 
 | Метод | Путь | Результат |
@@ -545,7 +558,7 @@ Browser storage хранит только локальные UI-настройк
 | `POST` | `/api/runs/preset` | Выполнить preset; `200 ScriptTaskRunResult` |
 | `GET` | `/api/runs/preset/state` | Текущее `PresetGateState` |
 | `GET` | `/api/runs/{correlationId}` | Полный `RunStatusInfo` main или extra |
-| `GET` | `/api/runs/active` | Только active main run; active extra восстанавливается из `/today` |
+| `GET` | `/api/runs/active` | `200 RunStatusInfo` для active main run, иначе `404`; active extra восстанавливается из `/today` |
 | `GET` | `/api/runs/today` | Сегодняшние main и extra runs |
 | `GET` | `/api/runs/dashboard` | Состояние окна, флаги и история текущего дня |
 | `GET` | `/api/runs/history?days=N` | Runs и task history за 1–365 дней |
@@ -576,6 +589,12 @@ Hub: `/hubs/status`.
 | `preset_replayed` | `ScriptTaskRunResult` | Результат повторного preset в admin mode |
 
 `SubscribeRun(correlationId)` сохранён в hub-контракте, но текущие status events рассылаются всем клиентам. Клиент обязан фильтровать данные по `correlationId` там, где это необходимо.
+
+Имена hub, метода и событий собраны в backend `RunStatusHubContract` и frontend
+`realtime-hub.contract.ts`. Backend публикует payload только через типизированные extension methods;
+contract tests фиксируют имена, соответствующие C# payload types и camelCase shape `RunnerEvent`.
+SignalR не входит в OpenAPI, поэтому новый event требует синхронного изменения этих двух файлов и
+обоих наборов contract tests.
 
 ## 15. Конфигурация
 
@@ -631,7 +650,10 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 - Сначала определить persisted source of truth.
 - Не хранить единственную копию состояния только во frontend.
 - Соблюдать terminal lifecycle: `Completed`, `Failed`, `Cancelled` не должны возвращаться в active.
-- Обновить backend DTO, frontend models, stores, API docs и Postman collection одновременно.
+- Для HTTP изменить C# contract, выполнить `tools/export-openapi.sh`, затем
+  `cd web/webApp && npm run generate:api`; generated-файлы вручную не редактировать.
+- Для SignalR обновить `RunStatusHubContract`, `realtime-hub.contract.ts`, payload type и contract tests.
+- Обновить stores, API docs и Postman collection одновременно.
 
 ### 17.3. Новое поле конфигурации
 

@@ -36,7 +36,7 @@ public class SystemController(
     /// Используется UI-клиентами для синхронизации часов с backend.
     /// </summary>
     [HttpGet("time")]
-    public IActionResult GetServerTime()
+    public ActionResult<ServerTimeResponse> GetServerTime()
     {
         var localNow = DateTimeOffset.Now;
         return Ok(new ServerTimeResponse(
@@ -47,7 +47,9 @@ public class SystemController(
     }
 
     [HttpGet("health")]
-    public IActionResult GetHealth()
+    [ProducesResponseType<SystemHealthResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<SystemHealthResponse>(StatusCodes.Status503ServiceUnavailable)]
+    public ActionResult<SystemHealthResponse> GetHealth()
     {
         var runState = _runStateStore.GetPersistenceHealth();
         var taskHistory = _taskExecutionHistoryStore.GetPersistenceHealth();
@@ -63,6 +65,8 @@ public class SystemController(
     }
 
     [HttpPost("sender-feedback")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PostSenderFeedback(
         [FromBody] SenderFeedbackRequest request,
         CancellationToken cancellationToken)
@@ -111,7 +115,7 @@ public class SystemController(
     /// </summary>
     [HttpPost("gateway-upload")]
     [RequestSizeLimit(MaxGatewayUploadRequestBytes)]
-    public async Task<IActionResult> UploadFilesToGateway(
+    public async Task<ActionResult<GatewayUploadResponse>> UploadFilesToGateway(
         [FromForm(Name = "files")] List<IFormFile> files,
         [FromForm(Name = "memberName")] string? memberName,
         CancellationToken cancellationToken)
@@ -125,6 +129,8 @@ public class SystemController(
     /// Путь валидируется и не может выходить за границы runtime output directory.
     /// </summary>
     [HttpGet("download")]
+    [Produces("application/octet-stream")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult DownloadOutputFile([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -141,7 +147,7 @@ public class SystemController(
     }
 
     [HttpGet("output-files")]
-    public IActionResult ListOutputFiles([FromQuery] string path)
+    public ActionResult<IReadOnlyList<OutputFileInfo>> ListOutputFiles([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -157,6 +163,8 @@ public class SystemController(
     }
 
     [HttpGet("download-archive")]
+    [Produces("application/zip")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult DownloadOutputArchive([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path))

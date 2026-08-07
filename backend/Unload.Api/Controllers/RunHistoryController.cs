@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Unload.Bootstrapper;
+using Unload.Store;
 using Unload.Tasks;
 
 namespace Unload.Api.Controllers;
@@ -17,19 +18,19 @@ public class RunHistoryController(
     private readonly HistoryRetentionOptions _historyRetentionOptions = historyRetentionOptions;
 
     [HttpGet("today")]
-    public IActionResult GetTodayRuns()
+    public ActionResult<IReadOnlyList<RunStatusInfo>> GetTodayRuns()
     {
         return Ok(_workflowQueryService.GetTodayRuns());
     }
 
     [HttpGet("dashboard")]
-    public IActionResult GetWorkflowDashboard()
+    public ActionResult<WorkflowDashboard> GetWorkflowDashboard()
     {
         return Ok(_workflowQueryService.GetDashboard());
     }
 
     [HttpGet("history")]
-    public IActionResult GetWorkflowHistory([FromQuery] int? days)
+    public ActionResult<WorkflowHistory> GetWorkflowHistory([FromQuery] int? days)
     {
         var requestedDays = days ?? _historyRetentionOptions.RetentionDays;
         return Ok(_workflowQueryService.GetHistory(requestedDays));

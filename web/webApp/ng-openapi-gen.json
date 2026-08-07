@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/ng-openapi-gen/ng-openapi-gen-schema.json",
+  "input": "../../openapi/Unload.Api.json",
+  "output": "src/app/generated/api",
+  "apiService": "UnloadApi",
+  "module": false,
+  "services": false,
+  "promises": false,
+  "ignoreUnusedModels": false,
+  "endOfLineStyle": "lf"
+}

@@ -60,7 +60,7 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
     workers.set(key, bucket);
   }
   for (const bucket of workers.values()) {
-    bucket.sort((left, right) => left.workerId - right.workerId);
+    bucket.sort((left, right) => Number(left.workerId) - Number(right.workerId));
   }
 
   for (const artifact of run.outputArtifacts ?? []) {

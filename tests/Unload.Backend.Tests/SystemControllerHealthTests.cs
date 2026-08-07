@@ -18,7 +18,7 @@ public class SystemControllerHealthTests
             new RunStateStore(workerCount: 1, paths.RunStateFilePath),
             new TaskExecutionHistoryStore(paths.TaskHistoryFilePath));
 
-        var result = Assert.IsType<OkObjectResult>(controller.GetHealth());
+        var result = Assert.IsType<OkObjectResult>(controller.GetHealth().Result);
         var response = Assert.IsType<SystemHealthResponse>(result.Value);
 
         Assert.Equal("healthy", response.Status);
@@ -36,7 +36,7 @@ public class SystemControllerHealthTests
             runStateStore,
             new TaskExecutionHistoryStore(paths.TaskHistoryFilePath));
 
-        var result = Assert.IsType<ObjectResult>(controller.GetHealth());
+        var result = Assert.IsType<ObjectResult>(controller.GetHealth().Result);
         var response = Assert.IsType<SystemHealthResponse>(result.Value);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, result.StatusCode);

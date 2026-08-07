@@ -112,7 +112,8 @@ npm start
 | SQL и состав выгрузки | `configs/catalog.json`, `scripts/`, соответствующий task/engine |
 | Статусы и восстановление | `RunStateStore`, `TaskExecutionHistoryStore`, projections |
 | HTTP endpoint или error code | controllers, `TaskLaunchException`, error mapping, frontend API client |
-| Событие реального времени | `RunStatusHub`, publisher события, `RealtimeHubService`, store-получатель |
+| HTTP DTO или client | C# contract, `openapi/Unload.Api.json`, generated API, затем UI adapter |
+| Событие реального времени | `RunStatusHubContract`, `realtime-hub.contract.ts`, store-получатель |
 | Отображение истории | backend history DTO, `history-projection.util.ts`, соответствующий store/component |
 | FTP-доставка | `Gateway.Ftp`, `GatewayUploadService`, background service и sender feedback |
 
@@ -124,9 +125,11 @@ npm start
 2. Найти текущий поток через Graphify и подтвердить его чтением исходников.
 3. Сначала добавить тест, фиксирующий бизнес-сценарий, если меняется нетривиальное правило.
 4. Внести минимальное изменение без смены форматов `output` и snapshots.
-5. Обновить затронутую документацию.
-6. После source-изменений выполнить `./.tools/bin/graphify update .`.
-7. Запустить backend tests, `dotnet build` и frontend `npm run build`.
+5. После изменения HTTP-контракта выполнить `tools/export-openapi.sh`, затем
+   `cd web/webApp && npm run generate:api`; generated-файлы вручную не исправлять.
+6. Обновить затронутую документацию.
+7. После source-изменений выполнить `./.tools/bin/graphify update .`.
+8. Запустить backend tests, `dotnet build` и frontend `npm run build`.
 
 Для live-проверки UI запускайте API и Angular и проверяйте наблюдаемый результат в браузере.
 

@@ -52,7 +52,7 @@ public class ExtraUnloadHostedService(
                 await foreach (var @event in _engine.RunAsync(request, runToken))
                 {
                     _runStateStore.ApplyEvent(@event);
-                    await _hubContext.Clients.All.SendAsync("status", @event, stoppingToken);
+                    await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
                     await PublishRunStateAsync(@event.CorrelationId, stoppingToken);
                 }
             }
@@ -148,6 +148,6 @@ public class ExtraUnloadHostedService(
             return;
         }
 
-        await _hubContext.Clients.All.SendAsync("run_status", state, cancellationToken);
+        await _hubContext.Clients.All.SendRunStatusAsync(state, cancellationToken);
     }
 }

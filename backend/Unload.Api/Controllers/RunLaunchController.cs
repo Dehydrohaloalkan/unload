@@ -35,9 +35,14 @@ public class RunLaunchController(
     private readonly ILogger<RunLaunchController> _logger = logger;
 
     [HttpPost]
-    public async Task<IActionResult> StartRunAsync([FromBody] RunStartRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType<RunAcceptedResponse>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RunAcceptedResponse>> StartRunAsync(
+        [FromBody] RunStartRequest request,
+        CancellationToken cancellationToken)
     {
-        return await ExecuteLaunchAsync("Run conflict", "Run launch", async () =>
+        return await ExecuteLaunchAsync<RunAcceptedResponse>("Run conflict", "Run launch", async () =>
         {
             var result = await _taskWorkflow.LaunchAsync(
                 CreateRunLaunchRequest(request),
@@ -52,7 +57,7 @@ public class RunLaunchController(
     }
 
     [HttpGet("preset/state")]
-    public IActionResult GetPresetState()
+    public ActionResult<PresetGateState> GetPresetState()
     {
         var state = _dailyWindowPolicy.Get();
         _logger.LogDebug(
@@ -65,9 +70,17 @@ public class RunLaunchController(
     }
 
     [HttpPost("preset")]
-    public async Task<IActionResult> RunPresetAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
+    [ProducesResponseType<ScriptTaskRunResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ScriptTaskRunResult>> RunPresetAsync(
+        [FromBody] AdminTaskRequest? request,
+        CancellationToken cancellationToken)
     {
-        return await ExecuteLaunchAsync("Preset task conflict", "Preset task", async () =>
+        return await ExecuteLaunchAsync<ScriptTaskRunResult>(
+            "Preset task conflict",
+            "Preset task",
+            async () =>
         {
             _logger.LogInformation("Preset task launch requested.");
             var alreadyCompleted = _dailyWindowPolicy.Get().PresetCompleted;
@@ -87,16 +100,25 @@ public class RunLaunchController(
     }
 
     [HttpGet("extra/banks")]
-    public async Task<IActionResult> GetExtraBanksAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ExtraBankInfo>>> GetExtraBanksAsync(
+        CancellationToken cancellationToken)
     {
         var banks = await _extraBanksService.GetBanksAsync(cancellationToken);
         return Ok(banks);
     }
 
     [HttpPost("extra")]
-    public async Task<IActionResult> RunExtraAsync([FromBody] AdminTaskRequest? request, CancellationToken cancellationToken)
+    [ProducesResponseType<RunAcceptedResponse>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RunAcceptedResponse>> RunExtraAsync(
+        [FromBody] AdminTaskRequest? request,
+        CancellationToken cancellationToken)
     {
-        return await ExecuteLaunchAsync("Extra task conflict", "Extra task", async () =>
+        return await ExecuteLaunchAsync<RunAcceptedResponse>(
+            "Extra task conflict",
+            "Extra task",
+            async () =>
         {
             _logger.LogInformation("Extra task launch requested.");
             var result = await _taskWorkflow.LaunchAsync(
@@ -112,7 +134,11 @@ public class RunLaunchController(
     }
 
     [HttpPost("{correlationId}/stop")]
-    public async Task<IActionResult> StopRunAsync(string correlationId, CancellationToken cancellationToken)
+    [ProducesResponseType<RunCancellationAcceptedResponse>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RunCancellationAcceptedResponse>> StopRunAsync(
+        string correlationId,
+        CancellationToken cancellationToken)
     {
         var cancelled = correlationId.StartsWith("extra-", StringComparison.OrdinalIgnoreCase)
             ? _extraWorkflow.TryCancel(correlationId)
@@ -131,7 +157,9 @@ public class RunLaunchController(
         _logger.LogInformation("Run cancellation requested. CorrelationId: {CorrelationId}", correlationId);
         await PublishRunStateAsync(correlationId, cancellationToken);
 
-        return Accepted($"/api/runs/{correlationId}", new { correlationId, status = "cancellation_requested" });
+        return Accepted(
+            $"/api/runs/{correlationId}",
+            new RunCancellationAcceptedResponse(correlationId, "cancellation_requested"));
     }
 
     private async Task PublishRunStateAsync(string correlationId, CancellationToken cancellationToken)
@@ -139,7 +167,7 @@ public class RunLaunchController(
         var runState = _runStateStore.Get(correlationId);
         if (runState is not null)
         {
-            await _hubContext.Clients.All.SendAsync("run_status", runState, cancellationToken);
+            await _hubContext.Clients.All.SendRunStatusAsync(runState, cancellationToken);
         }
     }
 
@@ -148,17 +176,17 @@ public class RunLaunchController(
         bool alreadyCompleted,
         CancellationToken cancellationToken)
     {
-        await _hubContext.Clients.All.SendAsync("preset_state", _dailyWindowPolicy.Get(), cancellationToken);
+        await _hubContext.Clients.All.SendPresetStateAsync(_dailyWindowPolicy.Get(), cancellationToken);
         if (alreadyCompleted)
         {
-            await _hubContext.Clients.All.SendAsync("preset_replayed", scriptResult, cancellationToken);
+            await _hubContext.Clients.All.SendPresetReplayedAsync(scriptResult, cancellationToken);
         }
     }
 
-    private async Task<IActionResult> ExecuteLaunchAsync(
+    private async Task<ActionResult<TResponse>> ExecuteLaunchAsync<TResponse>(
         string conflictTitle,
         string operationName,
-        Func<Task<IActionResult>> launch)
+        Func<Task<ActionResult<TResponse>>> launch)
     {
         try
         {
@@ -180,10 +208,10 @@ public class RunLaunchController(
         return new RunAcceptedResponse(
             correlationId,
             $"/api/runs/{correlationId}",
-            "/hubs/status",
-            "SubscribeRun",
-            "status",
-            "run_status",
+            RunStatusHubContract.HubPath,
+            RunStatusHubContract.SubscribeMethod,
+            RunStatusHubContract.StatusEvent,
+            RunStatusHubContract.RunStatusEvent,
             $"/api/runs/{correlationId}/stop");
     }
 

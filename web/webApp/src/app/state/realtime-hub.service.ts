@@ -7,6 +7,7 @@ import {
 import { Subject } from 'rxjs';
 import { PresetGateState, RunStatusInfo, RunnerEvent } from '../app.models';
 import { API_BASE_URL } from './api-base-url.token';
+import { REALTIME_HUB_CONTRACT } from './realtime-hub.contract';
 import { joinApiUrl } from './utils/api-url.util';
 
 const RECONNECT_DELAY_MS = 5000;
@@ -36,22 +37,22 @@ export class RealtimeHubService {
     }
 
     const connection = new HubConnectionBuilder()
-      .withUrl(joinApiUrl(this.baseUrl, '/hubs/status'))
+      .withUrl(joinApiUrl(this.baseUrl, REALTIME_HUB_CONTRACT.hubPath))
       // Бесконечные ретраи: стандартная политика сдаётся после ~40 секунд, и после
       // гибернации/долгого обрыва соединение умирало навсегда до ручного refresh.
       .withAutomaticReconnect({ nextRetryDelayInMilliseconds: () => RECONNECT_DELAY_MS })
       .build();
 
     // Доставляем все события всем подписчикам; разделение run/extra делают сторы по taskCode/correlationId.
-    connection.on('status', (event: RunnerEvent) => {
+    connection.on(REALTIME_HUB_CONTRACT.statusEvent, (event: RunnerEvent) => {
       this.statusEventsSubject.next(event);
     });
 
-    connection.on('run_status', (status: RunStatusInfo) => {
+    connection.on(REALTIME_HUB_CONTRACT.runStatusEvent, (status: RunStatusInfo) => {
       this.runStatusEventsSubject.next(status);
     });
 
-    connection.on('preset_state', (state: PresetGateState) => {
+    connection.on(REALTIME_HUB_CONTRACT.presetStateEvent, (state: PresetGateState) => {
       this.presetStateEventsSubject.next(state);
     });
 
@@ -112,7 +113,7 @@ export class RealtimeHubService {
     }
 
     try {
-      await this.connection.invoke('SubscribeRun', correlationId);
+      await this.connection.invoke(REALTIME_HUB_CONTRACT.subscribeMethod, correlationId);
     } catch (error) {
       if (isDevMode()) {
         console.error(error);

@@ -32,7 +32,7 @@ public class SenderFeedbackProjectionBackgroundService(
                     var state = _runStateStore.Get(feedback.CorrelationId);
                     if (state is not null)
                     {
-                        await _hubContext.Clients.All.SendAsync("run_status", state, stoppingToken);
+                        await _hubContext.Clients.All.SendRunStatusAsync(state, stoppingToken);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

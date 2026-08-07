@@ -1,0 +1,2373 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Unload.Api | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/catalog": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "operationId": "Catalog_GetCatalog",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "operationId": "Catalog_GetMembers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberCatalogItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberCatalogItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberCatalogItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/requeue": {
+      "post": {
+        "tags": [
+          "GatewayRequeue"
+        ],
+        "operationId": "GatewayRequeue_RequeueToGateway",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeueToGatewayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeueToGatewayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeueToGatewayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequeueToGatewayResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequeueToGatewayResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequeueToGatewayResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/today": {
+      "get": {
+        "tags": [
+          "RunHistory"
+        ],
+        "operationId": "RunHistory_GetTodayRuns",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/dashboard": {
+      "get": {
+        "tags": [
+          "RunHistory"
+        ],
+        "operationId": "RunHistory_GetWorkflowDashboard",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDashboard"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDashboard"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDashboard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/history": {
+      "get": {
+        "tags": [
+          "RunHistory"
+        ],
+        "operationId": "RunHistory_GetWorkflowHistory",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHistory"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHistory"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHistory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_StartRun",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStartRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStartRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "RunStatus"
+        ],
+        "operationId": "RunStatus_GetRuns",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RunStatusInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/preset/state": {
+      "get": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_GetPresetState",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetGateState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetGateState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetGateState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/preset": {
+      "post": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_RunPreset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptTaskRunResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptTaskRunResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptTaskRunResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/extra/banks": {
+      "get": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_GetExtraBanks",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtraBankInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtraBankInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtraBankInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/extra": {
+      "post": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_RunExtra",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdminTaskRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{correlationId}/stop": {
+      "post": {
+        "tags": [
+          "RunLaunch"
+        ],
+        "operationId": "RunLaunch_StopRun",
+        "parameters": [
+          {
+            "name": "correlationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCancellationAcceptedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCancellationAcceptedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCancellationAcceptedResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/active": {
+      "get": {
+        "tags": [
+          "RunStatus"
+        ],
+        "operationId": "RunStatus_GetActiveRun",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{correlationId}": {
+      "get": {
+        "tags": [
+          "RunStatus"
+        ],
+        "operationId": "RunStatus_GetRunByCorrelationId",
+        "parameters": [
+          {
+            "name": "correlationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/time": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_GetServerTime",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerTimeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerTimeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerTimeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_GetHealth",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/sender-feedback": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_PostSenderFeedback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SenderFeedbackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SenderFeedbackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SenderFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/gateway-upload": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_UploadFilesToGateway",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/IFormFile"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "memberName": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayUploadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayUploadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/download": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_DownloadOutputFile",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/octet-stream": { }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/output-files": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_ListOutputFiles",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutputFileInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutputFileInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutputFileInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/download-archive": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "System_DownloadOutputArchive",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/zip": { }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminTaskRequest": {
+        "type": "object",
+        "properties": {
+          "adminOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "publishToGateway": {
+            "type": "boolean",
+            "default": true
+          },
+          "selectedBanks": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CatalogGroupInfo": {
+        "required": [
+          "id",
+          "name",
+          "folder",
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogInfo": {
+        "required": [
+          "groups",
+          "members",
+          "targets",
+          "bigScriptTargetCodes"
+        ],
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogGroupInfo"
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogMemberInfo"
+            }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogTargetInfo"
+            }
+          },
+          "bigScriptTargetCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CatalogMemberInfo": {
+        "required": [
+          "id",
+          "name",
+          "code",
+          "fileExtension"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "fileExtension": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogTargetInfo": {
+        "required": [
+          "targetCode",
+          "groupId",
+          "memberId",
+          "groupName",
+          "groupFolder",
+          "groupCode",
+          "memberName",
+          "memberCode",
+          "memberFileExtension"
+        ],
+        "type": "object",
+        "properties": {
+          "targetCode": {
+            "type": "string"
+          },
+          "groupId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "memberId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "groupFolder": {
+            "type": "string"
+          },
+          "groupCode": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "memberCode": {
+            "type": "string"
+          },
+          "memberFileExtension": {
+            "type": "string"
+          }
+        }
+      },
+      "ExtraBankInfo": {
+        "required": [
+          "nrBank",
+          "bankName"
+        ],
+        "type": "object",
+        "properties": {
+          "nrBank": {
+            "type": "string"
+          },
+          "bankName": {
+            "type": "string"
+          }
+        }
+      },
+      "GatewayUploadFileResult": {
+        "required": [
+          "fileName",
+          "sizeBytes",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GatewayUploadResponse": {
+        "required": [
+          "requestId",
+          "correlationId",
+          "memberName",
+          "batchId",
+          "acceptedFiles",
+          "failedFiles",
+          "files"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "batchId": {
+            "type": "string"
+          },
+          "acceptedFiles": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failedFiles": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayUploadFileResult"
+            }
+          }
+        }
+      },
+      "IFormFile": {
+        "type": "string",
+        "format": "binary"
+      },
+      "MemberCatalogItem": {
+        "required": [
+          "code",
+          "name",
+          "targetCodes",
+          "activeRunCorrelationId",
+          "activeRunStatus"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "targetCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activeRunCorrelationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activeRunStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemberRunStatusInfo"
+              }
+            ]
+          }
+        }
+      },
+      "MemberRunLifecycleStatus": {
+        "type": "integer"
+      },
+      "MemberRunStatusInfo": {
+        "required": [
+          "memberName",
+          "status",
+          "lastStep",
+          "message",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "memberName": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MemberRunLifecycleStatus"
+          },
+          "lastStep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerStep"
+              }
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OutputFileInfo": {
+        "required": [
+          "fileName",
+          "filePath",
+          "modifiedAt",
+          "sizeBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "PersistenceComponentHealthResponse": {
+        "required": [
+          "status",
+          "isWritable",
+          "changedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "isWritable": {
+            "type": "boolean"
+          },
+          "changedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PresetGateState": {
+        "required": [
+          "enabled",
+          "pollingStarted",
+          "requiresPresetExecution",
+          "readyForPreset",
+          "presetCompleted",
+          "lastProbeValue",
+          "lastProbeAt",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "pollingStarted": {
+            "type": "boolean"
+          },
+          "requiresPresetExecution": {
+            "type": "boolean"
+          },
+          "readyForPreset": {
+            "type": "boolean"
+          },
+          "presetCompleted": {
+            "type": "boolean"
+          },
+          "lastProbeValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastProbeAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RequeueBatchResult": {
+        "required": [
+          "memberName",
+          "batchId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "memberName": {
+            "type": "string"
+          },
+          "batchId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SenderBatchStatus"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RequeueItem": {
+        "required": [
+          "taskCode",
+          "correlationId"
+        ],
+        "type": "object",
+        "properties": {
+          "taskCode": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "memberNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "filePaths": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RequeueItemResult": {
+        "required": [
+          "taskCode",
+          "correlationId",
+          "acceptedBatches",
+          "failedBatches",
+          "batches"
+        ],
+        "type": "object",
+        "properties": {
+          "taskCode": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "acceptedBatches": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failedBatches": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequeueBatchResult"
+            }
+          }
+        }
+      },
+      "RequeueToGatewayRequest": {
+        "required": [
+          "idempotencyKey",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequeueItem"
+            }
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "RequeueToGatewayResponse": {
+        "required": [
+          "requestId",
+          "acceptedBatches",
+          "failedBatches",
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "acceptedBatches": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failedBatches": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequeueItemResult"
+            }
+          }
+        }
+      },
+      "RunAcceptedResponse": {
+        "required": [
+          "correlationId",
+          "runStatusPath",
+          "hubPath",
+          "subscribeMethod",
+          "eventName",
+          "runStatusEventName",
+          "stopPath"
+        ],
+        "type": "object",
+        "properties": {
+          "correlationId": {
+            "type": "string"
+          },
+          "runStatusPath": {
+            "type": "string"
+          },
+          "hubPath": {
+            "type": "string"
+          },
+          "subscribeMethod": {
+            "type": "string"
+          },
+          "eventName": {
+            "type": "string"
+          },
+          "runStatusEventName": {
+            "type": "string"
+          },
+          "stopPath": {
+            "type": "string"
+          }
+        }
+      },
+      "RunCancellationAcceptedResponse": {
+        "required": [
+          "correlationId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "correlationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "RunLifecycleStatus": {
+        "type": "integer"
+      },
+      "RunnerStep": {
+        "type": "integer"
+      },
+      "RunOutputArtifactInfo": {
+        "required": [
+          "fileName",
+          "filePath",
+          "memberName",
+          "scriptCode",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scriptCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RunStartRequest": {
+        "required": [
+          "memberCodes"
+        ],
+        "type": "object",
+        "properties": {
+          "memberCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetCodes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "adminOverride": {
+            "type": "boolean",
+            "default": false
+          },
+          "publishToGateway": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "RunStatusInfo": {
+        "required": [
+          "correlationId",
+          "taskCode",
+          "status",
+          "targetCodes",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "correlationId": {
+            "type": "string"
+          },
+          "taskCode": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunLifecycleStatus"
+          },
+          "targetCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastStep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerStep"
+              }
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outputPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "memberStatuses": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MemberRunStatusInfo"
+            }
+          },
+          "outputArtifacts": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RunOutputArtifactInfo"
+            }
+          },
+          "workerStatuses": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RunWorkerStatusInfo"
+            }
+          },
+          "senderBatches": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SenderBatchStatusInfo"
+            }
+          },
+          "publishToGateway": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "RunWorkerStatusInfo": {
+        "required": [
+          "workerId",
+          "state",
+          "scriptCode",
+          "memberName",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "state": {
+            "type": "string"
+          },
+          "scriptCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "memberName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScriptTaskRunResult": {
+        "required": [
+          "taskName",
+          "correlationId",
+          "scriptsExecuted",
+          "filesWritten",
+          "outputPath",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "taskName": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "scriptsExecuted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "filesWritten": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "outputPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "SenderBatchStatus": {
+        "type": "integer"
+      },
+      "SenderBatchStatusInfo": {
+        "required": [
+          "batchId",
+          "memberName",
+          "status",
+          "updatedAt",
+          "sentFiles"
+        ],
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SenderBatchStatus"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sentFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SenderFileDispatchStateInfo"
+            }
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SenderFeedbackRequest": {
+        "required": [
+          "correlationId",
+          "memberName",
+          "batchId",
+          "kind",
+          "filePath",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "correlationId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "batchId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SenderFileDispatchStateInfo": {
+        "required": [
+          "filePath",
+          "sentAt"
+        ],
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ServerTimeResponse": {
+        "required": [
+          "serverLocalTime",
+          "serverUtcTime",
+          "utcOffsetMinutes",
+          "timeZoneId"
+        ],
+        "type": "object",
+        "properties": {
+          "serverLocalTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "serverUtcTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "utcOffsetMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "timeZoneId": {
+            "type": "string"
+          }
+        }
+      },
+      "SystemHealthResponse": {
+        "required": [
+          "status",
+          "runState",
+          "taskHistory"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "runState": {
+            "$ref": "#/components/schemas/PersistenceComponentHealthResponse"
+          },
+          "taskHistory": {
+            "$ref": "#/components/schemas/PersistenceComponentHealthResponse"
+          }
+        }
+      },
+      "TaskRecord": {
+        "required": [
+          "taskCode",
+          "startedAt",
+          "completedAt",
+          "correlationId",
+          "message",
+          "scriptsExecuted",
+          "filesWritten",
+          "outputPath"
+        ],
+        "type": "object",
+        "properties": {
+          "taskCode": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "correlationId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scriptsExecuted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "filesWritten": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "outputPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "WorkflowDashboard": {
+        "required": [
+          "presetState",
+          "hasRunToday",
+          "hasExtraToday",
+          "runLastCompletedAt",
+          "extraLastCompletedAt",
+          "todayHistory"
+        ],
+        "type": "object",
+        "properties": {
+          "presetState": {
+            "$ref": "#/components/schemas/PresetGateState"
+          },
+          "hasRunToday": {
+            "type": "boolean"
+          },
+          "hasExtraToday": {
+            "type": "boolean"
+          },
+          "runLastCompletedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "extraLastCompletedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "todayHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskRecord"
+            }
+          }
+        }
+      },
+      "WorkflowHistory": {
+        "required": [
+          "fromDayInclusive",
+          "toDayInclusive",
+          "days",
+          "runs",
+          "taskHistory"
+        ],
+        "type": "object",
+        "properties": {
+          "fromDayInclusive": {
+            "type": "string",
+            "format": "date"
+          },
+          "toDayInclusive": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunStatusInfo"
+            }
+          },
+          "taskHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskRecord"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Catalog"
+    },
+    {
+      "name": "GatewayRequeue"
+    },
+    {
+      "name": "RunHistory"
+    },
+    {
+      "name": "RunLaunch"
+    },
+    {
+      "name": "RunStatus"
+    },
+    {
+      "name": "System"
+    }
+  ]
+}

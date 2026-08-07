@@ -5,8 +5,10 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "generate:api": "ng-openapi-gen",
+    "check:api": "node tools/check-generated-api.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "npm run check:api && ng test"
   },
   "prettier": {
     "printWidth": 100,
@@ -43,6 +45,7 @@
     "@angular/compiler-cli": "^21.1.0",
     "@tailwindcss/postcss": "^4.1.12",
     "jsdom": "^27.1.0",
+    "ng-openapi-gen": "1.0.5",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.12",
     "typescript": "~5.9.2",
