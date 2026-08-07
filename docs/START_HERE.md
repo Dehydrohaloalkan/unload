@@ -7,30 +7,32 @@
 
 ## 1. Что понадобится
 
-- .NET SDK 10;
-- Node.js и npm, совместимые с `web/webApp/package-lock.json`;
+- .NET SDK из `global.json`;
+- Node.js из `.node-version` и npm, совместимый с `web/webApp/package-lock.json`;
 - свободные порты `5000` для API и `4200` для Angular dev-server;
 - запуск команд из корня репозитория.
 
 Development-сборка использует `StubDatabaseClient`, поэтому реальная база данных для первого
 локального запуска не нужна. FTP требуется только для проверки фактической доставки в gateway.
 
-## 2. Подготовить зависимости
+## 2. Выполнить полную проверку
 
 Из корня репозитория:
 
 ```bash
-dotnet restore
-cd web/webApp
-npm ci
-cd ../..
+./tools/verify.sh
 ```
+
+Скрипт восстанавливает backend-зависимости, проверяет формат и analyzers, собирает backend,
+запускает оба backend test project, устанавливает frontend-зависимости через `npm ci`, проверяет
+frontend tests и актуальность сгенерированного API client, затем выполняет production-сборку Angular.
+Успешный признак — сообщение `Verification passed.` и exit code `0`.
 
 `npm ci` использует зафиксированный lockfile и не должен переписывать версии зависимостей.
 
-## 3. Проверить сборку
+## 3. Разобрать отдельную ошибку
 
-Backend и frontend проверяются независимо:
+Если полная проверка упала, нужную часть можно повторить независимо:
 
 ```bash
 dotnet build
@@ -47,7 +49,7 @@ npm run build
 Backend-тесты:
 
 ```bash
-dotnet test tests/Unload.Backend.Tests/Unload.Backend.Tests.csproj
+dotnet test unload.slnx
 ```
 
 Тесты обязаны использовать собственные временные каталоги. Не направляйте тестовые fixtures в
@@ -129,7 +131,7 @@ npm start
    `cd web/webApp && npm run generate:api`; generated-файлы вручную не исправлять.
 6. Обновить затронутую документацию.
 7. После source-изменений выполнить `./.tools/bin/graphify update .`.
-8. Запустить backend tests, `dotnet build` и frontend `npm run build`.
+8. Запустить `./tools/verify.sh`.
 
 Для live-проверки UI запускайте API и Angular и проверяйте наблюдаемый результат в браузере.
 

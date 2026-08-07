@@ -388,15 +388,20 @@ Ignored-каталог старого Console не очищался: найде�
 
 Приоритет: средний.
 
-- [ ] Создать единый `verify`-скрипт.
-- [ ] Добавить CI для backend build/test и frontend build/test.
-- [ ] Добавить format/analyzer checks.
-- [ ] Добавить `Directory.Build.props`.
-- [ ] Добавить `Directory.Packages.props` и выровнять версии `Microsoft.Extensions.*`.
-- [ ] Добавить `global.json` для фиксации .NET SDK.
-- [ ] Проверять lockfile через `npm ci`.
-- [ ] Настроить контролируемые dependency-update PR.
-- [ ] После source-изменений обновлять graphify через `./.tools/bin/graphify update .`.
+- [x] Создать единый `verify`-скрипт.
+- [x] Добавить CI для backend build/test и frontend build/test.
+- [x] Добавить format/analyzer checks.
+- [x] Добавить `Directory.Build.props`.
+- [x] Добавить `Directory.Packages.props` и выровнять версии `Microsoft.Extensions.*`.
+- [x] Добавить `global.json` для фиксации .NET SDK.
+- [x] Проверять lockfile через `npm ci`.
+- [x] Настроить контролируемые dependency-update PR.
+- [x] После source-изменений обновлять graphify через `./.tools/bin/graphify update .`.
+
+Выполнено 7 августа 2026 года. Локальная и CI-проверка используют `tools/verify.sh`; workflow не
+публикует и не разворачивает приложение. NuGet-версии централизованы без общего массового upgrade,
+а `Microsoft.Extensions.*` выровнены до `10.0.8`. Analyzer check использует стандартный набор
+правил текущего SDK без отдельного списка подавленных legacy-диагностик.
 
 Критерий готовности: потенциально опасное изменение нельзя незаметно передать дальше с красными тестами или сборкой.
 

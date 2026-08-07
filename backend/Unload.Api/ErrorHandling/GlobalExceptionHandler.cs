@@ -73,7 +73,7 @@ public class GlobalExceptionHandler(
         };
     }
 
-    private  record ExceptionMapping(
+    private record ExceptionMapping(
         int StatusCode,
         string Title,
         string ErrorCode,

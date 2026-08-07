@@ -300,7 +300,7 @@ public class JsonCatalogService(string catalogPath, string scriptsDirectory) : I
         string fileExtension,
         IReadOnlyList<string> groupCodes)
     {
-        var extensionSuffix = fileExtension.StartsWith(".", StringComparison.Ordinal)
+        var extensionSuffix = fileExtension.StartsWith('.')
             ? fileExtension
             : $".{fileExtension}";
         var groupCodeMask = groupCodes.Count > 0 ? groupCodes[0] : "*";

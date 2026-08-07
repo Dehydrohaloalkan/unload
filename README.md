@@ -434,6 +434,15 @@ cd .\web\webApp
 npm start
 ```
 
+Полная проверка backend и frontend перед передачей изменений:
+
+```bash
+./tools/verify.sh
+```
+
+Команда использует зафиксированные версии SDK и lockfile, запускает format/analyzers, обе сборки,
+backend/frontend tests и проверку актуальности сгенерированного API client.
+
 ## Ограничения
 
 - Одновременно может выполняться только один активный `run`.

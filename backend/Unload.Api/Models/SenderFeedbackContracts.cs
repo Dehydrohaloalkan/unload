@@ -1,6 +1,6 @@
 namespace Unload.Api.Models;
 
-public  record SenderFeedbackRequest(
+public record SenderFeedbackRequest(
     string CorrelationId,
     string MemberName,
     string BatchId,

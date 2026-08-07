@@ -58,7 +58,7 @@ public class FtpGatewayBackgroundService(
             using var ftp = CreateFtpClient();
             await ftp.Connect(cancellationToken);
 
-            var targetDir  = _options.Ftp.RemoteDirectory.TrimEnd('/');
+            var targetDir = _options.Ftp.RemoteDirectory.TrimEnd('/');
             var stagingDir = ResolveStagingDir(targetDir);
 
             // Phase 1: upload all files fully into staging (handler does not watch staging)
@@ -76,7 +76,7 @@ public class FtpGatewayBackgroundService(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var stagingPath = $"{stagingDir}/{file.FileName}";
-                var targetPath  = $"{targetDir}/{file.FileName}";
+                var targetPath = $"{targetDir}/{file.FileName}";
                 await ftp.Rename(stagingPath, targetPath, cancellationToken);
                 _logger.LogInformation(
                     "File published: {FileName} (CorrelationId: {CorrelationId})",

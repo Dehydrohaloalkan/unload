@@ -39,17 +39,17 @@ public sealed class GitSyncPlanner(
                     AddDelete(change.OldPath!);
                     break;
                 case GitChangeKind.Rename:
-                {
-                    var oldTarget = pathMapper.ApplyRenames(change.OldPath!, configuration.Renames);
-                    var newTarget = pathMapper.ApplyRenames(change.NewPath!, configuration.Renames);
-                    if (!string.Equals(oldTarget, newTarget, StringComparison.OrdinalIgnoreCase))
                     {
-                        AddDelete(change.OldPath!);
-                    }
+                        var oldTarget = pathMapper.ApplyRenames(change.OldPath!, configuration.Renames);
+                        var newTarget = pathMapper.ApplyRenames(change.NewPath!, configuration.Renames);
+                        if (!string.Equals(oldTarget, newTarget, StringComparison.OrdinalIgnoreCase))
+                        {
+                            AddDelete(change.OldPath!);
+                        }
 
-                    AddWrite(change.NewPath!);
-                    break;
-                }
+                        AddWrite(change.NewPath!);
+                        break;
+                    }
                 default:
                     throw new ArgumentOutOfRangeException(nameof(change.Kind), change.Kind, null);
             }

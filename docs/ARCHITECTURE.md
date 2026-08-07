@@ -682,6 +682,21 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 
 При обнаружении расхождения код является источником фактического текущего поведения, а документ должен быть исправлен. Планируемое поведение необходимо явно помечать как план, а не описывать в настоящем времени.
 
+### 18.1. Единый контур проверки
+
+Каноническая проверка чистой рабочей копии запускается из корня командой
+`./tools/verify.sh`. Она последовательно выполняет restore, format/analyzer check, build и tests
+для решения .NET, затем `npm ci`, frontend tests вместе с проверкой generated API client и
+production build Angular. Локальная команда и `.github/workflows/verify.yml` используют один и тот
+же скрипт, поэтому CI не содержит отдельной, постепенно расходящейся последовательности команд.
+
+Общие .NET-настройки находятся в `Directory.Build.props`, версии NuGet-пакетов — в
+`Directory.Packages.props`, версия SDK — в `global.json`, версия Node.js — в `.node-version`.
+Analyzer check использует стандартный набор правил текущего .NET SDK без специального списка
+подавленных legacy-диагностик. Dependabot создаёт отдельные еженедельные PR для NuGet и npm, а их
+корректность подтверждает тот же workflow. Workflow только проверяет код и не выполняет публикацию
+или deployment.
+
 ## 19. Известные границы текущей реализации
 
 - `DailyWindowPolicy` использует локальное время `TimeProvider.System` и in-memory state; корректность runtime по-прежнему зависит от timezone сервера.
