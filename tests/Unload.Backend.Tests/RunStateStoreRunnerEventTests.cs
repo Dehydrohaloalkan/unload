@@ -5,6 +5,36 @@ namespace Unload.Backend.Tests;
 
 public class RunStateStoreRunnerEventTests
 {
+    [Theory]
+    [InlineData(TerminalMutation.Failed)]
+    [InlineData(TerminalMutation.CancellationRequested)]
+    [InlineData(TerminalMutation.Cancelled)]
+    public void TerminalMutation_ForUnknownRunThrows(TerminalMutation mutation)
+    {
+        using var fixture = new RunStateStoreFixture();
+
+        var action = () =>
+        {
+            switch (mutation)
+            {
+                case TerminalMutation.Failed:
+                    fixture.Store.SetFailed("missing", "failed");
+                    break;
+                case TerminalMutation.CancellationRequested:
+                    fixture.Store.SetCancellationRequested("missing", "stop requested");
+                    break;
+                case TerminalMutation.Cancelled:
+                    fixture.Store.SetCancelled("missing", "cancelled");
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mutation));
+            }
+        };
+
+        var exception = Assert.Throws<KeyNotFoundException>(action);
+        Assert.Contains("missing", exception.Message);
+    }
+
     [Fact]
     public void SetStarted_CreatesRunningStateWithPendingMembersAndIdleWorkers()
     {
@@ -196,5 +226,12 @@ public class RunStateStoreRunnerEventTests
         Assert.Same(terminal, fixture.Store.Get("run-1"));
         Assert.Equal(RunLifecycleStatus.Completed, terminal.Status);
         Assert.Equal("done", terminal.Message);
+    }
+
+    public enum TerminalMutation
+    {
+        Failed,
+        CancellationRequested,
+        Cancelled
     }
 }

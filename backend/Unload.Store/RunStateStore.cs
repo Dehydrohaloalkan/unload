@@ -17,8 +17,6 @@ public class RunStateStore
         PropertyNameCaseInsensitive = true
     };
     private const string TaskCodeRun = "run";
-    private const string TaskCodePreset = "preset";
-    private const string TaskCodeExtra = "extra";
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
     private readonly JsonFileStore<RunStatePersistenceSnapshot> _store;
     private readonly RunStateProjector _projector;
@@ -50,30 +48,13 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(taskCode);
 
         var now = DateTimeOffset.UtcNow;
-        var memberStatuses = memberNames
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                static x => x,
-                x => new MemberRunStatusInfo(
-                    x,
-                    MemberRunLifecycleStatus.Pending,
-                    LastStep: null,
-                    Message: "Awaiting processing.",
-                    UpdatedAt: now),
-                StringComparer.OrdinalIgnoreCase);
-        var snapshot = new RunStatusInfo(
+        var snapshot = _projector.CreateStarted(
             correlationId,
+            targetCodes,
+            memberNames,
+            publishToGateway,
             taskCode,
-            RunLifecycleStatus.Running,
-            targetCodes.ToArray(),
-            now,
-            now,
-            Message: "Run started.",
-            MemberStatuses: memberStatuses,
-            OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-            WorkerStatuses: _projector.CreateInitialWorkerStatuses(now),
-            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            PublishToGateway: publishToGateway);
+            now);
 
         _runs[correlationId] = snapshot;
         PersistSnapshot();
@@ -87,22 +68,16 @@ public class RunStateStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         var now = DateTimeOffset.UtcNow;
-        UpsertRun(
+        MutateRun(
             correlationId,
-            () => new RunStatusInfo(
-                CorrelationId: correlationId,
-                TaskCode: TaskCodeRun,
-                Status: RunLifecycleStatus.Running,
-                PublishToGateway: true,
-                TargetCodes: Array.Empty<string>(),
-                CreatedAt: now,
-                UpdatedAt: now,
-                Message: "Run started.",
-                MemberStatuses: new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
-                OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-                WorkerStatuses: _projector.CreateInitialWorkerStatuses(now),
-                SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase)),
-            current => _projector.UpdateForRunning(current, now));
+            addFactory: () => _projector.CreateStarted(
+                correlationId,
+                targetCodes: Array.Empty<string>(),
+                memberNames: Array.Empty<string>(),
+                publishToGateway: true,
+                taskCode: TaskCodeRun,
+                now),
+            updateFactory: current => _projector.UpdateForRunning(current, now));
         PersistSnapshot();
     }
 
@@ -116,10 +91,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(@event.CorrelationId);
 
         var now = DateTimeOffset.UtcNow;
-        UpsertRun(
+        MutateRun(
             @event.CorrelationId,
-            () => _projector.CreateFromEvent(@event, now),
-            current => _projector.ApplyRunnerEvent(current, @event, now));
+            addFactory: () => _projector.CreateFromEvent(@event, now),
+            updateFactory: current => _projector.ApplyRunnerEvent(current, @event, now));
         PersistSnapshot();
     }
 
@@ -130,10 +105,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(feedback.BatchId);
 
         var now = DateTimeOffset.UtcNow;
-        UpsertRun(
+        MutateRun(
             feedback.CorrelationId,
-            () => _projector.CreateFromSenderFeedback(feedback, now),
-            current => _projector.ApplySenderFeedback(current, feedback, now));
+            addFactory: () => _projector.CreateFromSenderFeedback(feedback, now),
+            updateFactory: current => _projector.ApplySenderFeedback(current, feedback, now));
         PersistSnapshot();
     }
 
@@ -147,7 +122,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        UpdateExistingRun(correlationId, current => _projector.UpdateToFailed(current, message, now));
+        MutateRun(
+            correlationId,
+            addFactory: null,
+            updateFactory: current => _projector.UpdateToFailed(current, message, now));
         PersistSnapshot();
     }
 
@@ -161,7 +139,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        UpdateExistingRun(correlationId, current => _projector.UpdateToCancellationRequested(current, message, now));
+        MutateRun(
+            correlationId,
+            addFactory: null,
+            updateFactory: current => _projector.UpdateToCancellationRequested(current, message, now));
         PersistSnapshot();
     }
 
@@ -175,7 +156,10 @@ public class RunStateStore
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var now = DateTimeOffset.UtcNow;
-        UpdateExistingRun(correlationId, current => _projector.UpdateToCancelled(current, message, now));
+        MutateRun(
+            correlationId,
+            addFactory: null,
+            updateFactory: current => _projector.UpdateToCancelled(current, message, now));
         PersistSnapshot();
     }
 
@@ -231,47 +215,9 @@ public class RunStateStore
         return removed;
     }
 
-    internal static string ResolveTaskCodeByCorrelationId(string correlationId)
-    {
-        var normalized = correlationId?.Trim() ?? string.Empty;
-        if (normalized.StartsWith("extra-", StringComparison.OrdinalIgnoreCase))
-        {
-            return TaskCodeExtra;
-        }
-
-        if (normalized.StartsWith("preset-", StringComparison.OrdinalIgnoreCase))
-        {
-            return TaskCodePreset;
-        }
-
-        return TaskCodeRun;
-    }
-
-    private RunStatusInfo UpdateExistingRun(string correlationId, Func<RunStatusInfo, RunStatusInfo> updater)
-    {
-        while (true)
-        {
-            if (!_runs.TryGetValue(correlationId, out var current))
-            {
-                throw new KeyNotFoundException($"Run '{correlationId}' was not found.");
-            }
-
-            var updated = updater(current);
-            if (ReferenceEquals(updated, current))
-            {
-                return current;
-            }
-
-            if (_runs.TryUpdate(correlationId, updated, current))
-            {
-                return updated;
-            }
-        }
-    }
-
-    private RunStatusInfo UpsertRun(
+    private RunStatusInfo MutateRun(
         string correlationId,
-        Func<RunStatusInfo> addFactory,
+        Func<RunStatusInfo>? addFactory,
         Func<RunStatusInfo, RunStatusInfo> updateFactory)
     {
         while (true)
@@ -290,6 +236,11 @@ public class RunStateStore
                 }
 
                 continue;
+            }
+
+            if (addFactory is null)
+            {
+                throw new KeyNotFoundException($"Run '{correlationId}' was not found.");
             }
 
             var created = addFactory();
@@ -346,5 +297,4 @@ public class RunStateStore
         string Version,
         DateTimeOffset SavedAt,
         IReadOnlyCollection<RunStatusInfo> Runs);
-
 }

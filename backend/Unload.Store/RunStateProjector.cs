@@ -17,6 +17,41 @@ internal sealed class RunStateProjector
         return _workerProjector.CreateInitial(now);
     }
 
+    public RunStatusInfo CreateStarted(
+        string correlationId,
+        IReadOnlyCollection<string> targetCodes,
+        IReadOnlyCollection<string> memberNames,
+        bool publishToGateway,
+        string taskCode,
+        DateTimeOffset now)
+    {
+        var memberStatuses = memberNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                static memberName => memberName,
+                memberName => new MemberRunStatusInfo(
+                    memberName,
+                    MemberRunLifecycleStatus.Pending,
+                    LastStep: null,
+                    Message: "Awaiting processing.",
+                    UpdatedAt: now),
+                StringComparer.OrdinalIgnoreCase);
+
+        return new RunStatusInfo(
+            correlationId,
+            taskCode,
+            RunLifecycleStatus.Running,
+            targetCodes.ToArray(),
+            now,
+            now,
+            Message: "Run started.",
+            MemberStatuses: memberStatuses,
+            OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
+            WorkerStatuses: CreateInitialWorkerStatuses(now),
+            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
+            PublishToGateway: publishToGateway);
+    }
+
     public RunStatusInfo CreateFromEvent(RunnerEvent @event, DateTimeOffset now)
     {
         return new RunStatusInfo(
@@ -71,7 +106,7 @@ internal sealed class RunStateProjector
     {
         return new RunStatusInfo(
             CorrelationId: feedback.CorrelationId,
-            TaskCode: RunStateStore.ResolveTaskCodeByCorrelationId(feedback.CorrelationId),
+            TaskCode: RunTaskCodeResolver.Resolve(feedback.CorrelationId),
             Status: RunLifecycleStatus.Running,
             PublishToGateway: true,
             TargetCodes: Array.Empty<string>(),

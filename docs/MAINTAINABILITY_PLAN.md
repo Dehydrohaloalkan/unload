@@ -247,6 +247,7 @@ RunArtifactProjector       — список созданных файлов
 RunWorkerProjector         — состояния workers
 GatewayFeedbackProjector   — применение sender-feedback
 RunCompletionPolicy        — чистое правило terminal-перехода
+RunTaskCodeResolver        — fallback task code для неизвестного feedback
 ```
 
 Шаги:
@@ -255,8 +256,8 @@ RunCompletionPolicy        — чистое правило terminal-перехо
 - [x] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
 - [x] Выделить gateway feedback projection.
 - [x] Выделить простые member, artifact и worker projections.
-- [ ] Оставить один публичный способ изменения state.
-- [ ] Убрать распознавание task type по префиксу correlation ID или изолировать его в одном месте.
+- [x] Оставить `RunStateStore` единственным публичным фасадом изменения state и один CAS-путь для upsert/update.
+- [x] Изолировать распознавание task type по префиксу correlation ID в одном месте.
 - [ ] Привести внутренние имена к единой терминологии execution/run/extra.
 
 Критерий готовности: каждый класс решает одну задачу, правила завершения читаются отдельно и полностью покрыты тестами.
@@ -473,8 +474,13 @@ tests/
   дедупликации, terminal feedback и неизменности исходной карты.
 - `RunMemberProjector`, `RunArtifactProjector` и `RunWorkerProjector` выделены в небольшие
   самостоятельные правила и покрыты 12 прямыми test cases; recovery использует тот же worker reset.
+- `RunStateStore` делегирует создание снимков в projector, а upsert/update объединены в один
+  `MutateRun`; публичные доменные методы сохранены для читаемости вызывающего кода. Три terminal
+  mutation по-прежнему явно отклоняют неизвестный correlation ID.
+- Prefix fallback для feedback неизвестного запуска изолирован в `RunTaskCodeResolver` и покрыт
+  5 прямыми test cases, включая регистр, пробелы и неизвестный префикс.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 91/91 относящихся к плану tests passed.
+- Штатный VSTest проходит: 99/99 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -482,8 +488,8 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Завершить фасад `RunStateStore`: проверить и сократить внутренние пути изменения state,
-> затем изолировать распознавание task type. Persistence оставить отдельным следующим этапом.
+> Перед persistence провести узкий аудит внутренней терминологии execution/run/extra и менять
+> только действительно неоднозначные имена. Затем перейти к отдельному этапу persistence.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
