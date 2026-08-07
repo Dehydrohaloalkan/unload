@@ -183,9 +183,9 @@ Fixtures используют отдельный scratch-каталог; `output
 
 ### 4.2 Frontend-тесты
 
-- [ ] Покрыть `history-projection.util.ts` табличными тестами;
-- [ ] покрыть проекции main и extra history;
-- [ ] покрыть gateway delivery и requeue summary;
+- [x] Покрыть `history-projection.util.ts` табличными тестами;
+- [x] покрыть проекции main и extra history;
+- [x] покрыть gateway delivery и requeue summary;
 - [ ] покрыть восстановление store после refresh;
 - [ ] покрыть fallback polling при недоступном SignalR;
 - [ ] добавить component-тесты запуска, отмены и отображения ошибки.
@@ -307,11 +307,15 @@ GatewayRequeueController
 
 ### Frontend
 
-- [ ] Разделить history projection для `run`, `extra` и gateway.
-- [ ] Сохранить orchestration в facade, но вынести чистые вычисления.
-- [ ] Уменьшить количество обязанностей `workflow.facade.ts`.
-- [ ] Не переносить бизнес-правила с backend во frontend.
-- [ ] Помечать generated API-код как нередактируемый.
+- [x] Разделить history projection для `run`, `extra` и gateway.
+- [x] Сохранить orchestration в facade, но вынести чистые вычисления.
+- [x] Уменьшить количество обязанностей `workflow.facade.ts`.
+- [x] Не переносить бизнес-правила с backend во frontend.
+- [x] Помечать generated API-код как нередактируемый.
+
+Правило generated-кода: когда на этапе 7 появится OpenAPI client, он размещается в
+`src/app/generated/`, каждый файл содержит `AUTO-GENERATED / DO NOT EDIT`, а изменения вносятся
+через schema/generator. Текущий `ApiClientService` написан вручную и generated не считается.
 
 Критерий готовности: изменение одного пользовательского сценария затрагивает ограниченный набор очевидных файлов.
 
@@ -512,6 +516,14 @@ tests/
   operation-specific ProblemDetails titles сохранены и защищены четырьмя contract test cases.
 - Построение launch requests, accepted/script responses и публикация preset state вынесены в
   именованные private helpers; новых use-case сервисов и интерфейсов не добавлено.
+- Монолитный frontend `history-projection.util.ts` разделён на main, extra, gateway/requeue и
+  models; прежний файл оставлен маленьким стабильным фасадом импорта и объединяет результаты.
+- Семь characterization test cases фиксируют main delivery, extra hierarchy, accepted requeue
+  paths и summary. Исправлен отсутствующий `ConfirmationService` в старом App test setup;
+  штатный frontend test runner проходит 9/9.
+- Чистые presentation-вычисления из `WorkflowStore` вынесены в `workflow-view-state.util.ts`:
+  bank name map, extra completion timestamp, доступность main/extra и UI phase. Семь test cases
+  фиксируют эти правила; orchestration и координация stores остались в facade.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
 - Штатный VSTest проходит: 114/114 относящихся к плану test cases, 116/116 во всём проекте.
 - Production frontend `npm run build` проходит.
@@ -519,10 +531,10 @@ tests/
   Не исправлять без отдельного бизнес-решения.
 - `output/` и `output/_state` не очищались.
 
-Backend-часть этапа 6 завершена. Следующая рекомендуемая задача:
+Этап 6 завершён. Штатный frontend test runner проходит 16/16. Следующая рекомендуемая задача:
 
-> Начать frontend-часть этапа 6 с characterization-тестов `history-projection.util.ts`, затем
-> разделить чистые проекции `run`, `extra` и gateway без изменения отображения UI.
+> Перейти к этапу 7: сначала включить публикацию OpenAPI schema и зафиксировать существующие
+> HTTP/SignalR contracts тестами до генерации TypeScript client.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

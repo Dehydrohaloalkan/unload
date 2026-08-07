@@ -135,6 +135,13 @@ Dev-server использует `proxy.conf.json`, поэтому запросы
 - `src/app/components/details-preset-panel.component.ts` — drawer-детали этапа 2.
 - `src/app/components/details-run-panel.component.ts` — drawer-детали этапа 3.
 - `src/app/components/details-extra-panel.component.ts` — drawer-детали этапа 4.
+- `src/app/state/utils/history-projection.util.ts` — стабильная точка сборки истории;
+  main, extra и gateway/requeue проекции находятся в соседних специализированных util-файлах.
+- `src/app/state/utils/workflow-view-state.util.ts` — чистые presentation-вычисления facade.
+
+Будущий сгенерированный OpenAPI client размещается в `src/app/generated/`. Каждый generated-файл
+должен содержать заголовок `AUTO-GENERATED / DO NOT EDIT`; ручные изменения вносятся в schema или
+настройку generator, а не в результат генерации. Текущий `ApiClientService` остаётся ручным кодом.
 
 ## Контракты API
 

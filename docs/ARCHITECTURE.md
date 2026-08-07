@@ -501,8 +501,16 @@ in-memory состояния и его записи. Если несколько
 | `CatalogStore` | каталог и доступные мемберы |
 | `SelectionStore` | выбранные targets и browser persistence |
 | `OutputFilesStore` | листинг файлов для истории |
+| `history-projection.util.ts` | стабильный фасад сборки и сортировки history nodes |
+| `run-history-projection.util.ts` | чистая проекция main run и его member-файлов |
+| `extra-history-projection.util.ts` | чистая иерархия extra: скрипт → банк → файл |
+| `gateway-history-projection.util.ts` | delivery status, подтверждённые requeue paths и summary |
+| `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
 
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.
+`WorkflowStore` сохраняет orchestration и координацию stores; чистые presentation-преобразования
+находятся в util-файлах и проверяются без Angular DI. Бизнес-допуск всё равно принимает backend:
+frontend availability управляет только состоянием кнопок и не заменяет `TaskWorkflow`.
 
 ### 13.2. Bootstrap страницы
 

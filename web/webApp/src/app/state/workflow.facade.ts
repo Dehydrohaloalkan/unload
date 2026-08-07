@@ -1,6 +1,6 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
-import { RequeueItem, RunLifecycleStatus } from '../app.models';
+import { RequeueItem } from '../app.models';
 import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
 import { ApiClientService } from './api-client.service';
@@ -16,6 +16,12 @@ import { SelectionStore } from './selection.store';
 import { ServerClockService } from './server-clock.service';
 import { toErrorMessage } from './utils/error-message.util';
 import { buildMemberGroups } from './utils/member-projections.util';
+import {
+  buildExtraBankNamesByCode,
+  canUseMainOrExtra,
+  resolveExtraLastCompletedAt,
+  resolveWorkflowPhase,
+} from './utils/workflow-view-state.util';
 
 /**
  * Фасад поверх signalStore'ов: оркестрирует bootstrap, прокидывает удобные
@@ -68,15 +74,9 @@ export class WorkflowStore {
   readonly extraBanks = this.extraStore.banks;
   readonly extraBanksLoading = this.extraStore.banksLoading;
   // Код банка (NrBank) → читаемое название; для подмены кода названием в истории extra.
-  readonly extraBankNamesByCode = computed<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
-    for (const bank of this.extraStore.banks()) {
-      if (bank.nrBank) {
-        map[bank.nrBank] = bank.bankName;
-      }
-    }
-    return map;
-  });
+  readonly extraBankNamesByCode = computed(() =>
+    buildExtraBankNamesByCode(this.extraStore.banks()),
+  );
 
   readonly activeRun = this.runStore.activeRun;
   readonly trackedCorrelationId = this.runStore.trackedCorrelationId;
@@ -97,11 +97,10 @@ export class WorkflowStore {
    * источник, что и флаг running, поэтому running и completedAt сходятся согласованно.
    */
   readonly extraLastCompletedAt = computed<string | null>(() => {
-    const run = this.activeExtraRun();
-    if (run && run.status === RunLifecycleStatus.Completed) {
-      return run.updatedAt;
-    }
-    return this.dashboardStore.extraLastCompletedAt();
+    return resolveExtraLastCompletedAt(
+      this.activeExtraRun(),
+      this.dashboardStore.extraLastCompletedAt(),
+    );
   });
   readonly todayHistory = this.dashboardStore.todayHistory;
   readonly todayRuns = this.dashboardStore.todayRuns;
@@ -123,13 +122,7 @@ export class WorkflowStore {
 
   readonly canRunPreset = computed(() => this.presetStore.canRunPreset(this.runStore.isRunBusy()));
 
-  readonly canRunMainOrExtra = computed(() => {
-    const preset = this.presetStore.presetState();
-    if (!preset) {
-      return false;
-    }
-    return !preset.requiresPresetExecution || preset.presetCompleted;
-  });
+  readonly canRunMainOrExtra = computed(() => canUseMainOrExtra(this.presetStore.presetState()));
 
   readonly canStartRun = computed(
     () =>
@@ -150,9 +143,7 @@ export class WorkflowStore {
       !this.extraStore.extraTask().running,
   );
 
-  readonly phase = computed<'gate' | 'tasks'>(() =>
-    this.presetStore.presetState()?.presetCompleted ? 'tasks' : 'gate',
-  );
+  readonly phase = computed(() => resolveWorkflowPhase(this.presetStore.presetState()));
 
   init(): void {
     if (this.initialized) {
