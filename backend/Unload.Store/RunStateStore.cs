@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Unload.Core;
 
@@ -11,14 +10,9 @@ namespace Unload.Store;
 /// </summary>
 public class RunStateStore
 {
-    private const string PersistenceVersion = "1";
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
     private const string TaskCodeRun = "run";
     private readonly ConcurrentDictionary<string, RunStatusInfo> _runs = new(StringComparer.OrdinalIgnoreCase);
-    private readonly JsonFileStore<RunStatePersistenceSnapshot> _store;
+    private readonly RunStatePersistence _persistence;
     private readonly RunStateProjector _projector;
 
     public RunStateStore(
@@ -28,7 +22,7 @@ public class RunStateStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
         _projector = new RunStateProjector(workerCount);
-        _store = new JsonFileStore<RunStatePersistenceSnapshot>(stateFilePath, JsonOptions, logger);
+        _persistence = new RunStatePersistence(stateFilePath, logger);
         LoadFromDisk();
     }
 
@@ -254,7 +248,7 @@ public class RunStateStore
     private void LoadFromDisk()
     {
         var recoveredAt = DateTimeOffset.UtcNow;
-        var snapshot = _store.Load();
+        var snapshot = _persistence.Load();
         if (snapshot?.Runs is null)
         {
             return;
@@ -269,11 +263,10 @@ public class RunStateStore
 
     private void PersistSnapshot()
     {
-        var snapshot = new RunStatePersistenceSnapshot(
-            PersistenceVersion,
-            DateTimeOffset.UtcNow,
-            _runs.Values.OrderByDescending(static run => run.UpdatedAt).ToArray());
-        _store.Save(snapshot);
+        _persistence.Save(() =>
+            _runs.Values
+                .OrderByDescending(static run => run.UpdatedAt)
+                .ToArray());
     }
 
     private static RunStatusInfo NormalizeRecoveredRun(RunStatusInfo run, DateTimeOffset recoveredAt)
@@ -292,9 +285,4 @@ public class RunStateStore
             WorkerStatuses = RunWorkerProjector.Reset(run.WorkerStatuses, recoveredAt)
         };
     }
-
-    private record RunStatePersistenceSnapshot(
-        string Version,
-        DateTimeOffset SavedAt,
-        IReadOnlyCollection<RunStatusInfo> Runs);
 }
