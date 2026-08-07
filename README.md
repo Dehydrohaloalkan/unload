@@ -232,7 +232,9 @@
 
 Главное:
 
-- контроллеры (`RunsController`, `CatalogController`, `SystemController`) — тонкий transport, вызывают `TaskWorkflow` напрямую;
+- run-контроллеры разделены по операциям: `RunLaunchController`, `RunStatusController`,
+  `RunHistoryController`, `GatewayRequeueController`; публичные маршруты остаются под `/api/runs`;
+- `CatalogController` и `SystemController` обслуживают каталог и системные операции;
 - `RunStatusHub` — SignalR hub `/hubs/status`;
 - error handling: `GlobalExceptionHandler`, `ApiProblemDetailsFactory`, `ApiProblemException`;
 - фоновые сервисы:

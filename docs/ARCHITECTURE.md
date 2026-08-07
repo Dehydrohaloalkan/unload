@@ -111,6 +111,15 @@ flowchart LR
 | `Unload.Gateway` | Формирует sender batches, отправляет файлы на FTP и выпускает feedback | Создание файла и подтверждённая доставка — разные состояния |
 | `Unload.Bootstrapper` / `AddUnloadRuntime` | Загружает конфигурацию, вычисляет пути и регистрирует runtime в DI | API и Console получают одинаковый набор сервисов |
 | `Unload.Api` | HTTP, SignalR, обработка ошибок, hosted services | Транспорт отделён от бизнес-правил и движков |
+| `Unload.Api` / `RunLaunchController` | Запускает и отменяет main/preset/extra, публикует первоначальный статус через SignalR | Изменения lifecycle не смешиваются с query endpoint-ами |
+| `Unload.Api` / `RunStatusController` | Возвращает список, active run и состояние по correlation ID | Простые state-запросы зависят только от store и main activation channel |
+| `Unload.Api` / `RunHistoryController` | Возвращает today, dashboard и history | Исторические проекции и retention default находятся в одной transport-зоне |
+| `Unload.Api` / `GatewayRequeueController` | Принимает запрос повторной публикации готовых файлов | Gateway-команда не смешивается с запуском SQL-выгрузки |
+
+Все четыре run-контроллера сохраняют общий route prefix `/api/runs`. `RunLaunchController`
+использует один private launch-wrapper для преобразования `TaskLaunchException` в прежний
+`ProblemDetails` и отдельные чистые helpers для построения request/response; дополнительный
+application/use-case слой ради этого разделения не вводится.
 
 Правило терминологии: `execution` означает один запуск задачи любого типа; `main run` — только
 задачу с `TaskCode = run`; `extra` — задачу с `TaskCode = extra`. Имена `RunStateStore`,
@@ -233,7 +242,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant UI
-    participant API as RunsController
+    participant API as RunLaunchController
     participant WF as TaskWorkflow
     participant Policy as DailyWindowPolicy
     participant Task as PresetTask
@@ -276,7 +285,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant UI
-    participant API as RunsController
+    participant API as RunLaunchController
     participant WF as TaskWorkflow
     participant Task as MainUnloadTask
     participant Channel as RunActivationChannel

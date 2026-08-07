@@ -291,10 +291,10 @@ read-only degraded mode закрывают наблюдаемые риски б�
 
 ### Backend
 
-- [ ] Разделить `RunsController` по пользовательским операциям.
-- [ ] Оставить endpoint-методы короткими: validation, вызов сервиса, mapping результата.
-- [ ] Убрать повторяющееся преобразование `TaskLaunchException` из endpoint-ов.
-- [ ] Не вводить отдельный use-case/interface для каждого метода без реальной необходимости.
+- [x] Разделить `RunsController` по пользовательским операциям.
+- [x] Оставить endpoint-методы короткими: validation, вызов сервиса, mapping результата.
+- [x] Убрать повторяющееся преобразование `TaskLaunchException` из endpoint-ов.
+- [x] Не вводить отдельный use-case/interface для каждого метода без реальной необходимости.
 
 Возможное разделение:
 
@@ -505,17 +505,24 @@ tests/
   stack trace: `200` для `healthy/recovered`, `503` для `degraded/corrupted`.
 - SQLite сейчас не вводится: цельные snapshots малы и обслуживаются одним процессом. Решение
   пересматривается только по измеренному росту записи/конкуренции или при частичных запросах.
+- Монолитный `RunsController` разделён на `RunLaunchController`, `RunStatusController`,
+  `RunHistoryController` и `GatewayRequeueController` без изменения 13 HTTP method/path пар.
+  Reflection test фиксирует эту карту маршрутов и защищает дальнейшее упрощение endpoint-ов.
+- Три launch endpoint-а используют один локальный wrapper для `TaskLaunchException`; прежние
+  operation-specific ProblemDetails titles сохранены и защищены четырьмя contract test cases.
+- Построение launch requests, accepted/script responses и публикация preset state вынесены в
+  именованные private helpers; новых use-case сервисов и интерфейсов не добавлено.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 109/109 относящихся к плану test cases, 111/111 во всём проекте.
+- Штатный VSTest проходит: 114/114 относящихся к плану test cases, 116/116 во всём проекте.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
 - `output/` и `output/_state` не очищались.
 
-Этап надёжной persistence завершён. Следующая рекомендуемая задача:
+Backend-часть этапа 6 завершена. Следующая рекомендуемая задача:
 
-> Перейти к этапу 6: начать с небольшого разделения ответственности `RunsController`, сохраняя
-> текущие HTTP-контракты и короткие endpoint-методы.
+> Начать frontend-часть этапа 6 с characterization-тестов `history-projection.util.ts`, затем
+> разделить чистые проекции `run`, `extra` и gateway без изменения отображения UI.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
