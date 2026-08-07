@@ -15,10 +15,8 @@
     <Project Path="backend/Unload.Tasks.MainUnload/Unload.Tasks.MainUnload.csproj" />
   </Folder>
   <Folder Name="/console/">
-    <Project Path="console/Unload.Console/Unload.Console.csproj" />
     <Project Path="console/Unload.FtpServer/Unload.FtpServer.csproj" />
     <Project Path="console/Unload.GatewayHandler/Unload.GatewayHandler.csproj" />
-    <Project Path="console/Unload.WebConsole/Unload.WebConsole.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Unload.Backend.Tests/Unload.Backend.Tests.csproj" />

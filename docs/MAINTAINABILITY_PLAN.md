@@ -349,7 +349,7 @@ GatewayRequeueController
 - Frontend `check:api` генерирует client во временный каталог и сравнивает все файлы с committed
   `src/app/generated/api`; проверка включена в обычный `npm test`.
 - Неоднозначный legacy-ответ `/api/runs/active` нормализован: endpoint возвращает
-  `200 RunStatusInfo` или `404`, что уже поддерживали Angular и WebConsole; два теста фиксируют оба
+  `200 RunStatusInfo` или `404`, что уже поддерживал Angular-клиент; два теста фиксируют оба
   варианта вместо прежнего второго `200` с неполным anonymous payload.
 
 Критерий готовности: C# и TypeScript модели не расходятся при ручном редактировании.
@@ -360,20 +360,27 @@ GatewayRequeueController
 
 Для каждого приложения определить статус: production, diagnostic, development-only или obsolete.
 
-- [ ] `Unload.Api`;
-- [ ] Angular `webApp`;
-- [ ] `Unload.Console`;
-- [ ] `Unload.WebConsole`;
-- [ ] `Unload.FtpServer`;
-- [ ] `Unload.GatewayHandler`.
+- [x] `Unload.Api` — production;
+- [x] Angular `webApp` — production, официальный пользовательский клиент;
+- [x] `Unload.Console` — obsolete, удалён;
+- [x] `Unload.WebConsole` — obsolete, удалён;
+- [x] `Unload.FtpServer` — development-only, используется для локальной FTP/E2E-проверки;
+- [x] `Unload.GatewayHandler` — development-only, используется для локальной интеграционной проверки.
 
 После решения:
 
-- [ ] оставить один официальный production-путь;
-- [ ] development-инструменты перенести в `tools/`;
-- [ ] удалить неиспользуемые приложения;
-- [ ] не дублировать бизнес-логику в клиентах;
-- [ ] явно указать уровень поддержки каждого инструмента.
+- [x] Оставить один официальный production-путь: `Unload.Api` + Angular `webApp`.
+- [x] Явно отделить development-инструменты; физически не переносить используемые пути
+  `console/Unload.FtpServer` и `console/Unload.GatewayHandler` без функциональной причины.
+- [x] Удалить неиспользуемые приложения и их ссылки из solution.
+- [x] Не дублировать бизнес-логику в клиентах: production-клиент работает через API.
+- [x] Явно указать уровень поддержки каждого инструмента.
+
+Реализовано 2026-08-07: удалены проекты `Unload.Console` и `Unload.WebConsole`, их команды запуска
+и ссылки из `unload.slnx`. Оставшиеся FTP Server и GatewayHandler подтверждены как используемые
+development-only приложения. Их каталоги сохранены, чтобы не ломать действующие локальные команды.
+Ignored-каталог старого Console не очищался: найденный run-каталог перенесён в
+`output/legacy-console/7a33906e3081`.
 
 Критерий готовности: разработчик знает, какие приложения обязательны, а какие можно не учитывать при обычной задаче.
 
@@ -479,13 +486,13 @@ tests/
 
 ### Итерация 6
 
-- [ ] Определить статус Console/WebConsole/FTP tools.
+- [x] Определить статус поддерживаемых и obsolete приложений.
 - [ ] Добавить CI и единый verify.
 - [ ] Оценить необходимость объединения проектов.
 
 ## 16. Точка продолжения
 
-Состояние на 2026-08-07 после завершения единого API-контракта:
+Состояние на 2026-08-07 после определения поддерживаемых приложений:
 
 Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
 Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
@@ -556,10 +563,10 @@ tests/
   Не исправлять без отдельного бизнес-решения.
 - `output/` и `output/_state` не очищались.
 
-Этап 7 завершён. Следующая рекомендуемая задача:
+Этап 8 завершён. Следующая рекомендуемая задача:
 
-> Перейти к этапу 8: определить статус `Unload.Api`, Angular `webApp`, Console/WebConsole,
-> FTP Server и GatewayHandler как production, diagnostic, development-only или obsolete.
+> Перейти к этапу 9: добавить единый verify-скрипт и CI для backend/frontend build и tests,
+> затем отдельно спланировать безопасное обновление frontend-зависимостей по результатам audit.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.

@@ -101,7 +101,7 @@ flowchart LR
 | `Unload.Store` / `TaskExecutionHistoryStore` | Хранит завершённые `probe`, `preset`, `run`, `extra` | Нужен для зависимостей «выполнено сегодня», dashboard и восстановления `preset` после рестарта |
 | `Unload.Store` / `JsonFileStore<T>` | Загружает и атомарно сохраняет JSON; ошибку записи логирует и возвращает вызывающему коду | Одинаковый наблюдаемый контракт персистентности используется обоими хранилищами |
 | `Unload.Store` / `RequeueService` | Повторно публикует выбранные существующие файлы в gateway | Повторная доставка не должна повторно выполнять SQL-выгрузку |
-| `Unload.Tasks` / `TaskWorkflow` | Проверяет окно, зависимости, конфликты и single-active, читая текущую локальную дату через `TimeProvider`, затем вызывает задачу | Одна точка бизнес-решения предотвращает разные правила в API, Console и scheduler; тесты даты не зависят от системных часов |
+| `Unload.Tasks` / `TaskWorkflow` | Проверяет окно, зависимости, конфликты и single-active, читая текущую локальную дату через `TimeProvider`, затем вызывает задачу | Одна точка бизнес-решения предотвращает разные правила в API и scheduler; тесты даты не зависят от системных часов |
 | `Unload.Tasks` / `DailyWindowPolicy` | Хранит in-memory состояние текущего дня, читает локальное время через `TimeProvider` и отвечает, можно ли выполнять `preset`, `run`, `extra` | Временные правила не размазаны по UI и задачам, а границы дня воспроизводятся в тестах |
 | `Unload.Tasks` / `PresetCompletionRecovery` | Проверяет историю за текущую локальную дату и восстанавливает выполненный `preset` после рестарта | Правило today/yesterday/disabled проверяется отдельно от бесконечного цикла scheduler |
 | `Unload.Tasks` / activation channels | Держит один активный `run` и один активный `extra`, передаёт их фоновым workers и маршрутизирует отмену | HTTP не должен оставаться открытым на всё время долгой выгрузки |
@@ -109,7 +109,7 @@ flowchart LR
 | `Unload.Tasks.ExtraUnload` | Выбирает обычные или atomic SQL-скрипты, фильтрует банки и создаёт extra-файлы | `Extra` имеет другую единицу выбора и другой формат агрегации, чем main run |
 | `Unload.Tasks.Preset` | Выполняет автоматический `probe` и синхронный `preset` | Подготовка рабочего дня отделена от выгрузок |
 | `Unload.Gateway` | Формирует sender batches, отправляет файлы на FTP и выпускает feedback | Создание файла и подтверждённая доставка — разные состояния |
-| `Unload.Bootstrapper` / `AddUnloadRuntime` | Загружает конфигурацию, вычисляет пути и регистрирует runtime в DI | API и Console получают одинаковый набор сервисов |
+| `Unload.Bootstrapper` / `AddUnloadRuntime` | Загружает конфигурацию, вычисляет пути и регистрирует runtime в DI | Composition root API остаётся компактным и не дублирует инфраструктурную регистрацию |
 | `Unload.Api` | HTTP, SignalR, обработка ошибок, hosted services | Транспорт отделён от бизнес-правил и движков |
 | `Unload.Api` / `RunLaunchController` | Запускает и отменяет main/preset/extra, публикует первоначальный статус через SignalR | Изменения lifecycle не смешиваются с query endpoint-ами |
 | `Unload.Api` / `RunStatusController` | Возвращает список, active run и состояние по correlation ID | Простые state-запросы зависят только от store и main activation channel |
@@ -129,13 +129,17 @@ application/use-case слой ради этого разделения не вв
 
 ### 4.2. Клиенты и вспомогательные процессы
 
-| Проект | Роль |
-|---|---|
-| `web/webApp` | Основной Angular-клиент: dashboard, выбор targets/банков, active state, история, скачивание |
-| `console/Unload.Console` | Локальный клиент того же runtime без HTTP; полезен для запуска и диагностики |
-| `console/Unload.WebConsole` | CLI-клиент к API через HTTP и SignalR |
-| `console/Unload.FtpServer` | Локальный FTP-сервер для разработки и end-to-end проверки |
-| `console/Unload.GatewayHandler` | Тестовый/вспомогательный потребитель опубликованных gateway-файлов |
+| Проект | Уровень поддержки | Роль |
+|---|---|---|
+| `backend/Unload.Api` | production | Единственный backend transport и host runtime-процессов |
+| `web/webApp` | production | Официальный Angular-клиент: dashboard, выбор targets/банков, active state, история, скачивание |
+| `console/Unload.FtpServer` | development-only, используется | Локальный FTP-сервер для разработки и end-to-end проверки |
+| `console/Unload.GatewayHandler` | development-only, используется | Обработчик файлов локального gateway для интеграционной проверки |
+
+`Unload.Console` и `Unload.WebConsole` признаны obsolete и удалены 2026-08-07. Поддерживаемый
+production-путь один: `Unload.Api` + `web/webApp`. Development-only инструменты оставлены в
+историческом каталоге `console/`, потому что их текущие пути используются локальными сценариями;
+перемещение без функциональной пользы создало бы лишнюю миграцию команд.
 
 ## 5. Запуск приложения и composition root
 
@@ -167,13 +171,14 @@ Unload минимальный уровень — `Information`; для `Microsof
 - регистрирует `TimeProvider.System` как единый источник текущего времени по умолчанию;
 - регистрирует задачи, движки, workflow и activation channels.
 
-Почему это важно: если новый сервис зарегистрирован только в API, `Unload.Console` получит другое поведение. Общую runtime-зависимость следует регистрировать через `AddUnloadRuntime`; только HTTP/SignalR-specific компонент — в `Program.cs` API.
+Почему это важно: инфраструктурную runtime-зависимость следует регистрировать через
+`AddUnloadRuntime`; только HTTP/SignalR-specific компонент — непосредственно в `Program.cs` API.
 
 ## 6. Единая модель запуска задач
 
 ### 6.1. Декларация правил
 
-Каждая задача наследует `UnloadTask` и объявляет правила свойствами. `TaskWorkflow` исполняет их одинаково для API, scheduler и Console.
+Каждая задача наследует `UnloadTask` и объявляет правила свойствами. `TaskWorkflow` исполняет их одинаково для API и scheduler.
 
 | Задача | Зависит от успешного запуска сегодня | Конфликтует | Требует открытое дневное окно | Модель исполнения |
 |---|---|---|---|---|
@@ -642,7 +647,7 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 3. Зарегистрировать задачу через project-specific DI extension, вызываемый из `AddUnloadRuntime`.
 4. Для deferred-задачи добавить отдельный activation mechanism или обоснованно переиспользовать существующий, затем hosted service.
 5. Создать server-side источник истины для статуса до возврата HTTP 202.
-6. Добавить API/Console entry point.
+6. Добавить API entry point и действие в Angular-клиенте.
 7. Добавить error codes, tests и обновить документацию/contracts.
 
 ### 17.2. Новый статус или SignalR event

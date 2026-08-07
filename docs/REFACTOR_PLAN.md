@@ -1,6 +1,9 @@
 # План рефакторинга backend Unload
 
-Документ — спецификация рефакторинга для пошаговой реализации. Опус составил план, реализация — Sonnet.
+Документ — историческая спецификация уже выполненного рефакторинга. Упоминания `Unload.Console`
+и `Unload.WebConsole` ниже описывают состояние и решения на момент реализации; оба проекта позже
+признаны obsolete и удалены 2026-08-07. Текущий состав приложений зафиксирован в
+`docs/ARCHITECTURE.md` и `docs/MAINTAINABILITY_PLAN.md`.
 
 ## 0. Цель и принципы
 
@@ -407,9 +410,9 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
 - Убрать парсинг секций из `Unload.Api/Program.cs` и `Unload.Console/Program.cs`.
 - Убрать дублирующий `ApiWorkspacePathResolver` / `WorkspacePathResolver`.
 
-### Фаза 8 — Console и документация
+### Фаза 8 — исторические Console и документация
 
-- Обновить `Unload.Console`, `Unload.WebConsole` под новые namespace/типы
+- На момент фазы обновить `Unload.Console`, `Unload.WebConsole` под новые namespace/типы
   (`TaskWorkflow.LaunchAsync` вместо `IWorkflowTaskDispatcher`).
 - Переписать `README.md` и `docs/ARCHITECTURE.md` (сейчас устарели — упоминают `Unload.MQ`,
   sender-stub; реальность — `Unload.Gateway`/FTP).
@@ -427,7 +430,8 @@ senderBatches). Переносится из `Unload.Run.Application/Models/RunSt
 - **Асимметрия main vs остальные**: `run` — deferred (канал + фоновый воркер), preset/extra/
   probe — синхронные. `TaskWorkflow` это учитывает: для `run` фиксацию завершения делает
   `MainUnloadHostedService`, не `LaunchAsync`.
-- **Console-проекты** легко отстают — проверять сборку всего `unload.slnx`, не только API.
+- **Исторические Console-проекты** могли отставать; с 2026-08-07 они удалены, но по-прежнему
+  проверяется сборка всего `unload.slnx`, а не только API.
 - Фазы 2–5 крупные; если фаза не помещается в зелёную сборку одним шагом — разрешено
   разбить, но не оставлять полусостояние между коммитами.
 

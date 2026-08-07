@@ -4,7 +4,8 @@
 
 - четыре задачи: `probe`, `preset`, `run`, `extra`;
 - единственный контролёр запусков `TaskWorkflow` — проверяет все зависимости, конфликты и дневное окно;
-- API, Console, WebConsole и Angular WebApp для запуска и наблюдения.
+- API и Angular WebApp для запуска и наблюдения;
+- локальные FTP Server и GatewayHandler для проверки интеграции.
 
 Этот `README.md` описывает прикладную логику: как устроен бизнес-пайплайн, какие сервисы за что отвечают, как менять правила и куда добавлять новые задачи.
 
@@ -55,7 +56,7 @@
 3. Вызывает `TaskWorkflow.LaunchAsync(probe)`.
 4. `ProbeTask` выполняет SQL probe, применяет результат в `DailyWindowPolicy`.
 5. Если probe вернул `1`, `DailyWindowPolicy.ReadyForPreset` становится `true`.
-6. Пользователь вызывает `preset` через API или Console.
+6. Пользователь вызывает `preset` через Angular WebApp или API.
 7. `TaskWorkflow` проверяет: probe пройден + время в пределах окна + нет конфликтов.
 8. `PresetTask` выполняет SQL-скрипты из `scripts/preset`.
 9. После успешного `preset`:
@@ -66,7 +67,7 @@
 
 ### Поток `run`
 
-1. Пользователь вызывает `POST /api/runs` или запускает Console.
+1. Пользователь запускает выгрузку в Angular WebApp, который вызывает `POST /api/runs`.
 2. `TaskWorkflow.LaunchAsync(run)` проверяет все ограничения.
 3. `MainUnloadTask`:
    - нормализует входные коды;
@@ -85,7 +86,7 @@
 
 ### Поток `extra`
 
-1. Пользователь вызывает `POST /api/runs/extra` или Console/WebConsole с `--extra`.
+1. Пользователь запускает Extra в Angular WebApp, который вызывает `POST /api/runs/extra`.
 2. `TaskWorkflow.LaunchAsync(extra)` проверяет все ограничения.
 3. `ExtraUnloadTask`:
    - находит SQL-скрипты в корне `scripts` (без подпапок);
@@ -221,7 +222,7 @@
 
 Главное:
 
-- `AddUnloadRuntime(IServiceCollection, IConfiguration)` — единственная точка регистрации всех сервисов. Используется API и Console.
+- `AddUnloadRuntime(IServiceCollection, IConfiguration)` — единственная точка регистрации runtime-сервисов API.
 - `UnloadConfiguration` — агрегат всех настроек (`Paths`, `Database`, `Runner`, `PresetGate`, `HistoryRetention`).
 - `UnloadConfigurationLoader` — читает `IConfiguration`, резолвит корень workspace (ищет `configs/catalog.json` + `scripts/` вверх по дереву).
 - `UnloadRuntimePaths` — пути к каталогу, скриптам и output.
@@ -243,18 +244,6 @@
   - `SenderFeedbackProjectionBackgroundService` — проецирует gateway-feedback в `RunStateStore`;
   - `HistoryRetentionBackgroundService` — удаляет старые записи из `TaskExecutionHistoryStore` и `RunStateStore`.
 
-### `console/Unload.Console`
-
-Локальный запуск через DI того же runtime.
-По умолчанию работает как единая интерактивная сессия стадий (`probe -> preset -> run -> extra`) без перезапуска процесса.
-Поддерживает one-shot режимы `--preset` и `--extra`.
-
-Ключевые типы, используемые из backend: `TaskWorkflow`, `TaskLaunchRequest`, `TaskCodes`, `RunActivationChannel`, `RunStateStore`, `MainUnloadEngine`, `RunActivation`, `RunnerOptions`, `DailyWindowPolicy`, `PresetGateOptions`, `PresetGateState`, `UnloadConfiguration`.
-
-### `console/Unload.WebConsole`
-
-CLI-клиент к API через HTTP + SignalR.
-
 ### `web/webApp`
 
 Браузерный Angular-клиент к API через HTTP + SignalR.
@@ -265,6 +254,14 @@ CLI-клиент к API через HTTP + SignalR.
 - часы синхронизируются через `GET /api/system/time`;
 - подписывается на SignalR: `status`, `run_status`, `preset_state`;
 - в `admin mode` передаёт `adminOverride` для обхода gate-зависимостей.
+
+### Вспомогательные приложения
+
+- `console/Unload.FtpServer` — поддерживаемый development-only FTP-сервер для локальной проверки доставки;
+- `console/Unload.GatewayHandler` — поддерживаемый development-only обработчик файлов локального gateway.
+
+Официальный production-путь один: `Unload.Api` + Angular `web/webApp`. Удалённые
+`Unload.Console` и `Unload.WebConsole` не являются поддерживаемыми способами запуска.
 
 ## Где управлять пайплайном
 
@@ -327,7 +324,7 @@ CLI-клиент к API через HTTP + SignalR.
 4. Реализовать `ExecuteAsync` — либо синхронно (как preset/probe), либо deferred (как run/extra).
 5. Зарегистрировать задачу как `UnloadTask` в DI (добавить в `AddUnload*` метод проекта задачи).
 6. Если задача deferred — добавить фоновый воркер в `Unload.Api`.
-7. Добавить transport-вход: API endpoint и/или Console/WebConsole режим.
+7. Добавить API endpoint и действие в Angular WebApp.
 8. Обновить:
    - `README.md`
    - `docs/ARCHITECTURE.md`
@@ -428,42 +425,6 @@ dotnet run --project .\backend\Unload.Api\Unload.Api.csproj
 
 ```powershell
 curl -X POST http://localhost:5000/api/runs -H "Content-Type: application/json" -d "{\"memberCodes\":[\"M\"]}"
-```
-
-Локальный Console (интерактивная сессия `probe -> preset -> run -> extra`):
-
-```powershell
-dotnet run --project .\console\Unload.Console\Unload.Console.csproj
-```
-
-Локальный `preset`:
-
-```powershell
-dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- --preset
-```
-
-Локальный `extra`:
-
-```powershell
-dotnet run --project .\console\Unload.Console\Unload.Console.csproj -- --extra
-```
-
-WebConsole:
-
-```powershell
-dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --members M
-```
-
-WebConsole `preset`:
-
-```powershell
-dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --preset
-```
-
-WebConsole `extra`:
-
-```powershell
-dotnet run --project .\console\Unload.WebConsole\Unload.WebConsole.csproj -- --api http://localhost:5000 --extra
 ```
 
 Angular WebApp:
