@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Unload.Core;
 
 /// <summary>
@@ -63,12 +61,12 @@ public static class PipeDelimitedFormatter
     }
 
     /// <summary>
-    /// Оценивает размер строки в байтах при UTF-8 кодировке с переводом строки.
+    /// Оценивает размер строки в байтах при Windows-1251 с переводом строки.
     /// </summary>
     /// <param name="line">Строка для оценки.</param>
     /// <returns>Количество байт, которое будет записано в файл.</returns>
     public static int EstimateLineBytes(string line)
     {
-        return Encoding.UTF8.GetByteCount(line) + 1;
+        return OutputTextEncoding.Windows1251.GetByteCount(line) + 1;
     }
 }

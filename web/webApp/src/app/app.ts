@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppErrorStore } from './app.error-store';
 import { WorkflowStore } from './app.store';
@@ -16,6 +16,7 @@ import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
 import { AdminLoginDialogComponent } from './ui/admin-login-dialog.component';
+import { ErrorDialogComponent, ErrorDialogData } from './ui/error-dialog.component';
 
 @Component({
   selector: 'app-root',
@@ -40,11 +41,38 @@ import { AdminLoginDialogComponent } from './ui/admin-login-dialog.component';
 })
 export class App {
   readonly store = inject(WorkflowStore);
-  readonly appErrorStore = inject(AppErrorStore);
+  private readonly appErrorStore = inject(AppErrorStore);
   private readonly dialog = inject(MatDialog);
+  private errorDialogRef: MatDialogRef<ErrorDialogComponent> | null = null;
+  private presentedErrorKey: string | null = null;
 
   readonly detailsPanelOpen = signal(false);
   readonly detailsPanelStage = signal<DrawerStage>('run');
+
+  constructor() {
+    effect(() => {
+      const workflowMessage = this.store.errorMessage();
+      const unhandledMessage = this.appErrorStore.unhandledErrorMessage();
+      const source: ErrorSource | null = workflowMessage
+        ? { kind: 'workflow', message: workflowMessage }
+        : unhandledMessage
+          ? { kind: 'unhandled', message: unhandledMessage }
+          : null;
+
+      if (!source) {
+        this.presentedErrorKey = null;
+        return;
+      }
+
+      const key = `${source.kind}:${source.message}`;
+      if (key === this.presentedErrorKey) {
+        return;
+      }
+
+      this.presentedErrorKey = key;
+      this.presentError(source, key);
+    });
+  }
 
   readonly probeCompleted = computed(() => {
     const preset = this.store.presetState();
@@ -117,6 +145,52 @@ export class App {
     // Главная карточка всегда запускает полную выгрузку; подмножество банков — из панели деталей.
     void this.store.runExtraAsync(null);
   }
+
+  private presentError(source: ErrorSource, key: string): void {
+    if (this.presentedErrorKey !== key) {
+      return;
+    }
+
+    this.errorDialogRef?.close();
+    const data: ErrorDialogData = {
+      title: source.kind === 'workflow' ? t('errors.dialogActionTitle') : t('errors.dialogUnexpectedTitle'),
+      message: source.message,
+      descriptionLabel: t('errors.dialogDescriptionLabel'),
+      recoveryHint: t('errors.dialogRecoveryHint'),
+      closeLabel: t('errors.dialogClose'),
+    };
+
+    const dialogRef = this.dialog.open(ErrorDialogComponent, {
+      data,
+      role: 'alertdialog',
+      width: '42rem',
+      maxWidth: 'calc(100vw - 1.5rem)',
+      autoFocus: '[data-error-close]',
+      restoreFocus: true,
+      panelClass: 'app-error-dialog',
+    });
+    this.errorDialogRef = dialogRef;
+
+    dialogRef.afterClosed().subscribe(() => {
+      if (this.errorDialogRef === dialogRef) {
+        this.errorDialogRef = null;
+      }
+      if (this.presentedErrorKey !== key) {
+        return;
+      }
+
+      if (source.kind === 'workflow' && this.store.errorMessage() === source.message) {
+        this.store.clearError();
+      }
+      if (
+        source.kind === 'unhandled' &&
+        this.appErrorStore.unhandledErrorMessage() === source.message
+      ) {
+        this.appErrorStore.clearUnhandledError();
+      }
+    });
+  }
 }
 
 type DrawerStage = 'run' | 'preset' | 'extra';
+type ErrorSource = { kind: 'workflow' | 'unhandled'; message: string };

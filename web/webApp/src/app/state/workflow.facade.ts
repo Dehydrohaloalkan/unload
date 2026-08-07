@@ -224,6 +224,10 @@ export class WorkflowStore {
     this.adminStore.setAdminMode(enabled);
   }
 
+  clearError(): void {
+    this.errorStore.clear();
+  }
+
   async runPresetAsync(): Promise<void> {
     try {
       await this.presetStore.runPresetAsync(this.adminStore.adminMode());

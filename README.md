@@ -413,6 +413,10 @@ SignalR:
 - Файлы чанков: `output/<dd_MM_yyyy_HHmmss>/output-files/`
 - CSV-отчет: `output/<dd_MM_yyyy_HHmmss>/run-report.csv`
 
+Все текстовые артефакты main run и `Extra`, включая `run-report.csv`, записываются без BOM в
+кодировке Windows-1251. Служебные JSON-файлы в `output/_state/` не являются файлами выгрузки и
+сохраняют собственный UTF-8 JSON-контракт.
+
 ## Быстрый старт
 
 Запуск API:

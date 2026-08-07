@@ -18,8 +18,11 @@
 
   <ItemGroup>
     <ProjectReference Include="../../backend/Unload.Api/Unload.Api.csproj" />
+    <ProjectReference Include="../../backend/Unload.FileWriter/Unload.FileWriter.csproj" />
     <ProjectReference Include="../../backend/Unload.Gateway/Unload.Gateway.csproj" />
     <ProjectReference Include="../../backend/Unload.Tasks/Unload.Tasks.csproj" />
+    <ProjectReference Include="../../backend/Unload.Tasks.ExtraUnload/Unload.Tasks.ExtraUnload.csproj" />
+    <ProjectReference Include="../../backend/Unload.Tasks.MainUnload/Unload.Tasks.MainUnload.csproj" />
   </ItemGroup>
 
   <ItemGroup>

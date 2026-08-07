@@ -1,4 +1,3 @@
-using System.Text;
 using Unload.Core;
 
 namespace Unload.Tasks.ExtraUnload;
@@ -155,7 +154,7 @@ public class ExtraOutputWriter(ExtraUnloadOptions options, IGatewayPublisher gat
         var baseFileName = OutputFileNaming.BuildChunkBaseName(stem, dayOfYear, chunkNumber);
         var (stream, fileName, filePath) = OutputFileNaming.OpenUniqueFile(bankDirectory, baseFileName, fileExtension);
 
-        await using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+        await using (var writer = new StreamWriter(stream, OutputTextEncoding.Windows1251))
         {
             await writer.WriteLineAsync(BuildHeaderLine(fileName, lines.Count));
             foreach (var line in lines)

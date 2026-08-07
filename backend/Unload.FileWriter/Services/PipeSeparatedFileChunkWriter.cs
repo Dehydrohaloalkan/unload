@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Unload.Core;
 
 namespace Unload.FileWriter;
@@ -37,7 +36,7 @@ public class PipeSeparatedFileChunkWriter : IFileChunkWriter
         try
         {
             var (stream, fileName, filePath) = OutputFileNaming.OpenUniqueFile(outputDirectory, baseFileName, fileExtension);
-            await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+            await using var writer = new StreamWriter(stream, OutputTextEncoding.Windows1251);
 
             var columns = PipeDelimitedFormatter.GetOrderedColumns(chunk.Rows);
             var metadataHeader =

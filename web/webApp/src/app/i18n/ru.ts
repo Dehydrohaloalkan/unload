@@ -37,6 +37,12 @@ export const RU = {
   'errors.runStopFailed': 'Не удалось отправить запрос на остановку.',
   'errors.requeueFailed': 'Не удалось отправить выбранное в шлюз.',
   'errors.activeRunConflict': 'Уже выполняется другой run. Переключаюсь в режим наблюдения.',
+  'errors.dialogActionTitle': 'Не удалось выполнить действие',
+  'errors.dialogUnexpectedTitle': 'Произошла непредвиденная ошибка',
+  'errors.dialogDescriptionLabel': 'Что произошло',
+  'errors.dialogRecoveryHint':
+    'Закройте это окно и повторите действие. Если ошибка появится снова, передайте этот текст специалисту поддержки.',
+  'errors.dialogClose': 'Понятно',
 
   'downloadHint.started': 'Скачивание началось. Загрузка начнется через пару секунд.',
   'downloadHint.close': 'Закрыть',

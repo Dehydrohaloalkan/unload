@@ -65,6 +65,7 @@ Write screenshots into the scratch directory and inspect them with the local ima
 
 - Run `scripts/extra-smoke.js` to check the Extra drawer, bank selection, gateway checkbox, launch flow, and bank names in history.
 - Run `scripts/extra-recovery.js` to check that an active Extra run remains visible and stoppable after a fresh page load.
+- Run `scripts/error-dialog-smoke.js` to force a bootstrap failure and verify the accessible error dialog on desktop and mobile.
 - For the green delivered gateway badge, also start `console/Unload.FtpServer` using development FTP settings.
 
 Reliable Extra start through the API:

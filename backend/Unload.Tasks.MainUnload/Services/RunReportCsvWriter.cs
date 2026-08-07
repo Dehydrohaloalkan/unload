@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Text;
+using Unload.Core;
 using Unload.Tasks.MainUnload.Models;
 
 namespace Unload.Tasks.MainUnload;
@@ -17,7 +17,7 @@ internal static class RunReportCsvWriter
             .ToArray();
 
         await using var stream = File.Open(reportPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+        await using var writer = new StreamWriter(stream, OutputTextEncoding.Windows1251);
 
         await writer.WriteLineAsync("memberName,fileType,operation,outputFileName,rowsCount,mqStatus,executionTimeMs");
         foreach (var row in orderedRows)
