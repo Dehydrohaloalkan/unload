@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Unload.Tasks.DependencyInjection;
 
@@ -18,6 +19,8 @@ public static class ServiceCollectionExtensions
         PresetGateOptions presetGateOptions)
     {
         services.AddSingleton(presetGateOptions);
+        // Хост может заранее зарегистрировать управляемое время; runtime по умолчанию использует системное.
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<DailyWindowPolicy>();
         services.AddSingleton<RunActivationChannel>();
         services.AddSingleton<ExtraActivationChannel>();

@@ -7,6 +7,7 @@ namespace Unload.Tasks;
 public class DailyWindowPolicy
 {
     private readonly object _sync = new();
+    private readonly TimeProvider _timeProvider;
     private TimeOnly _startTime = new(15, 0);
     private static readonly TimeOnly EndOfDayTime = new(23, 59);
     private DateOnly? _presetCompletedOnDate;
@@ -20,8 +21,9 @@ public class DailyWindowPolicy
         LastProbeAt: null,
         Message: "Preset gate is waiting for schedule.");
 
-    public DailyWindowPolicy(PresetGateOptions options)
+    public DailyWindowPolicy(PresetGateOptions options, TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         ApplyInitialOptions(options);
     }
 
@@ -142,7 +144,7 @@ public class DailyWindowPolicy
                 RequiresPresetExecution = false,
                 Message = "Preset task completed. Main and extra tasks are unlocked until 23:59."
             };
-            _presetCompletedOnDate = DateOnly.FromDateTime(DateTime.Now);
+            _presetCompletedOnDate = GetCurrentDate();
             return ReplaceIfChanged(next);
         }
     }
@@ -169,7 +171,7 @@ public class DailyWindowPolicy
                 return false;
             }
 
-            if (!IsWithinDailyWindow(TimeOnly.FromDateTime(DateTime.Now)))
+            if (!IsWithinDailyWindow(GetCurrentTime()))
             {
                 reason = $"Preset is available only from {_startTime:HH\\:mm} to 23:59.";
                 return false;
@@ -229,7 +231,7 @@ public class DailyWindowPolicy
             return;
         }
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
+        var today = GetCurrentDate();
         if (_presetCompletedOnDate.Value == today)
         {
             return;
@@ -264,5 +266,15 @@ public class DailyWindowPolicy
     private static int Clamp(int value, int min, int max)
     {
         return Math.Min(max, Math.Max(min, value));
+    }
+
+    private DateOnly GetCurrentDate()
+    {
+        return DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+    }
+
+    private TimeOnly GetCurrentTime()
+    {
+        return TimeOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
     }
 }

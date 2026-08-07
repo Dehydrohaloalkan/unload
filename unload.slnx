@@ -20,4 +20,7 @@
     <Project Path="console/Unload.GatewayHandler/Unload.GatewayHandler.csproj" />
     <Project Path="console/Unload.WebConsole/Unload.WebConsole.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Unload.Backend.Tests/Unload.Backend.Tests.csproj" />
+  </Folder>
 </Solution>

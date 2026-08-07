@@ -48,6 +48,72 @@
 
 Критерий готовности: проект собирается, базовые сценарии воспроизводимы, известна официальная production-конфигурация.
 
+### Результат baseline-прохода 2026-08-07
+
+- [x] Backend: `dotnet build` выполнен успешно, 0 warnings, 0 errors.
+- [x] Frontend production build: канонический `npm run build` выполнен успешно 2026-08-07.
+- [ ] Live-сценарии: API и Angular по отдельности доходят до состояния listening/build complete,
+  но текущий sandbox запрещает bind дочерним процессам (`SocketException: Permission denied`,
+  `listen EPERM`) и изолирует localhost между terminal-сессиями. Playwright-сценарии не запускались;
+  повторить вне этого ограничения.
+- [x] Историческая live-проверка от 2026-08-04 подтверждала Chromium-сценарии main/extra,
+  FTP delivery `12/12`, восстановление активной Extra после refresh и отмену со статусом
+  «отменено пользователем». Это полезная исходная точка, но не заменяет повторную проверку
+  текущего рабочего дерева.
+- [x] `output/` и `output/_state` не очищались и не изменялись тестовой очисткой.
+- [x] Перед началом обнаружены пользовательские изменения в `AGENTS.md` и
+  `docs/ARCHITECTURE.md`; они сохранены без перезаписи.
+
+Baseline пока не считается завершённым: остаются live-сценарии и фиксация production-конфигурации.
+
+### Точная матрица первых characterization-тестов
+
+`DailyWindowPolicy`:
+
+- [x] disabled gate: окно открыто, preset запускать нельзя, состояние сообщает об отключении;
+- [x] значения `StartHour` и `StartMinute` ограничиваются диапазонами `0..23` и `0..59`;
+- [x] `StartPolling` меняет состояние один раз, повторный вызов идемпотентен;
+- [x] probe `0` сохраняет закрытое состояние, probe `1` разрешает preset;
+- [x] preset запрещён до старта polling, до начала окна, при probe `0` и после выполнения;
+- [x] границы окна включительны: ровно в start time и в `23:59`;
+- [x] `MarkPresetCompleted` открывает main/extra только на текущий день;
+- [x] смена даты сбрасывает completion, probe и polling, вновь закрывая main/extra;
+- [x] `Get` и `RefreshDailyWindowState` не сообщают изменение без фактической смены состояния;
+- [x] после дневного completion `StartPolling` не запускает polling повторно.
+
+Для сценариев `CanRunPreset`, `MarkPresetCompleted` и смены даты требовалось сначала внедрить
+стандартный `.NET TimeProvider` как минимальную тестовую точку, не меняя бизнес-правила: до этого
+эти ветки напрямую читали `DateTime.Now`.
+
+Реализовано 2026-08-07: `DailyWindowPolicy` получает `TimeProvider` через DI, runtime использует
+`TimeProvider.System`, а 15 test cases используют ручное время. Текущее правило конца окна
+зафиксировано без изменения: `23:59:00` входит в окно, `23:59:01` уже не входит. Требуется
+отдельное бизнес-решение, должна ли вся последняя минута считаться открытой.
+
+Стандартный xUnit-проект добавлен в solution и компилируется общим `dotnet build`. Штатный
+`dotnet test` выполнен 2026-08-07: все 15 относящихся к этой итерации test cases
+`DailyWindowPolicy` прошли.
+
+`TaskWorkflow`:
+
+- [ ] неизвестный task code возвращает `VALIDATION_ERROR` и не вызывает задачу;
+- [ ] закрытое дневное окно возвращает `PRESET_GATE_BLOCKED` для main/extra;
+- [ ] закрытое preset-окно возвращает `PRESET_GATE_BLOCKED` с причиной policy;
+- [ ] отсутствующие `RequiresCompleted` возвращаются в `requiredTaskCodes`;
+- [ ] зависимости считаются только за текущую локальную дату;
+- [ ] активный main run блокирует второй run и задачи, конфликтующие с run;
+- [ ] активный extra блокирует второй extra и задачи, конфликтующие с extra;
+- [ ] foreground-конфликт проверяется симметрично по обеим декларациям `ConflictsWith`;
+- [ ] из двух конкурентных foreground-запусков конфликтующих задач проходит только один;
+- [ ] foreground-слот освобождается после success, exception и cancellation;
+- [ ] deferred-задача не удерживает foreground-слот после `ExecuteAsync` и полагается на activation channel;
+- [ ] `AdminOverride` обходит gate/dependency/conflict проверки, сохраняя фактическое выполнение задачи;
+- [ ] task code и конфликтные коды сравниваются без учёта регистра;
+- [ ] исходные request, cancellation token и execution result передаются без подмены.
+
+Все файловые fixtures для `TaskExecutionHistoryStore` должны создаваться в отдельном scratch-каталоге;
+реальный `output/` в этих тестах не используется.
+
 ## 4. Этап 1 — автоматическая страховочная сетка
 
 Приоритет: критический. Выполняется до архитектурного рефакторинга.
@@ -56,7 +122,7 @@
 
 Создать один тестовый проект `tests/Unload.Backend.Tests` и покрыть:
 
-- [ ] `DailyWindowPolicy`: время до окна, начало окна, конец дня, смена даты;
+- [x] `DailyWindowPolicy`: время до окна, начало окна, конец дня, смена даты;
 - [ ] восстановление выполненного `preset` после рестарта;
 - [ ] `TaskWorkflow`: зависимости задач;
 - [ ] конфликты `preset`, `run`, `extra`;
@@ -308,9 +374,9 @@ tests/
 
 - [ ] Проверить build и live-сценарии.
 - [ ] Исправить документацию про deferred `extra`.
-- [ ] Создать test project.
-- [ ] Покрыть `DailyWindowPolicy`.
-- [ ] Внедрить `TimeProvider` только в `DailyWindowPolicy` и связанные тесты.
+- [x] Создать test project.
+- [x] Покрыть `DailyWindowPolicy`.
+- [x] Внедрить `TimeProvider` только в `DailyWindowPolicy` и связанные тесты.
 
 ### Итерация 2
 
@@ -346,16 +412,64 @@ tests/
 
 ## 16. Точка продолжения
 
+Состояние на 2026-08-07, перед перезапуском Codex:
+
+Этот раздел — канонический самодостаточный checkpoint для продолжения после перезапуска.
+Запись отдельной ad-hoc заметки в долговременную папку Codex была запрещена sandbox, поэтому
+восстанавливать контекст нужно отсюда.
+
+- Базовый HEAD перед фиксацией итерации: `eedd1b1` (`master`).
+- Создан `tests/Unload.Backend.Tests` и подключён к `unload.slnx`.
+- `DailyWindowPolicy` получает `TimeProvider`; DI по умолчанию регистрирует `TimeProvider.System`.
+- Добавлены 15 test cases для `DailyWindowPolicy` и `ManualTimeProvider`.
+- Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
+- Штатный VSTest проходит: 15/15 относящихся к итерации tests passed.
+- Production frontend `npm run build` проходит.
+- Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
+  Не исправлять без отдельного бизнес-решения.
+- `output/` и `output/_state` не очищались.
+
 Следующая рекомендуемая задача:
 
-> Выполнить этап 0: прогнать `$build-check`, затем `$run-and-test-app`, зафиксировать результаты и составить точный список тестов для `DailyWindowPolicy` и `TaskWorkflow`.
+> Начать тесты `TaskWorkflow`: неизвестная задача, gate, зависимости, active run/extra,
+> симметричные конфликты, конкурентный запуск и освобождение foreground-слота.
+
+Для детерминированной проверки зависимостей «выполнено сегодня» сначала передать уже
+зарегистрированный `TimeProvider` в `TaskWorkflow` и заменить только его прямой `DateTime.Now`,
+не меняя бизнес-правила.
+
+Не перезаписывать изменения пользователя, которые уже находились или появились в рабочем дереве:
+
+- `AGENTS.md`;
+- `backend/Unload.Api/Services/SenderFeedbackProjectionBackgroundService.cs`;
+- `backend/Unload.Api/nlog.config`;
+- основная переработка `docs/ARCHITECTURE.md` — наши добавления про `TimeProvider` сделаны поверх неё.
+
+Файлы текущей итерации:
+
+- `backend/Unload.Tasks/DailyWindowPolicy.cs`;
+- `backend/Unload.Tasks/DependencyInjection/ServiceCollectionExtensions.cs`;
+- `tests/Unload.Backend.Tests/*`;
+- `unload.slnx`;
+- дополнения в `docs/JUNIOR_MAINTAINABILITY_PLAN.md` про тесты и время.
 
 Перед началом изменений проверить:
 
 ```bash
 git status --short
-./.tools/bin/graphify query "Как связаны DailyWindowPolicy, TaskWorkflow, ProbeSchedulerHostedService и TaskExecutionHistoryStore?"
+./.tools/bin/graphify query "Какие ветки TaskWorkflow нужно покрыть тестами и как он связан с DailyWindowPolicy, TaskExecutionHistoryStore, RunActivationChannel и ExtraActivationChannel?"
 ```
+
+После добавления тестов выполнить:
+
+```bash
+dotnet build
+MSBUILDDISABLENODEREUSE=1 dotnet test tests/Unload.Backend.Tests/Unload.Backend.Tests.csproj \
+  --no-restore -m:1 -nr:false -p:UseSharedCompilation=false
+```
+
+Если VSTest снова завершится на `SocketServer: Permission denied`, считать это ограничением
+sandbox, а не результатом test cases; не подменять постоянный тестовый фреймворк самодельным.
 
 После каждого изменения source-кода:
 
