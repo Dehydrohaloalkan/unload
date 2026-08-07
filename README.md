@@ -481,6 +481,11 @@ npm start
 
 ## Где смотреть подробнее
 
+- Единая карта документации: [docs/README.md](docs/README.md)
+- Первый запуск и навигация по репозиторию: [docs/START_HERE.md](docs/START_HERE.md)
 - Прикладная логика и быстрый вход: `README.md`
-- Детальная архитектура, диаграммы и naming rules: `docs/ARCHITECTURE.md`
+- Пользовательские действия и наблюдаемые состояния: [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- Детальная архитектура, диаграммы и naming rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Термины проекта: [docs/GLOSSARY.md](docs/GLOSSARY.md)
+- План сопровождения: [docs/MAINTAINABILITY_PLAN.md](docs/MAINTAINABILITY_PLAN.md)
 - API smoke/edge tests: `postman/unload-api.postman_collection.json`
