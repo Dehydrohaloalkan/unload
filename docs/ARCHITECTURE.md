@@ -93,6 +93,7 @@ flowchart LR
 | `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
 | `Unload.Store` / `RunStateStore` | Координирует конкурентные обновления, persistence и публичный доступ к состоянию `run`/`extra` | Это серверный источник истины и небольшой фасад над правилами проекции |
 | `Unload.Store` / `RunStateProjector` | Применяет runner events к immutable `RunStatusInfo` и координирует специализированные projections | Правила изменения members, workers и artifacts читаются отдельно от хранения |
+| `Unload.Store` / `RunMemberProjector`, `RunArtifactProjector`, `RunWorkerProjector` | Обновляют соответственно состояния мемберов, список файлов и занятость workers | Каждое простое правило можно прочитать и проверить без полного жизненного цикла запуска |
 | `Unload.Store` / `GatewayFeedbackProjector` | Проецирует `FileSent`, `BatchCompleted` и `BatchFailed` в карту sender batches | Нормализация путей, дедупликация и статусы доставки изолированы от runner events |
 | `Unload.Store` / `RunCompletionPolicy` | Чисто вычисляет terminal status после runner completion и gateway feedback | Условия `Completed`/`Failed` и режим без gateway покрываются отдельной таблицей тестов |
 | `Unload.Store` / `TaskExecutionHistoryStore` | Хранит завершённые `probe`, `preset`, `run`, `extra` | Нужен для зависимостей «выполнено сегодня», dashboard и восстановления `preset` после рестарта |

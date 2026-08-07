@@ -241,7 +241,10 @@ Fixtures используют отдельный scratch-каталог; `output
 ```text
 RunStateStore              — небольшой публичный фасад
 RunStatePersistence        — загрузка и сохранение snapshot
-RunEventProjector          — применение RunnerEvent
+RunStateProjector          — координация применения RunnerEvent
+RunMemberProjector         — состояния мемберов
+RunArtifactProjector       — список созданных файлов
+RunWorkerProjector         — состояния workers
 GatewayFeedbackProjector   — применение sender-feedback
 RunCompletionPolicy        — чистое правило terminal-перехода
 ```
@@ -251,7 +254,7 @@ RunCompletionPolicy        — чистое правило terminal-перехо
 - [x] Перенести nested `RunStateProjector` в отдельный файл без изменения поведения.
 - [x] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
 - [x] Выделить gateway feedback projection.
-- [ ] Выделить member, artifact и worker projection только если итоговые классы остаются простыми.
+- [x] Выделить простые member, artifact и worker projections.
 - [ ] Оставить один публичный способ изменения state.
 - [ ] Убрать распознавание task type по префиксу correlation ID или изолировать его в одном месте.
 - [ ] Привести внутренние имена к единой терминологии execution/run/extra.
@@ -468,8 +471,10 @@ tests/
 - Чистый `RunCompletionPolicy` выделен отдельно и покрыт таблицей из 10 test cases.
 - `GatewayFeedbackProjector` выделен отдельно и покрыт 7 test cases для mapping, путей,
   дедупликации, terminal feedback и неизменности исходной карты.
+- `RunMemberProjector`, `RunArtifactProjector` и `RunWorkerProjector` выделены в небольшие
+  самостоятельные правила и покрыты 12 прямыми test cases; recovery использует тот же worker reset.
 - Общий `dotnet build` проходит: 0 warnings, 0 errors, тестовый проект компилируется.
-- Штатный VSTest проходит: 79/79 относящихся к плану tests passed.
+- Штатный VSTest проходит: 91/91 относящихся к плану tests passed.
 - Production frontend `npm run build` проходит.
 - Поведение конца окна только зафиксировано: `23:59:00` разрешено, `23:59:01` запрещено.
   Не исправлять без отдельного бизнес-решения.
@@ -477,8 +482,8 @@ tests/
 
 Следующая рекомендуемая задача:
 
-> Оценить оставшиеся member/artifact/worker projections: выносить только те части, которые
-> образуют простые самостоятельные правила; persistence оставить отдельным следующим этапом.
+> Завершить фасад `RunStateStore`: проверить и сократить внутренние пути изменения state,
+> затем изолировать распознавание task type. Persistence оставить отдельным следующим этапом.
 
 Восстановление `preset` теперь изолировано в `PresetCompletionRecovery`; не возвращать это правило
 обратно в hosted service. Сквозной restart-сценарий API остаётся отдельной live-проверкой.
