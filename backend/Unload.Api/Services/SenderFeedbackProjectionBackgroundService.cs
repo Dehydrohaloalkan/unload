@@ -22,26 +22,37 @@ public class SenderFeedbackProjectionBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var feedback in _feedbackSource.ReadSenderFeedbackAsync(stoppingToken))
+        try
         {
-            try
+            await foreach (var feedback in _feedbackSource.ReadSenderFeedbackAsync(stoppingToken))
             {
-                await _feedbackConsumer.ConsumeAsync(feedback, stoppingToken);
-                var state = _runStateStore.Get(feedback.CorrelationId);
-                if (state is not null)
+                try
                 {
-                    await _hubContext.Clients.All.SendAsync("run_status", state, stoppingToken);
+                    await _feedbackConsumer.ConsumeAsync(feedback, stoppingToken);
+                    var state = _runStateStore.Get(feedback.CorrelationId);
+                    if (state is not null)
+                    {
+                        await _hubContext.Clients.All.SendAsync("run_status", state, stoppingToken);
+                    }
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to project sender feedback. CorrelationId: {CorrelationId}, BatchId: {BatchId}, Kind: {Kind}",
+                        feedback.CorrelationId,
+                        feedback.BatchId,
+                        feedback.Kind);
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to project sender feedback. CorrelationId: {CorrelationId}, BatchId: {BatchId}, Kind: {Kind}",
-                    feedback.CorrelationId,
-                    feedback.BatchId,
-                    feedback.Kind);
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Sender feedback projection stopped.");
         }
     }
 }

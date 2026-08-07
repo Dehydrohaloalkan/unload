@@ -26,9 +26,16 @@ public class FtpGatewayBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var batch in _batchSource.ReadBatchReadyEventsAsync(stoppingToken))
+        try
         {
-            await ProcessBatchAsync(batch, stoppingToken);
+            await foreach (var batch in _batchSource.ReadBatchReadyEventsAsync(stoppingToken))
+            {
+                await ProcessBatchAsync(batch, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("FTP gateway worker stopped.");
         }
     }
 

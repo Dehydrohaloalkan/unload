@@ -27,6 +27,18 @@ public class ExtraUnloadHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
+            await ProcessActivationsAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Extra unload worker stopped.");
+        }
+    }
+
+    private async Task ProcessActivationsAsync(CancellationToken stoppingToken)
+    {
         await foreach (var activation in _extraWorkflow.ReadActivationsAsync(stoppingToken))
         {
             var request = activation.Payload;
