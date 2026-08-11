@@ -40,8 +40,8 @@ public sealed class GitSyncPlanner(
                     break;
                 case GitChangeKind.Rename:
                     {
-                        var oldTarget = pathMapper.ApplyRenames(change.OldPath!, configuration.Renames);
-                        var newTarget = pathMapper.ApplyRenames(change.NewPath!, configuration.Renames);
+                        var oldTarget = pathMapper.MapPath(change.OldPath!, configuration);
+                        var newTarget = pathMapper.MapPath(change.NewPath!, configuration);
                         if (!string.Equals(oldTarget, newTarget, StringComparison.OrdinalIgnoreCase))
                         {
                             AddDelete(change.OldPath!);
@@ -88,10 +88,17 @@ public sealed class GitSyncPlanner(
             }
 
             var transformText = _globMatcher.IsMatch(desired.SourceRelativePath, configuration.TransformTextIn) ||
-                                _globMatcher.IsMatch(desired.TargetRelativePath, configuration.TransformTextIn);
+                                _globMatcher.IsMatch(desired.TargetRelativePath, configuration.TransformTextIn) ||
+                                configuration.NamespaceMappings.Count > 0 &&
+                                (desired.SourceRelativePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                                 desired.TargetRelativePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
             var bytes = _gitClient.ReadFileAtCommit(source, resolvedCommit, desired.SourceRelativePath);
             var expectedBytes = transformText
-                ? _textTransformer.Transform(bytes, configuration.Renames)
+                ? _textTransformer.Transform(
+                    bytes,
+                    configuration,
+                    desired.SourceRelativePath,
+                    desired.TargetRelativePath)
                 : bytes;
             if (File.Exists(targetPath) &&
                 new FileInfo(targetPath).Length == expectedBytes.Length &&
@@ -128,14 +135,14 @@ public sealed class GitSyncPlanner(
         void AddWrite(string sourceRelativePath)
         {
             var normalizedSource = GlobMatcher.Normalize(sourceRelativePath);
-            var mappedTarget = pathMapper.ApplyRenames(normalizedSource, configuration.Renames);
+            var mappedTarget = pathMapper.MapPath(normalizedSource, configuration);
             AddDesired(new DesiredGitChange(normalizedSource, mappedTarget, Delete: false));
         }
 
         void AddDelete(string sourceRelativePath)
         {
             var normalizedSource = GlobMatcher.Normalize(sourceRelativePath);
-            var mappedTarget = pathMapper.ApplyRenames(normalizedSource, configuration.Renames);
+            var mappedTarget = pathMapper.MapPath(normalizedSource, configuration);
             AddDesired(new DesiredGitChange(normalizedSource, mappedTarget, Delete: true));
         }
 

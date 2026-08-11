@@ -9,6 +9,19 @@
       "to": "iiu.slnx"
     }
   ],
+  "pathMappings": [
+    {
+      "from": "web/webApp",
+      "to": "web"
+    }
+  ],
+  "namespaceMappings": [
+    {
+      "symbol": "RunnerEvent",
+      "from": "Unload.Core",
+      "to": "IIU.Core.Domain"
+    }
+  ],
   "ignore": [
     ".vs/**",
     ".agents/**",

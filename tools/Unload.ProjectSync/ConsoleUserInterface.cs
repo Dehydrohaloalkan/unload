@@ -84,14 +84,6 @@ public sealed class ConsoleUserInterface
         return indexes.Select(index => candidates[index - 1]).ToArray();
     }
 
-    public bool ConfirmApply(int selectedCount)
-    {
-        Console.WriteLine();
-        WriteColor($"Будет перенесено файлов: {selectedCount}.", ConsoleColor.Yellow);
-        Console.Write("Для продолжения введите APPLY: ");
-        return string.Equals(Console.ReadLine()?.Trim(), "APPLY", StringComparison.Ordinal);
-    }
-
     public GitCommitInfo? SelectCommit(IReadOnlyList<GitCommitInfo> commits)
     {
         Console.WriteLine();
@@ -132,7 +124,7 @@ public sealed class ConsoleUserInterface
         Console.WriteLine("  --config <path>     JSON с renames, ignore и protected");
         Console.WriteLine("  --preview           Только показать различия");
         Console.WriteLine("  --apply-all         Применить все безопасные ADD/UPDATE/DELETE");
-        Console.WriteLine("  --yes               Не спрашивать APPLY; только с --apply-all");
+        Console.WriteLine("  --yes               Устаревший совместимый параметр; подтверждение больше не запрашивается");
         Console.WriteLine("  --git               Выбрать один commit и его изменённые файлы");
         Console.WriteLine("  --commit REF        Взять файлы из одного указанного commit");
         Console.WriteLine("  --help              Показать эту справку");

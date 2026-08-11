@@ -46,6 +46,53 @@ public sealed class SyncPlannerTests
         Assert.DoesNotContain(plan.Items, static item => item.TargetRelativePath.Contains("bin", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void CreatePlan_MapsFrontendDirectoryPrefix()
+    {
+        using var workspace = new TemporaryWorkspace();
+        workspace.WriteSource("web/webApp/src/app/app.ts", "export const app = true;\n");
+        workspace.WriteTarget("web/src/app/app.ts", "export const app = true;\n");
+
+        var configuration = new SyncConfiguration
+        {
+            PathMappings = [new PathMappingRule("web/webApp", "web")]
+        };
+
+        var plan = workspace.CreatePlan(configuration);
+
+        Assert.Empty(plan.Items);
+        Assert.Equal(1, plan.SameCount);
+    }
+
+    [Fact]
+    public void CreatePlan_MapsSymbolNamespaceAndAddsUsingToConsumers()
+    {
+        using var workspace = new TemporaryWorkspace();
+        workspace.WriteSource(
+            "backend/Unload.Core/Domain/RunnerEvent.cs",
+            "namespace Unload.Core;\n\npublic record RunnerEvent;\n");
+        workspace.WriteSource(
+            "backend/Unload.Store/Consumer.cs",
+            "using Unload.Core;\n\nnamespace Unload.Store;\n\npublic class Consumer(RunnerEvent value);\n");
+        workspace.WriteTarget(
+            "backend/IIU.Core/Domain/RunnerEvent.cs",
+            "namespace IIU.Core.Domain;\n\npublic record RunnerEvent;\n");
+        workspace.WriteTarget(
+            "backend/IIU.Store/Consumer.cs",
+            "using IIU.Core;\nusing IIU.Core.Domain;\n\nnamespace IIU.Store;\n\npublic class Consumer(RunnerEvent value);\n");
+
+        var configuration = new SyncConfiguration
+        {
+            Renames = [new RenameRule("Unload.", "IIU.")],
+            NamespaceMappings = [new NamespaceMappingRule("RunnerEvent", "Unload.Core", "IIU.Core.Domain")]
+        };
+
+        var plan = workspace.CreatePlan(configuration);
+
+        Assert.Empty(plan.Items);
+        Assert.Equal(2, plan.SameCount);
+    }
+
     private static SyncConfiguration CreateConfiguration() => new()
     {
         Renames = [new RenameRule("Unload.", "IIU.")],

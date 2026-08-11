@@ -116,12 +116,6 @@ public static class Program
             return 0;
         }
 
-        if (!options.Yes && !ui.ConfirmApply(selected.Count))
-        {
-            Console.WriteLine("Подтверждение не получено. Изменения не применялись.");
-            return 0;
-        }
-
         var result = new SyncExecutor(textTransformer).Execute(plan, selected, configuration);
         Console.WriteLine();
         Console.WriteLine(

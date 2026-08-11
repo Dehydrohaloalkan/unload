@@ -65,7 +65,11 @@ public sealed class SyncExecutor(TextFileTransformer textTransformer)
                 }
                 else if (item.TransformText)
                 {
-                    var bytes = _textTransformer.ReadAndTransform(item.SourceFullPath!, configuration.Renames);
+                    var bytes = _textTransformer.ReadAndTransform(
+                        item.SourceFullPath!,
+                        configuration,
+                        item.SourceRelativePath,
+                        item.TargetRelativePath);
                     File.WriteAllBytes(temporaryPath, bytes);
                 }
                 else

@@ -24,6 +24,10 @@ public sealed class SyncConfiguration
 
     public IReadOnlyList<RenameRule> Renames { get; init; } = [];
 
+    public IReadOnlyList<PathMappingRule> PathMappings { get; init; } = [];
+
+    public IReadOnlyList<NamespaceMappingRule> NamespaceMappings { get; init; } = [];
+
     public IReadOnlyList<string> Ignore { get; init; } = [];
 
     public IReadOnlyList<string> Protected { get; init; } = [];
@@ -59,6 +63,23 @@ public sealed class SyncConfiguration
 
     private void Validate()
     {
+        foreach (var mapping in PathMappings)
+        {
+            ValidateRelativeMappingPath(mapping.From, "pathMappings.from", allowEmpty: false);
+            ValidateRelativeMappingPath(mapping.To, "pathMappings.to", allowEmpty: true);
+        }
+
+        foreach (var mapping in NamespaceMappings)
+        {
+            if (string.IsNullOrWhiteSpace(mapping.Symbol) ||
+                string.IsNullOrWhiteSpace(mapping.From) ||
+                string.IsNullOrWhiteSpace(mapping.To))
+            {
+                throw new InvalidOperationException(
+                    "Поля symbol, from и to в namespaceMappings не могут быть пустыми.");
+            }
+        }
+
         foreach (var rename in Renames)
         {
             if (string.IsNullOrEmpty(rename.From))
@@ -84,6 +105,21 @@ public sealed class SyncConfiguration
                 "backupDirectoryName должен быть простым именем каталога без '..' и разделителей пути.");
         }
     }
+
+    private static void ValidateRelativeMappingPath(string value, string field, bool allowEmpty)
+    {
+        if ((!allowEmpty && string.IsNullOrWhiteSpace(value)) ||
+            Path.IsPathRooted(value) ||
+            GlobMatcher.Normalize(value).Split('/').Any(static part => part == ".."))
+        {
+            throw new InvalidOperationException(
+                $"Поле '{field}' должно быть безопасным относительным путём без '..'.");
+        }
+    }
 }
 
 public sealed record RenameRule(string From, string To);
+
+public sealed record PathMappingRule(string From, string To);
+
+public sealed record NamespaceMappingRule(string Symbol, string From, string To);

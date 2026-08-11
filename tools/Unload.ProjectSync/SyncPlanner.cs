@@ -21,7 +21,7 @@ public sealed class SyncPlanner(
         foreach (var sourceFile in EnumerateFiles(source, configuration.AllIgnorePatterns))
         {
             var sourceRelative = NormalizeRelative(Path.GetRelativePath(source, sourceFile));
-            var targetRelative = ApplyRenames(sourceRelative, configuration.Renames);
+            var targetRelative = MapPath(sourceRelative, configuration);
             var targetFile = ResolveSafeTargetPath(target, targetRelative);
             mappedTargetPaths.Add(targetRelative);
 
@@ -32,8 +32,15 @@ public sealed class SyncPlanner(
             }
 
             var transformText = _globMatcher.IsMatch(sourceRelative, configuration.TransformTextIn) ||
-                                _globMatcher.IsMatch(targetRelative, configuration.TransformTextIn);
-            var filesAreEqual = File.Exists(targetFile) && FilesAreEqual(sourceFile, targetFile, transformText, configuration);
+                                _globMatcher.IsMatch(targetRelative, configuration.TransformTextIn) ||
+                                ShouldApplyNamespaceMappings(sourceRelative, targetRelative, configuration);
+            var filesAreEqual = File.Exists(targetFile) && FilesAreEqual(
+                sourceFile,
+                targetFile,
+                sourceRelative,
+                targetRelative,
+                transformText,
+                configuration);
             if (filesAreEqual)
             {
                 sameCount++;
@@ -92,15 +99,41 @@ public sealed class SyncPlanner(
         return NormalizeRelative(result);
     }
 
+    public string MapPath(string value, SyncConfiguration configuration)
+    {
+        var normalized = NormalizeRelative(value);
+        var mapping = configuration.PathMappings
+            .OrderByDescending(static rule => NormalizeRelative(rule.From).Length)
+            .FirstOrDefault(rule => IsSamePathOrChild(normalized, NormalizeRelative(rule.From)));
+
+        if (mapping is not null)
+        {
+            var from = NormalizeRelative(mapping.From).TrimEnd('/');
+            var to = NormalizeRelative(mapping.To).TrimEnd('/');
+            var suffix = normalized.Length == from.Length ? string.Empty : normalized[from.Length..].TrimStart('/');
+            normalized = string.IsNullOrEmpty(to)
+                ? suffix
+                : string.IsNullOrEmpty(suffix) ? to : $"{to}/{suffix}";
+        }
+
+        return ApplyRenames(normalized, configuration.Renames);
+    }
+
     private bool FilesAreEqual(
         string sourceFile,
         string targetFile,
+        string sourceRelative,
+        string targetRelative,
         bool transformText,
         SyncConfiguration configuration)
     {
         if (transformText)
         {
-            var expectedBytes = _textTransformer.ReadAndTransform(sourceFile, configuration.Renames);
+            var expectedBytes = _textTransformer.ReadAndTransform(
+                sourceFile,
+                configuration,
+                sourceRelative,
+                targetRelative);
             var targetInfo = new FileInfo(targetFile);
             return targetInfo.Length == expectedBytes.Length &&
                    File.ReadAllBytes(targetFile).AsSpan().SequenceEqual(expectedBytes);
@@ -146,6 +179,14 @@ public sealed class SyncPlanner(
     private bool IsProtected(string sourceRelative, string targetRelative, SyncConfiguration configuration) =>
         _globMatcher.IsMatch(sourceRelative, configuration.Protected) ||
         _globMatcher.IsMatch(targetRelative, configuration.Protected);
+
+    private static bool ShouldApplyNamespaceMappings(
+        string sourceRelative,
+        string targetRelative,
+        SyncConfiguration configuration) =>
+        configuration.NamespaceMappings.Count > 0 &&
+        (sourceRelative.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+         targetRelative.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
 
     private IEnumerable<string> EnumerateFiles(string root, IEnumerable<string> ignorePatterns)
     {
@@ -221,4 +262,8 @@ public sealed class SyncPlanner(
     }
 
     private static string NormalizeRelative(string path) => GlobMatcher.Normalize(path);
+
+    private static bool IsSamePathOrChild(string path, string parent) =>
+        string.Equals(path, parent, StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith(parent.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
 }
