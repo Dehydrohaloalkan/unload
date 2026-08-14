@@ -333,7 +333,8 @@ GatewayRequeueController
 
 - Development API публикует OpenAPI 3.1 по `/openapi/v1.json`; зафиксированная schema содержит
   21 path и типизированные success/error responses.
-- `tools/export-openapi.sh` запускает API в изолированном режиме без всех hosted services,
+- `tools/export-openapi.sh` и Windows-команда `tools/export-openapi.cmd` запускают API в
+  изолированном режиме без всех hosted services,
   обновляет `openapi/Unload.Api.json` и останавливает только созданный им процесс. Контрольные
   суммы подтвердили отсутствие изменений в `output/_state`.
 - `ng-openapi-gen` создаёт 39 DTO и функциональный Angular client в `src/app/generated/api`;
@@ -398,8 +399,9 @@ Ignored-каталог старого Console не очищался: найде�
 - [x] Настроить контролируемые dependency-update PR.
 - [x] После source-изменений обновлять graphify через `./.tools/bin/graphify update .`.
 
-Выполнено 7 августа 2026 года. Локальная и CI-проверка используют `tools/verify.sh`; workflow не
-публикует и не разворачивает приложение. NuGet-версии централизованы без общего массового upgrade,
+Выполнено 7 августа 2026 года; Windows-обёртка добавлена 14 августа 2026 года. Linux/CI используют
+`tools/verify.sh`, Windows — `tools/verify.cmd`; workflow не публикует и не разворачивает приложение.
+NuGet-версии централизованы без общего массового upgrade,
 а `Microsoft.Extensions.*` выровнены до `10.0.8`. Analyzer check использует стандартный набор
 правил текущего SDK без отдельного списка подавленных legacy-диагностик.
 

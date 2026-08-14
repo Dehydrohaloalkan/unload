@@ -111,6 +111,17 @@ internal sealed class TemporaryGitWorkspace : IDisposable
     {
         if (Directory.Exists(_root))
         {
+            // Git may mark object files as read-only on Windows. The workspace owns every
+            // entry below _root, so normalizing attributes here keeps cleanup cross-platform.
+            foreach (var path in Directory.EnumerateFileSystemEntries(
+                _root,
+                "*",
+                SearchOption.AllDirectories))
+            {
+                File.SetAttributes(path, FileAttributes.Normal);
+            }
+
+            File.SetAttributes(_root, FileAttributes.Normal);
             Directory.Delete(_root, recursive: true);
         }
     }

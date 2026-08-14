@@ -29,7 +29,8 @@ public class OpenApiContractTests
 
         Assert.True(
             JsonNode.DeepEquals(expected, actual),
-            "openapi/Unload.Api.json is stale. Run tools/export-openapi.sh and npm run generate:api.");
+            "openapi/Unload.Api.json is stale. Run tools/export-openapi.sh (Linux/WSL) or " +
+            "tools\\export-openapi.cmd (Windows), then npm run generate:api.");
     }
 
     private static string FindCommittedSchema()

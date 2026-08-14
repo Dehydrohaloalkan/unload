@@ -561,7 +561,8 @@ Browser storage хранит только локальные UI-настройк
 ## 14. HTTP и SignalR contracts
 
 OpenAPI schema публикуется API только в `Development` по `/openapi/v1.json`. Зафиксированная
-копия находится в `openapi/Unload.Api.json`; `tools/export-openapi.sh` обновляет её в специальном
+копия находится в `openapi/Unload.Api.json`; `tools/export-openapi.sh` в Linux/WSL и
+`tools/export-openapi.cmd` в Windows обновляют её в специальном
 режиме `OpenApiGenerationOnly`, в котором не запускаются scheduler, workflow, projection и FTP
 hosted services. Поэтому обновление контракта не должно менять `output/` или `output/_state`.
 
@@ -676,7 +677,8 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 - Сначала определить persisted source of truth.
 - Не хранить единственную копию состояния только во frontend.
 - Соблюдать terminal lifecycle: `Completed`, `Failed`, `Cancelled` не должны возвращаться в active.
-- Для HTTP изменить C# contract, выполнить `tools/export-openapi.sh`, затем
+- Для HTTP изменить C# contract, выполнить `tools/export-openapi.sh` в Linux/WSL или
+  `tools/export-openapi.cmd` в Windows, затем
   `cd web/webApp && npm run generate:api`; generated-файлы вручную не редактировать.
 - Для SignalR обновить `RunStatusHubContract`, `realtime-hub.contract.ts`, payload type и contract tests.
 - Обновить stores, API docs и Postman collection одновременно.
@@ -706,11 +708,14 @@ Y<memberCode><groupCode>_<type>_<codes>_<extension>.sql
 ### 18.1. Единый контур проверки
 
 Каноническая проверка чистой рабочей копии запускается из корня командой
-`./tools/verify.sh`. Она последовательно выполняет restore, format/analyzer check, build и tests
+`./tools/verify.sh` в Linux/WSL либо `.\tools\verify.cmd` в Windows. Она последовательно выполняет
+restore, format/analyzer check, build и tests
 для решения .NET, затем `npm ci`, `npm audit --audit-level=moderate`, frontend tests вместе с
-проверкой generated API client и production build Angular. Локальная команда и
-`.github/workflows/verify.yml` используют один и тот же скрипт, поэтому CI не содержит отдельной,
-постепенно расходящейся последовательности команд.
+проверкой generated API client и production build Angular. Bash- и PowerShell-реализации держат
+одинаковую последовательность шагов; `.github/workflows/verify.yml` использует Bash-вариант.
+Windows `.cmd`-обёртка запускает PowerShell без изменения системной execution policy, а для checkout
+в `\\wsl.localhost\...` автоматически делегирует выполнение Bash-варианту внутри WSL, не смешивая
+артефакты разных ОС.
 
 Общие .NET-настройки находятся в `Directory.Build.props`, версии NuGet-пакетов — в
 `Directory.Packages.props`, версия SDK — в `global.json`, версия Node.js — в `.node-version`.

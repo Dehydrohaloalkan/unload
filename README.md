@@ -438,7 +438,13 @@ cd .\web\webApp
 npm start
 ```
 
-Полная проверка backend и frontend перед передачей изменений:
+Полная проверка backend и frontend перед передачей изменений в Windows PowerShell или CMD:
+
+```powershell
+.\tools\verify.cmd
+```
+
+В Linux, WSL или CI:
 
 ```bash
 ./tools/verify.sh

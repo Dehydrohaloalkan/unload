@@ -17,7 +17,13 @@ Development-сборка использует `StubDatabaseClient`, поэтом
 
 ## 2. Выполнить полную проверку
 
-Из корня репозитория:
+Из корня репозитория в Windows PowerShell или CMD:
+
+```powershell
+.\tools\verify.cmd
+```
+
+В Linux, WSL или CI:
 
 ```bash
 ./tools/verify.sh
@@ -140,11 +146,12 @@ npm start
 2. Найти текущий поток через Graphify и подтвердить его чтением исходников.
 3. Сначала добавить тест, фиксирующий бизнес-сценарий, если меняется нетривиальное правило.
 4. Внести минимальное изменение без смены форматов `output` и snapshots.
-5. После изменения HTTP-контракта выполнить `tools/export-openapi.sh`, затем
+5. После изменения HTTP-контракта выполнить `tools/export-openapi.sh` в Linux/WSL или
+   `.\tools\export-openapi.cmd` в Windows, затем
    `cd web/webApp && npm run generate:api`; generated-файлы вручную не исправлять.
 6. Обновить затронутую документацию.
 7. После source-изменений выполнить `./.tools/bin/graphify update .`.
-8. Запустить `./tools/verify.sh`.
+8. Запустить `./tools/verify.sh` в Linux/WSL или `.\tools\verify.cmd` в Windows.
 
 Для live-проверки UI запускайте API и Angular и проверяйте наблюдаемый результат в браузере.
 
