@@ -11,7 +11,7 @@ import { UiConfirmService } from '../ui/ui-confirm.service';
   imports: [CommonModule, MatButtonModule, MatCardModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-card.component.html',
-  styleUrl: './run-card.component.css',
+  styleUrls: ['./run-card.component.css', './stage-button-state.css'],
 })
 export class RunCardComponent {
   readonly canStartRun = input(false);

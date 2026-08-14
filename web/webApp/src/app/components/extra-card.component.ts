@@ -12,7 +12,7 @@ import { UiConfirmService } from '../ui/ui-confirm.service';
   imports: [CommonModule, MatButtonModule, MatCardModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './extra-card.component.html',
-  styleUrl: './extra-card.component.css',
+  styleUrls: ['./extra-card.component.css', './stage-button-state.css'],
 })
 export class ExtraCardComponent {
   readonly task = input.required<TaskUiState>();

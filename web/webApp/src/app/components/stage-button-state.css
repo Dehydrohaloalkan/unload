@@ -1,0 +1,5 @@
+/* A completed step remains available for an intentional rerun, but must no longer
+   look like the primary next action in the workflow. */
+.stage-button--done {
+  opacity: 0.62;
+}

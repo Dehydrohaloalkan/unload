@@ -13,7 +13,7 @@ import { UiConfirmService } from '../ui/ui-confirm.service';
   imports: [CommonModule, MatButtonModule, MatCardModule, MatProgressSpinnerModule, TPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preset-stage.component.html',
-  styleUrl: './preset-stage.component.css',
+  styleUrls: ['./preset-stage.component.css', './stage-button-state.css'],
 })
 export class PresetStageComponent {
   readonly presetState = input<PresetGateState | null>(null);
