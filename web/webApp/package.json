@@ -8,7 +8,8 @@
     "generate:api": "ng-openapi-gen",
     "check:api": "node tools/check-generated-api.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "npm run check:api && ng test"
+    "test": "npm run check:api && ng test",
+    "test:ui": "playwright test"
   },
   "prettier": {
     "printWidth": 100,
@@ -33,9 +34,9 @@
     "@angular/compiler": "^22.1.0",
     "@angular/core": "^22.1.0",
     "@angular/forms": "^22.1.0",
+    "@angular/material": "^22.1.1",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
-    "@angular/material": "^22.1.1",
     "@microsoft/signalr": "^10.0.11",
     "@ngrx/signals": "22.0.0-rc.0",
     "rxjs": "~7.8.0",
@@ -45,6 +46,7 @@
     "@angular/build": "^22.1.3",
     "@angular/cli": "^22.1.3",
     "@angular/compiler-cli": "^22.1.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "jsdom": "^27.1.0",
     "ng-openapi-gen": "1.0.5",

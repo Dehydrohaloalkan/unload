@@ -32,6 +32,8 @@ graph.json
 *.log
 *.tmp
 *.temp
+web/webApp/test-results/
+web/webApp/playwright-report/
 
 # OS
 .DS_Store

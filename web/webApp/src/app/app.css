@@ -110,7 +110,8 @@
 }
 
 .hero-section--drawer-open {
-  transform: translateX(calc(-1 * clamp(12rem, 24vw, 26rem)));
+  width: 50%;
+  transform: none;
 }
 
 .stage-stack {
@@ -320,6 +321,7 @@
 
 @media (max-width: 1100px) {
   .hero-section--drawer-open {
+    width: 100%;
     transform: none;
   }
 

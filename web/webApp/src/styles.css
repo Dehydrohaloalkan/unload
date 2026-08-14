@@ -175,6 +175,18 @@ body::after {
   touch-action: manipulation;
 }
 
+/* Inline icons follow the text baseline; icon-only buttons need their own centering rule. */
+.mat-mdc-icon-button .app-icon {
+  display: block;
+  margin: auto;
+}
+
+/* The drawer owns vertical scrolling. Material tab internals must not capture the wheel. */
+.details-drawer .mat-mdc-tab-body.mat-mdc-tab-body-active,
+.details-drawer .mat-mdc-tab-body-content {
+  overflow: visible;
+}
+
 .stage-action-button,
 .details-primary-button,
 .details-secondary-button {
