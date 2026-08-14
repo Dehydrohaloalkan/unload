@@ -1,17 +1,16 @@
 import { OutputFileInfo, RunStatusInfo, TaskRecord } from '../../app.models';
-import { resolveGatewayDelivery } from './gateway-history-projection.util';
+import {
+  buildFileGatewayDeliveries,
+  buildGatewayAttempts,
+  resolveGatewayDelivery,
+} from './gateway-history-projection.util';
 import {
   HistoryBankNode,
   HistoryFileRow,
   HistoryRunNode,
   HistoryScriptNode,
 } from './history-projection.models';
-import {
-  buildRunMemberIndex,
-  extraFilePathKey,
-  isExtraFileSentViaBatch,
-  memberKey,
-} from './member-index.util';
+import { buildRunMemberIndex, extraFilePathKey, memberKey } from './member-index.util';
 import { resolveRunStatusLabel } from './labels.util';
 import { sortNames } from './sort.util';
 
@@ -20,7 +19,7 @@ export function buildExtraHistoryNode(
   todayHistory: TaskRecord[],
   outputFilesByPath: Record<string, OutputFileInfo[]>,
   knownMemberNames: string[],
-  confirmedSentPaths: Set<string>,
+  queuedGatewayPaths: Set<string>,
   bankNamesByCode: Record<string, string>,
 ): HistoryRunNode | null {
   const correlationId = (run.correlationId ?? '').trim();
@@ -38,7 +37,7 @@ export function buildExtraHistoryNode(
     run,
     correlationId,
     index,
-    confirmedSentPaths,
+    queuedGatewayPaths,
     bankNamesByCode,
   );
   const publishToGateway = run.publishToGateway ?? false;
@@ -55,10 +54,11 @@ export function buildExtraHistoryNode(
     gatewayDelivery: resolveGatewayDelivery(
       publishToGateway,
       scripts.flatMap((script) => script.banks.flatMap((bank) => bank.files)),
-      Array.from(index.batches.values()),
+      Object.values(run.senderBatches ?? {}),
     ),
     memberNames: sortNames(knownMemberNames),
     memberFiles: {},
+    gatewayAttempts: buildGatewayAttempts(run),
     scripts,
   };
 }
@@ -99,14 +99,15 @@ function buildExtraScripts(
   run: RunStatusInfo,
   correlationId: string,
   index: ReturnType<typeof buildRunMemberIndex>,
-  confirmedSentPaths: Set<string>,
+  queuedGatewayPaths: Set<string>,
   bankNamesByCode: Record<string, string>,
 ): HistoryScriptNode[] {
   const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
   for (const [pathKey, file] of files) {
     const { scriptCode, bankCode } = parseExtraFilePath(file.filePath, file.fileName);
     const bankName = bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
-    const batch = index.batches.get(memberKey(scriptCode));
+    const batches = index.batchGroups.get(memberKey(scriptCode)) ?? [];
+    const gatewayDeliveries = buildFileGatewayDeliveries(file.filePath, batches, true);
     const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
     const row: HistoryFileRow = {
       key: `extra|${correlationId}|${pathKey}`,
@@ -118,9 +119,9 @@ function buildExtraScripts(
       fileName: file.fileName,
       filePath: file.filePath,
       occurredAt: file.occurredAt,
-      sentToGateway:
-        confirmedSentPaths.has(file.filePath) ||
-        isExtraFileSentViaBatch(file.filePath, batch?.sentFiles ?? null),
+      sentToGateway: gatewayDeliveries.length > 0,
+      queuedForGateway: queuedGatewayPaths.has(file.filePath) && gatewayDeliveries.length === 0,
+      gatewayDeliveries,
     };
     bankMap.set(bankCode, [...(bankMap.get(bankCode) ?? []), row]);
     scriptMap.set(scriptCode, bankMap);

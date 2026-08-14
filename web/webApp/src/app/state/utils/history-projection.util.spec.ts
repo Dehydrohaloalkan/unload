@@ -6,7 +6,7 @@ import {
   SenderBatchStatusInfo,
 } from '../../app.models';
 import {
-  buildConfirmedSentPaths,
+  buildAcceptedRequeuePaths,
   buildHistoryNodes,
   GatewayDelivery,
   HistoryFileRow,
@@ -16,7 +16,7 @@ import {
 describe('history projection', () => {
   it.each([
     { publish: false, batchStatus: SenderBatchStatus.Completed, sent: false, expected: 'off' },
-    { publish: true, batchStatus: SenderBatchStatus.Completed, sent: false, expected: 'delivered' },
+    { publish: true, batchStatus: SenderBatchStatus.Completed, sent: false, expected: 'notSent' },
     { publish: true, batchStatus: SenderBatchStatus.Failed, sent: true, expected: 'partial' },
     { publish: true, batchStatus: SenderBatchStatus.Failed, sent: false, expected: 'failed' },
   ] satisfies Array<{
@@ -112,7 +112,7 @@ describe('history projection', () => {
       ],
     });
 
-    const paths = buildConfirmedSentPaths(result, [runRow, extraRow]);
+    const paths = buildAcceptedRequeuePaths(result, [runRow, extraRow]);
 
     expect(Array.from(paths)).toEqual(['run-a.csv']);
   });
@@ -142,7 +142,74 @@ describe('history projection', () => {
       ],
     });
 
-    expect(summarizeRequeue(result, selected)).toEqual({ total: 3, sent: 1, notSent: 2 });
+    expect(summarizeRequeue(result, selected)).toEqual({ total: 3, accepted: 1, rejected: 2 });
+  });
+
+  it('keeps every confirmed file delivery and gateway attempt in chronological order', () => {
+    const filePath = 'output/run/member-a.csv';
+    const run = createRun({
+      outputArtifacts: [
+        {
+          fileName: 'member-a.csv',
+          filePath,
+          memberName: 'Member A',
+          scriptCode: 'SCRIPT_A',
+          occurredAt: '2026-08-07T10:01:00Z',
+        },
+      ],
+      senderBatches: {
+        initial: {
+          ...createBatch('Member A', SenderBatchStatus.Completed, [filePath]),
+          batchId: 'initial-1',
+          updatedAt: '2026-08-07T10:04:00Z',
+          sentFiles: [{ filePath, sentAt: '2026-08-07T10:03:00Z' }],
+        },
+        repeated: {
+          ...createBatch('Member A', SenderBatchStatus.Completed, [filePath]),
+          batchId: 'requeue-1',
+          updatedAt: '2026-08-07T11:05:00Z',
+          sentFiles: [{ filePath, sentAt: '2026-08-07T11:04:00Z' }],
+        },
+      },
+    });
+
+    const node = buildHistoryNodes(createInput({ todayRuns: [run] }))[0];
+    const file = node.memberFiles['Member A'][0];
+
+    expect(file.gatewayDeliveries).toEqual([
+      { batchId: 'requeue-1', sentAt: '2026-08-07T11:04:00Z' },
+      { batchId: 'initial-1', sentAt: '2026-08-07T10:03:00Z' },
+    ]);
+    expect(node.gatewayAttempts.map((attempt) => attempt.batchId)).toEqual([
+      'requeue-1',
+      'initial-1',
+    ]);
+    expect(node.gatewayAttempts.map((attempt) => attempt.repeated)).toEqual([true, false]);
+  });
+
+  it('shows an accepted requeue as queued until sender feedback confirms delivery', () => {
+    const filePath = 'output/run/member-a.csv';
+    const run = createRun({
+      outputArtifacts: [
+        {
+          fileName: 'member-a.csv',
+          filePath,
+          memberName: 'Member A',
+          scriptCode: 'SCRIPT_A',
+          occurredAt: '2026-08-07T10:01:00Z',
+        },
+      ],
+      senderBatches: {},
+    });
+
+    const node = buildHistoryNodes(
+      createInput({ todayRuns: [run], queuedGatewayPaths: new Set([filePath]) }),
+    )[0];
+    const file = node.memberFiles['Member A'][0];
+
+    expect(file.queuedForGateway).toBe(true);
+    expect(file.sentToGateway).toBe(false);
+    expect(file.gatewayDeliveries).toEqual([]);
   });
 });
 
@@ -153,7 +220,7 @@ function createInput(overrides: Partial<Parameters<typeof buildHistoryNodes>[0]>
     allTodayRuns: [],
     outputFilesByPath: {},
     knownMemberNames: [],
-    confirmedSentPaths: new Set<string>(),
+    queuedGatewayPaths: new Set<string>(),
     ...overrides,
   };
 }
@@ -211,6 +278,8 @@ function createHistoryRow(
     filePath,
     occurredAt: '2026-08-07T10:00:00Z',
     sentToGateway: false,
+    queuedForGateway: false,
+    gatewayDeliveries: [],
   };
 }
 

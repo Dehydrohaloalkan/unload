@@ -13,19 +13,34 @@ import {
   HistoryRunNode,
   HistoryScriptNode,
   HistoryTaskCode,
-  buildConfirmedSentPaths,
+  buildAcceptedRequeuePaths,
   buildHistoryNodes,
   summarizeRequeue,
 } from '../../state/utils/history-projection.util';
+import {
+  HistorySelectionState,
+  collectHistoryFiles,
+  collectRunFiles,
+  collectScriptFiles,
+  resolveHistorySelectionState,
+  toggleHistoryFiles,
+} from '../../state/utils/history-selection.util';
 import { resolveSenderStatusLabel } from '../../state/utils/labels.util';
 import { formatFileCount } from '../../state/utils/pluralize.util';
 import { formatTimestamp } from '../../state/utils/time.util';
 import { UiConfirmService } from '../../ui/ui-confirm.service';
+import { GatewayDeliveryHistoryComponent } from './gateway-delivery-history.component';
 
 @Component({
   selector: 'app-run-history-list',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatCheckboxModule, TPipe],
+  imports: [
+    CommonModule,
+    GatewayDeliveryHistoryComponent,
+    MatButtonModule,
+    MatCheckboxModule,
+    TPipe,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-history-list.component.html',
   styleUrls: ['./details-shared.css', './run-history-list.component.css'],
@@ -39,8 +54,8 @@ export class RunHistoryListComponent {
   /** Снапшот выделения на момент инициирования requeue — основание для сверки ответа API. */
   private readonly requeueSnapshot = signal<HistoryFileRow[] | null>(null);
 
-  private readonly confirmedSentPaths = computed(() =>
-    buildConfirmedSentPaths(this.store.requeueResult(), this.requeueSnapshot()),
+  private readonly acceptedRequeuePaths = computed(() =>
+    buildAcceptedRequeuePaths(this.store.requeueResult(), this.requeueSnapshot()),
   );
 
   /** Опциональный фильтр по типу задачи: панель extra показывает только extra-узлы. */
@@ -53,13 +68,14 @@ export class RunHistoryListComponent {
       allTodayRuns: this.store.allTodayRuns(),
       outputFilesByPath: this.store.outputFilesByPath() ?? {},
       knownMemberNames: this.store.historyMemberNames(),
-      confirmedSentPaths: this.confirmedSentPaths(),
+      queuedGatewayPaths: this.acceptedRequeuePaths(),
       bankNamesByCode: this.store.extraBankNamesByCode(),
     });
     const filter = this.taskCodeFilter();
     return filter ? nodes.filter((node) => node.taskCode === filter) : nodes;
   });
 
+  readonly allHistoryFiles = computed(() => collectHistoryFiles(this.historyNodes()));
   readonly canRequeue = computed(() => this.selectedHistoryFiles().length > 0);
 
   private readonly openHistoryRuns = signal(new Set<string>());
@@ -142,10 +158,27 @@ export class RunHistoryListComponent {
   }
 
   toggleHistoryFile(row: HistoryFileRow, checked: boolean): void {
-    const next = checked
-      ? [...this.selectedHistoryFiles().filter((file) => file.key !== row.key), row]
-      : this.selectedHistoryFiles().filter((file) => file.key !== row.key);
-    this.selectedHistoryFiles.set(next);
+    this.toggleHistoryGroup([row], checked);
+  }
+
+  toggleHistoryGroup(files: HistoryFileRow[], checked: boolean): void {
+    this.selectedHistoryFiles.set(toggleHistoryFiles(this.selectedHistoryFiles(), files, checked));
+  }
+
+  clearHistorySelection(): void {
+    this.selectedHistoryFiles.set([]);
+  }
+
+  selectionState(files: HistoryFileRow[]): HistorySelectionState {
+    return resolveHistorySelectionState(files, this.selectedHistoryFiles());
+  }
+
+  runFiles(node: HistoryRunNode): HistoryFileRow[] {
+    return collectRunFiles(node);
+  }
+
+  scriptFiles(script: HistoryScriptNode): HistoryFileRow[] {
+    return collectScriptFiles(script);
   }
 
   historyMembers(node: HistoryRunNode) {
@@ -209,7 +242,7 @@ export class RunHistoryListComponent {
 
     this.confirmationService.confirm({
       title: t('confirm.header'),
-      message: t('history.confirmMessage'),
+      message: t('history.confirmMessage', { count: this.selectedHistoryFiles().length }),
       acceptLabel: t('history.confirmAccept'),
       rejectLabel: t('confirm.reject'),
       onAccept: () => this.emitRequeue(),
@@ -217,7 +250,29 @@ export class RunHistoryListComponent {
   }
 
   requeueFileSummary(result: ReturnType<WorkflowStore['requeueResult']>) {
-    return result ? summarizeRequeue(result, this.selectedHistoryFiles()) : null;
+    return result ? summarizeRequeue(result, this.requeueSnapshot() ?? []) : null;
+  }
+
+  gatewayFileLabel(file: HistoryFileRow): string {
+    const deliveries = file.gatewayDeliveries;
+    if (deliveries.length === 0) {
+      return t(file.queuedForGateway ? 'history.gatewayQueued' : 'history.gatewayPending');
+    }
+    const latest = formatTimestamp(deliveries[0].sentAt);
+    return deliveries.length === 1
+      ? t('history.gatewaySentAt', { time: latest })
+      : t('history.gatewaySentMany', { count: deliveries.length, time: latest });
+  }
+
+  gatewayFileTitle(file: HistoryFileRow): string {
+    if (file.gatewayDeliveries.length === 0) {
+      return t(
+        file.queuedForGateway ? 'history.gatewayQueuedTitle' : 'history.gatewayPendingTitle',
+      );
+    }
+    return file.gatewayDeliveries
+      .map((delivery) => `${formatTimestamp(delivery.sentAt)} · ${delivery.batchId}`)
+      .join('\n');
   }
 
   private emitRequeue(): void {

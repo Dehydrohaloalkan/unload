@@ -528,7 +528,8 @@ Material отвечает за доступное поведение диало�
 | `history-projection.util.ts` | стабильный фасад сборки и сортировки history nodes |
 | `run-history-projection.util.ts` | чистая проекция main run и его member-файлов |
 | `extra-history-projection.util.ts` | чистая иерархия extra: скрипт → банк → файл |
-| `gateway-history-projection.util.ts` | delivery status, подтверждённые requeue paths и summary |
+| `gateway-history-projection.util.ts` | delivery status, принятые requeue paths, фактические `sentAt`, история партий и summary |
+| `history-selection.util.ts` | единые правила массового выбора file/member/script/bank/run/all и indeterminate state |
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
 
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.

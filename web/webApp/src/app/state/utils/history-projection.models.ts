@@ -1,4 +1,4 @@
-import { OutputFileInfo, RunStatusInfo, TaskRecord } from '../../app.models';
+import { OutputFileInfo, RunStatusInfo, SenderBatchStatus, TaskRecord } from '../../app.models';
 
 export type HistoryTaskCode = 'run' | 'extra';
 
@@ -11,8 +11,25 @@ export interface HistoryFileRow {
   filePath: string;
   occurredAt: string;
   sentToGateway: boolean;
+  queuedForGateway: boolean;
+  gatewayDeliveries: HistoryFileDelivery[];
   scriptCode?: string;
   bankName?: string;
+}
+
+export interface HistoryFileDelivery {
+  batchId: string;
+  sentAt: string;
+}
+
+export interface HistoryGatewayAttempt {
+  batchId: string;
+  memberName: string;
+  status: SenderBatchStatus;
+  updatedAt: string;
+  sentFileCount: number;
+  message: string | null;
+  repeated: boolean;
 }
 
 export interface HistoryBankNode {
@@ -40,6 +57,7 @@ export interface HistoryRunNode {
   gatewayDelivery: GatewayDelivery;
   memberNames: string[];
   memberFiles: Record<string, HistoryFileRow[]>;
+  gatewayAttempts: HistoryGatewayAttempt[];
   scripts?: HistoryScriptNode[];
 }
 
@@ -49,12 +67,12 @@ export interface HistoryProjectionInput {
   allTodayRuns: RunStatusInfo[];
   outputFilesByPath: Record<string, OutputFileInfo[]>;
   knownMemberNames: string[];
-  confirmedSentPaths: Set<string>;
+  queuedGatewayPaths: Set<string>;
   bankNamesByCode?: Record<string, string>;
 }
 
 export interface RequeueFileSummary {
   total: number;
-  sent: number;
-  notSent: number;
+  accepted: number;
+  rejected: number;
 }

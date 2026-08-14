@@ -5,13 +5,15 @@ import {
 } from '../../app.models';
 import {
   GatewayDelivery,
+  HistoryFileDelivery,
   HistoryFileRow,
+  HistoryGatewayAttempt,
   HistoryTaskCode,
   RequeueFileSummary,
 } from './history-projection.models';
-import { memberKey } from './member-index.util';
+import { extraFilePathKey, memberKey, normalizeFilePath } from './member-index.util';
 
-export function buildConfirmedSentPaths(
+export function buildAcceptedRequeuePaths(
   result: RequeueToGatewayResponse | null,
   snapshot: HistoryFileRow[] | null,
 ): Set<string> {
@@ -48,7 +50,7 @@ export function summarizeRequeue(
 ): RequeueFileSummary {
   const total = selected.length;
   if (!result?.results || total === 0) {
-    return { total, sent: 0, notSent: total };
+    return { total, accepted: 0, rejected: total };
   }
 
   const selectedByItemKey = new Map<string, HistoryFileRow[]>();
@@ -57,7 +59,7 @@ export function summarizeRequeue(
     selectedByItemKey.set(key, [...(selectedByItemKey.get(key) ?? []), row]);
   }
 
-  let sent = 0;
+  let accepted = 0;
   for (const [itemKey, selectedRows] of selectedByItemKey) {
     const [taskCode, correlationId] = itemKey.split('|', 2) as [HistoryTaskCode, string];
     const itemResult = result.results.find(
@@ -77,10 +79,46 @@ export function summarizeRequeue(
     }
 
     const acceptedMembers = acceptedMemberNames(itemResult.batches ?? []);
-    sent += selectedRows.filter((row) => acceptedMembers.has(memberKey(row.memberName))).length;
+    accepted += selectedRows.filter((row) => acceptedMembers.has(memberKey(row.memberName))).length;
   }
 
-  return { total, sent, notSent: Math.max(0, total - sent) };
+  return { total, accepted, rejected: Math.max(0, total - accepted) };
+}
+
+export function buildFileGatewayDeliveries(
+  filePath: string,
+  batches: SenderBatchStatusInfo[],
+  extraPath = false,
+): HistoryFileDelivery[] {
+  const pathKey = extraPath ? extraFilePathKey : normalizeFilePath;
+  const target = pathKey(filePath);
+  const deliveries: HistoryFileDelivery[] = [];
+
+  for (const batch of batches) {
+    for (const sentFile of batch.sentFiles ?? []) {
+      if (pathKey(sentFile.filePath) === target) {
+        deliveries.push({ batchId: batch.batchId, sentAt: sentFile.sentAt });
+      }
+    }
+  }
+
+  return deliveries.sort((left, right) => Date.parse(right.sentAt) - Date.parse(left.sentAt));
+}
+
+export function buildGatewayAttempts(run: {
+  senderBatches?: Record<string, SenderBatchStatusInfo> | null;
+}): HistoryGatewayAttempt[] {
+  return Object.values(run.senderBatches ?? {})
+    .map((batch) => ({
+      batchId: batch.batchId,
+      memberName: batch.memberName,
+      status: batch.status,
+      updatedAt: batch.updatedAt,
+      sentFileCount: batch.sentFiles?.length ?? 0,
+      message: batch.message ?? null,
+      repeated: batch.batchId.toLowerCase().startsWith('requeue-'),
+    }))
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
 export function resolveGatewayDelivery(
@@ -88,16 +126,21 @@ export function resolveGatewayDelivery(
   files: HistoryFileRow[],
   batches: SenderBatchStatusInfo[],
 ): GatewayDelivery {
+  const deliveredFileCount = files.filter((file) => file.sentToGateway).length;
+  const hasFailure = batches.some((batch) => batch.status === SenderBatchStatus.Failed);
+  if (hasFailure) {
+    return deliveredFileCount > 0 ? 'partial' : 'failed';
+  }
+  if (files.length > 0 && deliveredFileCount === files.length) {
+    return 'delivered';
+  }
+  if (deliveredFileCount > 0) {
+    return 'partial';
+  }
   if (!publishToGateway) {
     return 'off';
   }
-
-  const hasFailure = batches.some((batch) => batch.status === SenderBatchStatus.Failed);
-  if (!hasFailure) {
-    return 'delivered';
-  }
-
-  return files.some((file) => file.sentToGateway) ? 'partial' : 'failed';
+  return 'notSent';
 }
 
 function acceptedMemberNames(

@@ -20,6 +20,8 @@ export function normalizeFilePath(value: string): string {
 export interface RunMemberIndex {
   statuses: Map<string, MemberRunStatusInfo>;
   batches: Map<string, SenderBatchStatusInfo>;
+  /** Все попытки отправки мембера, включая повторные requeue-партии. */
+  batchGroups: Map<string, SenderBatchStatusInfo[]>;
   workers: Map<string, RunWorkerStatusInfo[]>;
   artifacts: Map<string, RunOutputArtifactInfo[]>;
   /** Уникальные member-имена, замеченные в любом из подразделов run'а. */
@@ -30,12 +32,13 @@ export interface RunMemberIndex {
 export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
   const statuses = new Map<string, MemberRunStatusInfo>();
   const batches = new Map<string, SenderBatchStatusInfo>();
+  const batchGroups = new Map<string, SenderBatchStatusInfo[]>();
   const workers = new Map<string, RunWorkerStatusInfo[]>();
   const artifacts = new Map<string, RunOutputArtifactInfo[]>();
   const memberNames = new Set<string>();
 
   if (!run) {
-    return { statuses, batches, workers, artifacts, memberNames };
+    return { statuses, batches, batchGroups, workers, artifacts, memberNames };
   }
 
   for (const status of Object.values(run.memberStatuses ?? {})) {
@@ -49,6 +52,7 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
     const key = memberKey(batch.memberName);
     if (!key) continue;
     batches.set(key, batch);
+    batchGroups.set(key, [...(batchGroups.get(key) ?? []), batch]);
     memberNames.add(batch.memberName);
   }
 
@@ -72,7 +76,11 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
     memberNames.add(artifact.memberName);
   }
 
-  return { statuses, batches, workers, artifacts, memberNames };
+  for (const group of batchGroups.values()) {
+    group.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+  }
+
+  return { statuses, batches, batchGroups, workers, artifacts, memberNames };
 }
 
 export function isFileSentViaBatch(

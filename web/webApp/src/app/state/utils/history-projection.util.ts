@@ -4,7 +4,7 @@ import { HistoryProjectionInput, HistoryRunNode } from './history-projection.mod
 import { buildRunHistoryNode } from './run-history-projection.util';
 
 export * from './history-projection.models';
-export { buildConfirmedSentPaths, summarizeRequeue } from './gateway-history-projection.util';
+export { buildAcceptedRequeuePaths, summarizeRequeue } from './gateway-history-projection.util';
 
 /**
  * Собирает единое представление истории из независимых main и extra проекций.
@@ -13,7 +13,7 @@ export { buildConfirmedSentPaths, summarizeRequeue } from './gateway-history-pro
 export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode[] {
   const nodeMap = new Map<string, HistoryRunNode>();
   for (const run of input.todayRuns) {
-    const node = buildRunHistoryNode(run, input.knownMemberNames, input.confirmedSentPaths);
+    const node = buildRunHistoryNode(run, input.knownMemberNames, input.queuedGatewayPaths);
     if (node) {
       nodeMap.set(node.key, node);
     }
@@ -26,7 +26,7 @@ export function buildHistoryNodes(input: HistoryProjectionInput): HistoryRunNode
       input.todayHistory,
       input.outputFilesByPath,
       input.knownMemberNames,
-      input.confirmedSentPaths,
+      input.queuedGatewayPaths,
       bankNamesByCode,
     );
     if (node) {

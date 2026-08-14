@@ -1,0 +1,31 @@
+<details class="history-delivery-log">
+  <summary class="history-delivery-log__summary">
+    <span>{{ 'history.deliveryLog' | t }}</span>
+    <span>
+      {{ 'history.deliveryAttemptCount' | t: { count: attempts().length } }} ·
+      {{ formatTimestamp(attempts()[0].updatedAt) }}
+    </span>
+  </summary>
+  <div class="history-delivery-log__body">
+    @for (attempt of attempts(); track attempt.batchId) {
+      <div class="history-delivery-attempt">
+        <span class="history-delivery-attempt__time">
+          {{ formatTimestamp(attempt.updatedAt) }}
+        </span>
+        <span class="history-delivery-attempt__kind">
+          {{
+            (attempt.repeated ? 'history.deliveryRepeated' : 'history.deliveryInitial') | t
+          }}
+        </span>
+        <span class="history-delivery-attempt__member">{{ attempt.memberName }}</span>
+        <span class="history-delivery-attempt__status">
+          {{ resolveSenderStatusLabel(attempt.status) }}
+        </span>
+        <span>{{ formatFileCount(attempt.sentFileCount) }}</span>
+        @if (attempt.message) {
+          <span class="history-delivery-attempt__message">{{ attempt.message }}</span>
+        }
+      </div>
+    }
+  </div>
+</details>

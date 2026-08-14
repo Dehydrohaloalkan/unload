@@ -4,10 +4,40 @@
   @if (historyNodes().length === 0) {
     <div class="details-empty">{{ 'history.empty' | t }}</div>
   } @else {
+    @let allSelection = selectionState(allHistoryFiles());
+    <div class="history-selection-toolbar">
+      <mat-checkbox
+        [checked]="allSelection.checked"
+        [indeterminate]="allSelection.indeterminate"
+        [disabled]="allSelection.total === 0"
+        (change)="toggleHistoryGroup(allHistoryFiles(), $event.checked)"
+      >{{ 'history.selectAllFiles' | t }}</mat-checkbox>
+      <span class="history-selection-toolbar__count">
+        {{
+          'history.selectedCount'
+            | t: { selected: selectedHistoryFiles().length, total: allHistoryFiles().length }
+        }}
+      </span>
+      @if (selectedHistoryFiles().length > 0) {
+        <button mat-button type="button" (click)="clearHistorySelection()">
+          {{ 'history.clearSelection' | t }}
+        </button>
+      }
+    </div>
+
     <div class="history-runs">
       @for (node of historyNodes(); track node.key) {
         <details class="history-run" (toggle)="onHistoryRunToggle($event, node.key)">
           <summary class="history-run__summary">
+            @let runSelection = selectionState(runFiles(node));
+            <mat-checkbox
+              class="history-group-checkbox"
+              [checked]="runSelection.checked"
+              [indeterminate]="runSelection.indeterminate"
+              [disabled]="runSelection.total === 0"
+              [attr.aria-label]="'history.selectRun' | t"
+              (change)="toggleHistoryGroup(runFiles(node), $event.checked)"
+            ></mat-checkbox>
             <span class="history-run__title">
               {{ node.taskCode === 'run' ? ('history.runLabel' | t) : ('history.extraLabel' | t) }} ·
               {{ node.correlationId }}
@@ -27,6 +57,10 @@
 
           @if (isHistoryRunOpen(node.key)) {
             <div class="history-run__body">
+              @if (node.gatewayAttempts.length > 0) {
+                <app-gateway-delivery-history [attempts]="node.gatewayAttempts" />
+              }
+
               @if (node.taskCode === 'extra') {
                 <div class="history-members">
                   @for (script of historyScripts(node); track script.scriptCode) {
@@ -35,6 +69,15 @@
                       (toggle)="onHistoryScriptToggle($event, scriptKey(node, script))"
                     >
                       <summary class="history-member__summary">
+                        @let scriptSelection = selectionState(scriptFiles(script));
+                        <mat-checkbox
+                          class="history-group-checkbox"
+                          [checked]="scriptSelection.checked"
+                          [indeterminate]="scriptSelection.indeterminate"
+                          [disabled]="scriptSelection.total === 0"
+                          [attr.aria-label]="'history.selectScript' | t"
+                          (change)="toggleHistoryGroup(scriptFiles(script), $event.checked)"
+                        ></mat-checkbox>
                         <span>{{ script.scriptCode }}</span>
                         <span>{{ formatFileCount(script.fileCount) }}</span>
                       </summary>
@@ -46,6 +89,15 @@
                               (toggle)="onHistoryBankToggle($event, bankKey(node, script, bank.bankName))"
                             >
                               <summary class="history-member__summary">
+                                @let bankSelection = selectionState(bank.files);
+                                <mat-checkbox
+                                  class="history-group-checkbox"
+                                  [checked]="bankSelection.checked"
+                                  [indeterminate]="bankSelection.indeterminate"
+                                  [disabled]="bankSelection.total === 0"
+                                  [attr.aria-label]="'history.selectBank' | t"
+                                  (change)="toggleHistoryGroup(bank.files, $event.checked)"
+                                ></mat-checkbox>
                                 <span>{{ bank.bankName }}</span>
                                 <span>{{ formatFileCount(bank.files.length) }}</span>
                               </summary>
@@ -67,19 +119,16 @@
                                       @if (file.occurredAt) {
                                         <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
                                       }
-                                      @if (file.sentToGateway) {
-                                        <span
-                                          class="history-file__gateway history-file__gateway--sent"
-                                          [title]="'history.gatewaySentTitle' | t"
-                                          >{{ 'history.gatewaySent' | t }}</span
-                                        >
-                                      } @else {
-                                        <span
-                                          class="history-file__gateway history-file__gateway--pending"
-                                          [title]="'history.gatewayPendingTitle' | t"
-                                          >{{ 'history.gatewayPending' | t }}</span
-                                        >
-                                      }
+                                      <span
+                                        class="history-file__gateway"
+                                        [class.history-file__gateway--sent]="file.sentToGateway"
+                                        [class.history-file__gateway--queued]="file.queuedForGateway"
+                                        [class.history-file__gateway--pending]="
+                                          !file.sentToGateway && !file.queuedForGateway
+                                        "
+                                        [title]="gatewayFileTitle(file)"
+                                        >{{ gatewayFileLabel(file) }}</span
+                                      >
                                     </div>
                                   }
                                 </div>
@@ -99,6 +148,15 @@
                       (toggle)="onHistoryMemberToggle($event, member.key)"
                     >
                       <summary class="history-member__summary">
+                        @let memberSelection = selectionState(member.files);
+                        <mat-checkbox
+                          class="history-group-checkbox"
+                          [checked]="memberSelection.checked"
+                          [indeterminate]="memberSelection.indeterminate"
+                          [disabled]="memberSelection.total === 0"
+                          [attr.aria-label]="'history.selectMember' | t"
+                          (change)="toggleHistoryGroup(member.files, $event.checked)"
+                        ></mat-checkbox>
                         <span>{{ member.memberName }}</span>
                         <span>{{ formatFileCount(member.files.length) }}</span>
                       </summary>
@@ -123,19 +181,16 @@
                                 @if (file.occurredAt) {
                                   <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
                                 }
-                                @if (file.sentToGateway) {
-                                  <span
-                                    class="history-file__gateway history-file__gateway--sent"
-                                    [title]="'history.gatewaySentTitle' | t"
-                                    >{{ 'history.gatewaySent' | t }}</span
-                                  >
-                                } @else {
-                                  <span
-                                    class="history-file__gateway history-file__gateway--pending"
-                                    [title]="'history.gatewayPendingTitle' | t"
-                                    >{{ 'history.gatewayPending' | t }}</span
-                                  >
-                                }
+                                <span
+                                  class="history-file__gateway"
+                                  [class.history-file__gateway--sent]="file.sentToGateway"
+                                  [class.history-file__gateway--queued]="file.queuedForGateway"
+                                  [class.history-file__gateway--pending]="
+                                    !file.sentToGateway && !file.queuedForGateway
+                                  "
+                                  [title]="gatewayFileTitle(file)"
+                                  >{{ gatewayFileLabel(file) }}</span
+                                >
                               </div>
                             }
                           }
@@ -166,7 +221,7 @@
       [class.app-icon--spin]="store.requeueRunning()"
       aria-hidden="true"
     ></span>
-    {{ 'history.sendSelected' | t }}
+    {{ 'history.sendSelectedCount' | t: { count: selectedHistoryFiles().length } }}
   </button>
 
   @if (store.requeueResult(); as result) {
@@ -176,9 +231,9 @@
           'history.requeueSummary'
             | t
               : {
-                  sent: summary.sent,
+                  accepted: summary.accepted,
                   total: summary.total,
-                  notSent: summary.notSent,
+                  rejected: summary.rejected,
                   requestId: result.requestId
                 }
         }}
