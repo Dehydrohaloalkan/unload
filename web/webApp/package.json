@@ -36,7 +36,7 @@
     "@angular/forms": "^22.1.0",
     "@angular/material": "^22.1.1",
     "@angular/platform-browser": "^22.1.0",
-    "@angular/router": "^22.1.0",
+    "@angular/router": "^22.1.1",
     "@microsoft/signalr": "^10.0.11",
     "@ngrx/signals": "22.0.0-rc.0",
     "rxjs": "~7.8.0",
