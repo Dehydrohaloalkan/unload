@@ -48,7 +48,7 @@
     "@angular/compiler-cli": "^22.1.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
-    "jsdom": "^27.1.0",
+    "jsdom": "^30.0.1",
     "ng-openapi-gen": "1.0.5",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
