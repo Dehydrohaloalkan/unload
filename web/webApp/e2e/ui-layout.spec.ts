@@ -78,6 +78,35 @@ test('leaves vertical scrolling to the drawer instead of Material tab internals'
   await expect(page.locator('.details-drawer__body')).toHaveCSS('overflow-y', 'auto');
 });
 
+test('gives workflow cards layered depth and a mouse-only hover lift', async ({ page }) => {
+  const card = page.locator('.stage-flow__item').first().locator('.mat-mdc-card');
+  await expect(card).toBeVisible();
+
+  const restingStyle = await card.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { boxShadow: style.boxShadow, transform: style.transform };
+  });
+
+  const shadowLayers = restingStyle.boxShadow.split(/, (?=(?:rgba?|color)\()/);
+  expect(shadowLayers).toHaveLength(3);
+
+  await card.hover();
+  await page.waitForTimeout(220);
+  await expect
+    .poll(() => card.evaluate((element) => getComputedStyle(element).transform))
+    .not.toBe(restingStyle.transform);
+});
+
+test('removes decorative card transforms when reduced motion is requested', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await expect(page.locator('.stage-stack')).toBeVisible();
+
+  const card = page.locator('.stage-flow__item').first().locator('.mat-mdc-card');
+  await card.hover();
+  await expect(card).toHaveCSS('transform', 'none');
+});
+
 test.describe('mobile drawer', () => {
   test.use({ viewport: { width: 375, height: 900 } });
 

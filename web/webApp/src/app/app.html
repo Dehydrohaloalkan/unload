@@ -39,7 +39,11 @@
       </div>
     } @else {
       <ol class="stage-stack">
-        <li class="stage-flow__item">
+        <li
+          class="stage-flow__item"
+          [class.stage-flow__item--active]="!probeCompleted()"
+          [class.stage-flow__item--complete]="probeCompleted()"
+        >
           <span class="stage-flow__marker" aria-hidden="true">01</span>
           <div class="stage-flow__card">
             <app-live-clock
@@ -51,7 +55,13 @@
           </div>
         </li>
 
-        <li class="stage-flow__item">
+        <li
+          class="stage-flow__item"
+          [class.stage-flow__item--active]="
+            (store.canRunPreset() || store.adminMode()) && !stage2CompletedAt()
+          "
+          [class.stage-flow__item--complete]="!!stage2CompletedAt()"
+        >
           <span class="stage-flow__marker" aria-hidden="true">02</span>
           <div class="stage-flow__card">
             <app-preset-stage
@@ -65,7 +75,11 @@
           </div>
         </li>
 
-        <li class="stage-flow__item">
+        <li
+          class="stage-flow__item"
+          [class.stage-flow__item--active]="store.canStartFullRun() && !store.hasRunToday()"
+          [class.stage-flow__item--complete]="store.hasRunToday()"
+        >
           <span class="stage-flow__marker" aria-hidden="true">03</span>
           <div class="stage-flow__card">
             <app-run-card
@@ -79,7 +93,11 @@
           </div>
         </li>
 
-        <li class="stage-flow__item">
+        <li
+          class="stage-flow__item"
+          [class.stage-flow__item--active]="store.canRunExtra() && !store.hasExtraToday()"
+          [class.stage-flow__item--complete]="store.hasExtraToday()"
+        >
           <span class="stage-flow__marker" aria-hidden="true">04</span>
           <div class="stage-flow__card">
             <app-extra-card
