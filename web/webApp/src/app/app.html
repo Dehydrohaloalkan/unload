@@ -38,41 +38,61 @@
         </div>
       </div>
     } @else {
-      <div class="stage-stack">
-        <app-live-clock
-          [now]="store.currentTime()"
-          [connected]="store.connectionReady()"
-          [probeCompleted]="probeCompleted()"
-          [dayWindowSummary]="dayWindowSummary()"
-        />
+      <ol class="stage-stack">
+        <li class="stage-flow__item">
+          <span class="stage-flow__marker" aria-hidden="true">01</span>
+          <div class="stage-flow__card">
+            <app-live-clock
+              [now]="store.currentTime()"
+              [connected]="store.connectionReady()"
+              [probeCompleted]="probeCompleted()"
+              [dayWindowSummary]="dayWindowSummary()"
+            />
+          </div>
+        </li>
 
-        <app-preset-stage
-          [presetState]="store.presetState()"
-          [presetTask]="store.presetTask()"
-          [canRunPreset]="store.canRunPreset() || store.adminMode()"
-          [completedAt]="stage2CompletedAt()"
-          (startPreset)="store.runPresetAsync()"
-          (openDetails)="openDetails('preset')"
-        />
+        <li class="stage-flow__item">
+          <span class="stage-flow__marker" aria-hidden="true">02</span>
+          <div class="stage-flow__card">
+            <app-preset-stage
+              [presetState]="store.presetState()"
+              [presetTask]="store.presetTask()"
+              [canRunPreset]="store.canRunPreset() || store.adminMode()"
+              [completedAt]="stage2CompletedAt()"
+              (startPreset)="store.runPresetAsync()"
+              (openDetails)="openDetails('preset')"
+            />
+          </div>
+        </li>
 
-        <app-run-card
-          [canStartRun]="store.canStartFullRun()"
-          [runBusy]="store.isRunBusy()"
-          [hasRunToday]="store.hasRunToday()"
-          [lastCompletedAt]="store.runLastCompletedAt()"
-          (startRun)="startRunFromMainCard()"
-          (openDetails)="openDetails('run')"
-        />
+        <li class="stage-flow__item">
+          <span class="stage-flow__marker" aria-hidden="true">03</span>
+          <div class="stage-flow__card">
+            <app-run-card
+              [canStartRun]="store.canStartFullRun()"
+              [runBusy]="store.isRunBusy()"
+              [hasRunToday]="store.hasRunToday()"
+              [lastCompletedAt]="store.runLastCompletedAt()"
+              (startRun)="startRunFromMainCard()"
+              (openDetails)="openDetails('run')"
+            />
+          </div>
+        </li>
 
-        <app-extra-card
-          [task]="store.extraTask()"
-          [canRun]="store.canRunExtra()"
-          [hasRunToday]="store.hasExtraToday()"
-          [lastCompletedAt]="store.extraLastCompletedAt()"
-          (start)="startExtraFromMainCard()"
-          (openDetails)="openDetails('extra')"
-        />
-      </div>
+        <li class="stage-flow__item">
+          <span class="stage-flow__marker" aria-hidden="true">04</span>
+          <div class="stage-flow__card">
+            <app-extra-card
+              [task]="store.extraTask()"
+              [canRun]="store.canRunExtra()"
+              [hasRunToday]="store.hasExtraToday()"
+              [lastCompletedAt]="store.extraLastCompletedAt()"
+              (start)="startExtraFromMainCard()"
+              (openDetails)="openDetails('extra')"
+            />
+          </div>
+        </li>
+      </ol>
     }
   </section>
 

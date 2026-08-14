@@ -115,15 +115,75 @@
 
 .stage-stack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  width: min(100%, 64rem);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  width: min(100%, 48rem);
   margin-inline: auto;
+  padding: 0;
+  list-style: none;
 }
 
 .app-shell--drawer-open .stage-stack {
-  grid-template-columns: minmax(0, 1fr);
-  max-width: 30rem;
+  max-width: 34rem;
+}
+
+.stage-flow__item {
+  --flow-color: #10b981;
+  position: relative;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.9rem;
+  padding-bottom: 1rem;
+}
+
+.stage-flow__item:nth-child(2) {
+  --flow-color: #7c3aed;
+}
+
+.stage-flow__item:nth-child(3) {
+  --flow-color: #2563eb;
+}
+
+.stage-flow__item:nth-child(4) {
+  --flow-color: #ec4899;
+}
+
+.stage-flow__item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 2.65rem;
+  bottom: -0.15rem;
+  left: 1.35rem;
+  width: 0.16rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--flow-color) 55%, white), #cbd5e1);
+}
+
+.stage-flow__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.85rem;
+  height: 2.85rem;
+  margin-top: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--flow-color) 48%, white);
+  border-radius: 1rem;
+  color: color-mix(in srgb, var(--flow-color) 78%, #0f172a);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--flow-color) 14%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  font-size: 0.7rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-flow__card {
+  min-width: 0;
 }
 
 .loading-state {
@@ -228,9 +288,18 @@
   }
 
   .stage-stack {
-    grid-template-columns: minmax(0, 1fr);
     max-width: 30rem;
     gap: 0.7rem;
+  }
+
+  .stage-flow__item {
+    display: block;
+    padding: 0;
+  }
+
+  .stage-flow__item::after,
+  .stage-flow__marker {
+    display: none;
   }
 }
 
