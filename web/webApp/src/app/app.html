@@ -114,20 +114,41 @@
     }
   </section>
 
-  <aside class="details-drawer" [class.details-drawer--open]="detailsPanelOpen()">
+  <aside
+    class="details-drawer"
+    [class.details-drawer--open]="detailsPanelOpen()"
+    [class.details-drawer--preset]="detailsPanelStage() === 'preset'"
+    [class.details-drawer--run]="detailsPanelStage() === 'run'"
+    [class.details-drawer--extra]="detailsPanelStage() === 'extra'"
+  >
     <div class="details-drawer__head">
-      <div class="details-drawer__title">
-        @switch (detailsPanelStage()) {
-          @case ('run') {
-            {{ 'app.drawer.runTitle' | t }}
+      <div class="details-drawer__heading">
+        <span class="details-drawer__stage-mark" aria-hidden="true">
+          @switch (detailsPanelStage()) {
+            @case ('run') {
+              03
+            }
+            @case ('preset') {
+              02
+            }
+            @default {
+              04
+            }
           }
-          @case ('preset') {
-            {{ 'app.drawer.presetTitle' | t }}
+        </span>
+        <div class="details-drawer__title">
+          @switch (detailsPanelStage()) {
+            @case ('run') {
+              {{ 'app.drawer.runTitle' | t }}
+            }
+            @case ('preset') {
+              {{ 'app.drawer.presetTitle' | t }}
+            }
+            @default {
+              {{ 'app.drawer.extraTitle' | t }}
+            }
           }
-          @default {
-            {{ 'app.drawer.extraTitle' | t }}
-          }
-        }
+        </div>
       </div>
       <button mat-icon-button type="button" aria-label="Закрыть панель" (click)="closeDetails()">
         <span class="app-icon app-icon--close" aria-hidden="true"></span>

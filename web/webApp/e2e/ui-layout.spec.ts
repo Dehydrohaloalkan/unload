@@ -56,6 +56,31 @@ test('keeps the header inside the main pane when the drawer opens', async ({ pag
   expect(geometry.drawerLeft).toBeLessThan(geometry.viewportWidth);
 });
 
+test('presents details as a layered panel tied to the selected stage', async ({ page }) => {
+  await page.locator('app-run-card button[aria-label="Подробнее"]').click();
+  const drawer = page.locator('.details-drawer--open');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('.details-drawer__stage-mark')).toHaveText('03');
+
+  const surface = await drawer.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundImage: style.backgroundImage,
+      borderRadius: Number.parseFloat(style.borderTopLeftRadius),
+      boxShadow: style.boxShadow,
+    };
+  });
+  const sectionShadow = await drawer
+    .locator('.details-section')
+    .first()
+    .evaluate((element) => getComputedStyle(element).boxShadow);
+
+  expect(surface.backgroundImage).toContain('radial-gradient');
+  expect(surface.borderRadius).toBeGreaterThan(20);
+  expect(surface.boxShadow).not.toBe('none');
+  expect(sectionShadow).not.toBe('none');
+});
+
 test('leaves vertical scrolling to the drawer instead of Material tab internals', async ({
   page,
 }) => {
@@ -113,7 +138,10 @@ test.describe('mobile drawer', () => {
   test('covers the viewport without horizontal overflow', async ({ page }) => {
     await page.locator('app-run-card button[aria-label="Подробнее"]').click();
     await expect(page.locator('.details-drawer--open')).toBeVisible();
-    await page.waitForTimeout(250);
+    await expect(page.locator('.details-drawer--open')).toHaveCSS(
+      'transform',
+      'matrix(1, 0, 0, 1, 0, 0)',
+    );
 
     const geometry = await page.evaluate(() => {
       const drawer = document
@@ -130,5 +158,29 @@ test.describe('mobile drawer', () => {
     expect(geometry.drawerLeft).toBe(0);
     expect(geometry.drawerRight).toBe(geometry.viewportWidth);
     expect(geometry.documentWidth).toBe(geometry.viewportWidth);
+  });
+});
+
+test.describe('landscape drawer', () => {
+  test.use({ viewport: { width: 900, height: 500 } });
+
+  test('fills the viewport and keeps long content on the drawer scroll', async ({ page }) => {
+    await page.locator('app-run-card button[aria-label="Подробнее"]').click();
+    const drawer = page.locator('.details-drawer--open');
+    const body = page.locator('.details-drawer__body');
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+
+    const geometry = await drawer.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, viewportHeight: window.innerHeight };
+    });
+    expect(geometry.top).toBe(0);
+    expect(geometry.bottom).toBe(geometry.viewportHeight);
+    await expect(body).toHaveCSS('overflow-y', 'auto');
+
+    await body.hover();
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   });
 });
