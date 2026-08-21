@@ -1,4 +1,5 @@
 <main class="app-shell" [class.app-shell--drawer-open]="detailsPanelOpen()">
+  <app-completion-confetti [run]="store.activeRun()" />
   <app-download-hint-toast />
 
   <section class="hero-section" [class.hero-section--drawer-open]="detailsPanelOpen()">

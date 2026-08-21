@@ -10,6 +10,7 @@ import { byDescDate } from './state/utils/compare.util';
 import { DetailsRunPanelComponent } from './components/details-run-panel/details-run-panel.component';
 import { DetailsExtraPanelComponent } from './components/details-extra-panel/details-extra-panel.component';
 import { DetailsTaskPanelComponent } from './components/details-task-panel.component';
+import { CompletionConfettiComponent } from './components/completion-confetti.component';
 import { DownloadHintToastComponent } from './components/download-hint-toast.component';
 import { ExtraCardComponent } from './components/extra-card.component';
 import { LiveClockComponent } from './components/live-clock.component';
@@ -29,6 +30,7 @@ import { ErrorDialogComponent, ErrorDialogData } from './ui/error-dialog.compone
     DetailsRunPanelComponent,
     DetailsExtraPanelComponent,
     DetailsTaskPanelComponent,
+    CompletionConfettiComponent,
     DownloadHintToastComponent,
     ExtraCardComponent,
     LiveClockComponent,
