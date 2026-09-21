@@ -40,6 +40,22 @@ export type RunWorkerStatusInfo = ApiModels.RunWorkerStatusInfo;
 export type RunOutputArtifactInfo = ApiModels.RunOutputArtifactInfo;
 export type FileRunStage = ApiModels.FileRunStage;
 export type FileRunStatusInfo = ApiModels.FileRunStatusInfo;
+export const FileRunStage = {
+  QueuedForWrite: 0,
+  Written: 1,
+  Failed: 2,
+  Cancelled: 3,
+} as const satisfies Record<string, FileRunStage>;
+
+export type ScriptRunStage = ApiModels.ScriptRunStage;
+export type ScriptRunStatusInfo = ApiModels.ScriptRunStatusInfo;
+export const ScriptRunStage = {
+  AwaitingWorker: 0,
+  Running: 1,
+  Completed: 2,
+  Failed: 3,
+  Cancelled: 4,
+} as const satisfies Record<string, ScriptRunStage>;
 
 export type SenderBatchStatus = ApiModels.SenderBatchStatus;
 export const SenderBatchStatus = {
