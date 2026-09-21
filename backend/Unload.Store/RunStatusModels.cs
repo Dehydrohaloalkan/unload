@@ -99,6 +99,60 @@ public record ScriptRunStatusInfo(
     string? Message = null);
 
 /// <summary>
+/// Перечисляет наблюдаемые этапы file-карточки в рамках main run.
+/// </summary>
+public enum FileRunStage
+{
+    /// <summary>
+    /// Чанк передан <c>IFileChunkWriter</c>. Время этапа включает возможное ожидание его внутренней блокировки,
+    /// поэтому этот статус не означает, что в файл уже записан первый байт.
+    /// </summary>
+    QueuedForWrite,
+    Written,
+    Failed,
+    Cancelled
+}
+
+/// <summary>
+/// Снимок прохождения одного чанка через запись выходного файла.
+/// </summary>
+/// <param name="Id">Детерминированный идентификатор мембер + скрипт + номер чанка без учета регистра.</param>
+/// <param name="ParentScriptId">Идентификатор родительской script-карточки.</param>
+/// <param name="MemberName">Имя мембера, которому принадлежит файл.</param>
+/// <param name="ScriptCode">Код скрипта, создавшего чанк.</param>
+/// <param name="ChunkNumber">Номер чанка в рамках мембера.</param>
+/// <param name="Stage">Текущий наблюдаемый этап файла.</param>
+/// <param name="CreatedAt">Время появления file-карточки.</param>
+/// <param name="QueuedAt">Время передачи чанка writer-у.</param>
+/// <param name="StageEnteredAt">Время входа в текущий этап.</param>
+/// <param name="UpdatedAt">Время последнего события, обновившего карточку.</param>
+/// <param name="CompletedAt">Время терминального завершения карточки, если оно известно.</param>
+/// <param name="WorkerId">Worker, передавший чанк writer-у, если он известен.</param>
+/// <param name="Rows">Количество строк чанка, если оно известно.</param>
+/// <param name="EstimatedBytes">Оценочный размер чанка до записи либо размер записанного чанка.</param>
+/// <param name="FileName">Фактическое имя записанного файла, если оно известно.</param>
+/// <param name="FilePath">Фактический путь записанного файла, если он известен.</param>
+/// <param name="Message">Последнее человекочитаемое сообщение раннера для файла.</param>
+public record FileRunStatusInfo(
+    string Id,
+    string ParentScriptId,
+    string MemberName,
+    string ScriptCode,
+    int ChunkNumber,
+    FileRunStage Stage,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset QueuedAt,
+    DateTimeOffset StageEnteredAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? CompletedAt = null,
+    int? WorkerId = null,
+    int? Rows = null,
+    long? EstimatedBytes = null,
+    string? FileName = null,
+    string? FilePath = null,
+    string? Message = null);
+
+/// <summary>
 /// Снимок выходного артефакта, созданного в рамках запуска.
 /// </summary>
 /// <param name="FileName">Имя файла артефакта.</param>
@@ -141,6 +195,7 @@ public record SenderBatchStatusInfo(
 /// <param name="OutputArtifacts">Список файлов, созданных в рамках запуска.</param>
 /// <param name="WorkerStatuses">Текущие состояния worker-потоков.</param>
 /// <param name="ScriptStatuses">Карточки скриптов и их текущие этапы выполнения.</param>
+/// <param name="FileStatuses">Карточки файлов и их наблюдаемые этапы записи.</param>
 public record RunStatusInfo(
     string CorrelationId,
     string TaskCode,
@@ -156,4 +211,5 @@ public record RunStatusInfo(
     IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null,
     IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null,
     bool PublishToGateway = true,
-    IReadOnlyDictionary<string, ScriptRunStatusInfo>? ScriptStatuses = null);
+    IReadOnlyDictionary<string, ScriptRunStatusInfo>? ScriptStatuses = null,
+    IReadOnlyDictionary<string, FileRunStatusInfo>? FileStatuses = null);

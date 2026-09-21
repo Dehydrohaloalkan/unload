@@ -103,6 +103,25 @@ public sealed class MainUnloadChaosTests
     }
 
     [Fact]
+    public async Task FileWriteEvents_AreOrderedAndKeepChunkIdentity()
+    {
+        using var scratch = new ScratchDirectory();
+        var engine = CreateEngine(ChaosPoint.None);
+
+        var events = await CollectAsync(engine.RunAsync(Request(scratch.Path), CancellationToken.None));
+        var ordered = events.ToList();
+        var chunkCreated = Assert.Single(events, static item => item.Step == RunnerStep.ChunkCreated);
+        var writeStarted = Assert.Single(events, static item => item.Step == RunnerStep.FileWriteStarted);
+        var fileWritten = Assert.Single(events, static item => item.Step == RunnerStep.FileWritten && item.ChunkNumber is not null);
+
+        Assert.NotNull(chunkCreated.ChunkNumber);
+        Assert.Equal(chunkCreated.ChunkNumber, writeStarted.ChunkNumber);
+        Assert.Equal(chunkCreated.ChunkNumber, fileWritten.ChunkNumber);
+        Assert.True(ordered.IndexOf(chunkCreated) < ordered.IndexOf(writeStarted));
+        Assert.True(ordered.IndexOf(writeStarted) < ordered.IndexOf(fileWritten));
+    }
+
+    [Fact]
     public async Task SuccessfulGatewayQueue_EmitsMemberCompletionBeforeRunCompletion()
     {
         using var scratch = new ScratchDirectory();

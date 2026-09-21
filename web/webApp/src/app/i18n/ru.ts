@@ -185,6 +185,7 @@ export const RU = {
   'runner.steps.queryStarted': 'Запрос выполняется',
   'runner.steps.queryCompleted': 'Запрос завершён',
   'runner.steps.chunkCreated': 'Чанк создан',
+  'runner.steps.fileWriteStarted': 'Передан на запись',
   'runner.steps.fileWritten': 'Файл записан',
   'runner.steps.scriptCompleted': 'Скрипт завершён',
   'runner.steps.publishedToGateway': 'Опубликован в шлюз',

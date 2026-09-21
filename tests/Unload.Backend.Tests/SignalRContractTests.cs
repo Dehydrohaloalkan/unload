@@ -40,7 +40,9 @@ public class SignalRContractTests
         Assert.Equal(
             new[]
             {
+                "chunkNumber",
                 "correlationId",
+                "estimatedBytes",
                 "filePath",
                 "memberName",
                 "message",

@@ -31,11 +31,14 @@ export const RunnerStep = {
   PublishedToGateway: 8,
   Completed: 9,
   Failed: 10,
+  FileWriteStarted: 11,
 } as const satisfies Record<string, RunnerStep>;
 
 export type MemberRunStatusInfo = ApiModels.MemberRunStatusInfo;
 export type RunWorkerStatusInfo = ApiModels.RunWorkerStatusInfo;
 export type RunOutputArtifactInfo = ApiModels.RunOutputArtifactInfo;
+export type FileRunStage = ApiModels.FileRunStage;
+export type FileRunStatusInfo = ApiModels.FileRunStatusInfo;
 
 export type SenderBatchStatus = ApiModels.SenderBatchStatus;
 export const SenderBatchStatus = {
@@ -60,6 +63,8 @@ export interface RunnerEvent {
   records: number | null;
   filePath: string | null;
   workerId: number | null;
+  chunkNumber: number | null;
+  estimatedBytes: number | null;
 }
 
 export type MemberCatalogItem = ApiModels.MemberCatalogItem;

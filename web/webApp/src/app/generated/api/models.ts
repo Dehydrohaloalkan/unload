@@ -7,6 +7,8 @@ export type { CatalogInfo } from './models/catalog-info';
 export type { CatalogMemberInfo } from './models/catalog-member-info';
 export type { CatalogTargetInfo } from './models/catalog-target-info';
 export type { ExtraBankInfo } from './models/extra-bank-info';
+export type { FileRunStage } from './models/file-run-stage';
+export type { FileRunStatusInfo } from './models/file-run-status-info';
 export type { GatewayUploadFileResult } from './models/gateway-upload-file-result';
 export type { GatewayUploadResponse } from './models/gateway-upload-response';
 export type { IFormFile } from './models/i-form-file';

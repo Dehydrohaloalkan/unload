@@ -44,6 +44,7 @@ const RUNNER_STEP_KEYS: Record<RunnerStep, I18nKey> = {
   [RunnerStep.PublishedToGateway]: 'runner.steps.publishedToGateway',
   [RunnerStep.Completed]: 'runner.steps.completed',
   [RunnerStep.Failed]: 'runner.steps.failed',
+  [RunnerStep.FileWriteStarted]: 'runner.steps.fileWriteStarted',
 };
 
 export function resolveRunStatusLabel(status: RunLifecycleStatus | null | undefined): string {

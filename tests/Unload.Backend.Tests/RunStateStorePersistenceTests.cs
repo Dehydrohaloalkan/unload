@@ -53,6 +53,12 @@ public class RunStateStorePersistenceTests
             memberName: "Member A",
             scriptCode: "script-a",
             workerId: 1);
+        fixture.ApplyEvent(
+            RunnerStep.FileWriteStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1,
+            workerId: 1);
         if (cancellationRequested)
         {
             fixture.Store.SetCancellationRequested("run-1", "stop requested");
@@ -68,6 +74,7 @@ public class RunStateStorePersistenceTests
         Assert.Null(state.WorkerStatuses[1].ScriptCode);
         Assert.Null(state.WorkerStatuses[1].MemberName);
         Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
+        Assert.Equal(FileRunStage.Cancelled, Assert.Single(state.FileStatuses!).Value.Stage);
     }
 
     [Theory]

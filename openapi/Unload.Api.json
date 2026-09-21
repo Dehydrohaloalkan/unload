@@ -1299,6 +1299,117 @@
           }
         }
       },
+      "FileRunStage": {
+        "type": "integer"
+      },
+      "FileRunStatusInfo": {
+        "required": [
+          "id",
+          "parentScriptId",
+          "memberName",
+          "scriptCode",
+          "chunkNumber",
+          "stage",
+          "createdAt",
+          "queuedAt",
+          "stageEnteredAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "parentScriptId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "scriptCode": {
+            "type": "string"
+          },
+          "chunkNumber": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/FileRunStage"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "queuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stageEnteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "workerId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "estimatedBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "filePath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "GatewayUploadFileResult": {
         "required": [
           "fileName",
@@ -1984,6 +2095,15 @@
             ],
             "additionalProperties": {
               "$ref": "#/components/schemas/ScriptRunStatusInfo"
+            }
+          },
+          "fileStatuses": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FileRunStatusInfo"
             }
           }
         }

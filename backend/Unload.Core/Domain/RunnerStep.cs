@@ -16,5 +16,9 @@ public enum RunnerStep
     ScriptCompleted,
     PublishedToGateway,
     Completed,
-    Failed
+    Failed,
+    /// <summary>
+    /// Чанк передан writer-у для записи. Этап включает возможное ожидание внутренней блокировки файла.
+    /// </summary>
+    FileWriteStarted
 }

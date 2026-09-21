@@ -48,7 +48,10 @@ internal sealed class RunStateStoreFixture : IDisposable
         string? scriptCode = null,
         string? filePath = null,
         int? workerId = null,
-        string? message = null)
+        string? message = null,
+        int? records = null,
+        int? chunkNumber = null,
+        long? estimatedBytes = null)
     {
         Store.ApplyEvent(new RunnerEvent(
             DateTimeOffset.UtcNow,
@@ -57,9 +60,11 @@ internal sealed class RunStateStoreFixture : IDisposable
             message ?? step.ToString(),
             memberName,
             scriptCode,
-            Records: null,
+            Records: records,
             filePath,
-            workerId));
+            workerId,
+            chunkNumber,
+            estimatedBytes));
     }
 
     public void ApplyFeedback(

@@ -13,6 +13,8 @@ namespace Unload.Core;
 /// <param name="Records">Количество обработанных записей (если применимо).</param>
 /// <param name="FilePath">Путь к файлу результата (если применимо).</param>
 /// <param name="WorkerId">Идентификатор worker-потока, если событие относится к конкретному worker.</param>
+/// <param name="ChunkNumber">Номер чанка в рамках мембера (если событие относится к файлу).</param>
+/// <param name="EstimatedBytes">Оценочный размер чанка до записи либо размер записанного чанка (если применимо).</param>
 public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -22,4 +24,6 @@ public record RunnerEvent(
     string? ScriptCode = null,
     int? Records = null,
     string? FilePath = null,
-    int? WorkerId = null);
+    int? WorkerId = null,
+    int? ChunkNumber = null,
+    long? EstimatedBytes = null);

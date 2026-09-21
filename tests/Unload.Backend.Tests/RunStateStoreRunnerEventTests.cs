@@ -149,6 +149,12 @@ public class RunStateStoreRunnerEventTests
             scriptCode: "script-a",
             workerId: 1);
         fixture.ApplyEvent(
+            RunnerStep.FileWriteStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1,
+            workerId: 1);
+        fixture.ApplyEvent(
             RunnerStep.ScriptCompleted,
             memberName: "Member B",
             scriptCode: "script-b");
@@ -163,6 +169,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses["Member B"].Status);
         Assert.All(state.WorkerStatuses!.Values, worker => Assert.Equal("idle", worker.State));
         Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
+        Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
     }
 
     [Fact]
@@ -179,6 +186,12 @@ public class RunStateStoreRunnerEventTests
             memberName: "Member A",
             scriptCode: "script-a",
             workerId: 1);
+        fixture.ApplyEvent(
+            RunnerStep.FileWriteStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1,
+            workerId: 1);
 
         fixture.Store.SetFailed("run-1", "worker crashed");
 
@@ -188,6 +201,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
         Assert.Equal("idle", state.WorkerStatuses![1].State);
         Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
+        Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
     }
 
     [Fact]
@@ -204,6 +218,12 @@ public class RunStateStoreRunnerEventTests
             memberName: "Member A",
             scriptCode: "script-a",
             workerId: 1);
+        fixture.ApplyEvent(
+            RunnerStep.FileWriteStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1,
+            workerId: 1);
         fixture.Store.SetCancellationRequested("run-1", "stop requested");
 
         fixture.Store.SetCancelled("run-1", "cancelled by user");
@@ -214,6 +234,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(MemberRunLifecycleStatus.Cancelled, state.MemberStatuses!["Member A"].Status);
         Assert.Equal("idle", state.WorkerStatuses![1].State);
         Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
+        Assert.Equal(FileRunStage.Cancelled, Assert.Single(state.FileStatuses!).Value.Stage);
     }
 
     [Fact]
@@ -242,15 +263,27 @@ public class RunStateStoreRunnerEventTests
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start(publishToGateway: false);
+        fixture.ApplyEvent(
+            RunnerStep.FileWriteStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1);
         fixture.ApplyEvent(RunnerStep.Completed, message: "done");
         var terminal = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
 
         fixture.ApplyEvent(RunnerStep.Failed, message: "late failure");
+        fixture.ApplyEvent(
+            RunnerStep.FileWritten,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            chunkNumber: 1,
+            filePath: fixture.ArtifactPath());
         fixture.Store.SetRunning("run-1");
 
         Assert.Same(terminal, fixture.Store.Get("run-1"));
         Assert.Equal(RunLifecycleStatus.Completed, terminal.Status);
         Assert.Equal("done", terminal.Message);
+        Assert.Equal(FileRunStage.QueuedForWrite, Assert.Single(terminal.FileStatuses!).Value.Stage);
     }
 
     public enum TerminalMutation

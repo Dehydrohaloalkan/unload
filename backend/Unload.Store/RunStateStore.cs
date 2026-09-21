@@ -299,6 +299,10 @@ public class RunStateStore
             ScriptStatuses = RunScriptProjector.CancelUnfinished(
                 run.ScriptStatuses,
                 "Run was interrupted due to server restart.",
+                recoveredAt),
+            FileStatuses = RunFileProjector.CancelUnfinished(
+                run.FileStatuses,
+                "Run was interrupted due to server restart.",
                 recoveredAt)
         };
     }

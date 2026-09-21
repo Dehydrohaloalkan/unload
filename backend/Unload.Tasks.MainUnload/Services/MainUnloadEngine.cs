@@ -375,9 +375,23 @@ public class MainUnloadEngine
             RunnerStep.ChunkCreated,
             $"Chunk #{chunkNumber} created for {script.ScriptCode}.",
             records: rows.Length,
-            workerId: workerId);
+            workerId: workerId,
+            chunkNumber: chunkNumber,
+            estimatedBytes: byteSize);
 
         var chunk = new FileChunk(script, chunkNumber, rows, byteSize);
+        // This marks hand-off to IFileChunkWriter, not the physical first byte. Its elapsed stage
+        // intentionally includes any wait inside the writer, including its file lock.
+        await eventEmitter.EmitForScriptAsync(
+            script,
+            RunnerStep.FileWriteStarted,
+            $"Chunk #{chunkNumber} queued for writing.",
+            records: rows.Length,
+            filePath: null,
+            workerId: workerId,
+            chunkNumber: chunkNumber,
+            estimatedBytes: byteSize,
+            cancellationToken: cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         var written = await _fileChunkWriter.WriteChunkAsync(chunk, runFilesDirectory, cancellationToken);
         stopwatch.Stop();
@@ -390,6 +404,8 @@ public class MainUnloadEngine
             records: written.RowsCount,
             filePath: written.FilePath,
             workerId: workerId,
+            chunkNumber: chunkNumber,
+            estimatedBytes: written.ByteSize,
             cancellationToken: cancellationToken);
 
         reportRows.Add(new RunReportRow(

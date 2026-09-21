@@ -50,7 +50,8 @@ internal sealed class RunStateProjector
             WorkerStatuses: CreateInitialWorkerStatuses(now),
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
             PublishToGateway: publishToGateway,
-            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
+            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+            FileStatuses: new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
     }
 
     public RunStatusInfo CreateFromEvent(RunnerEvent @event, DateTimeOffset now)
@@ -75,6 +76,9 @@ internal sealed class RunStateProjector
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
             ScriptStatuses: RunScriptProjector.Apply(
                 new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                @event),
+            FileStatuses: RunFileProjector.Apply(
+                new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 @event));
     }
 
@@ -101,7 +105,8 @@ internal sealed class RunStateProjector
             MemberStatuses = RunMemberProjector.Apply(current.MemberStatuses, @event, now),
             OutputArtifacts = RunArtifactProjector.Apply(current.OutputArtifacts, @event),
             WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, @event, now),
-            ScriptStatuses = RunScriptProjector.Apply(current.ScriptStatuses, @event)
+            ScriptStatuses = RunScriptProjector.Apply(current.ScriptStatuses, @event),
+            FileStatuses = RunFileProjector.Apply(current.FileStatuses, @event)
         };
 
         return RunCompletionPolicy.Apply(updated, now);
@@ -125,7 +130,8 @@ internal sealed class RunStateProjector
                 source: null,
                 feedback,
                 now),
-            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
+            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+            FileStatuses: new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
     }
 
     public RunStatusInfo ApplySenderFeedback(RunStatusInfo current, SenderFileDispatchFeedback feedback, DateTimeOffset now)
@@ -174,7 +180,8 @@ internal sealed class RunStateProjector
             ScriptStatuses = RunScriptProjector.FailUnfinished(
                 current.ScriptStatuses,
                 message,
-                now)
+                now),
+            FileStatuses = RunFileProjector.FailUnfinished(current.FileStatuses, message, now)
         };
     }
 
@@ -216,7 +223,8 @@ internal sealed class RunStateProjector
                 message,
                 now),
             WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now),
-            ScriptStatuses = RunScriptProjector.CancelUnfinished(current.ScriptStatuses, message, now)
+            ScriptStatuses = RunScriptProjector.CancelUnfinished(current.ScriptStatuses, message, now),
+            FileStatuses = RunFileProjector.CancelUnfinished(current.FileStatuses, message, now)
         };
     }
 
