@@ -18,6 +18,7 @@ import { toErrorMessage } from './utils/error-message.util';
 import { buildMemberGroups } from './utils/member-projections.util';
 import {
   buildExtraBankNamesByCode,
+  canStartExport,
   canUseMainOrExtra,
   resolveExtraLastCompletedAt,
   resolveWorkflowPhase,
@@ -127,20 +128,28 @@ export class WorkflowStore {
   readonly canStartRun = computed(
     () =>
       this.selectionStore.selectedCount() > 0 &&
-      (this.canRunMainOrExtra() || this.adminStore.adminMode()) &&
-      !this.runStore.isRunBusy(),
+      canStartExport(
+        this.canRunMainOrExtra() || this.adminStore.adminMode(),
+        this.presetStore.presetTask().running,
+        this.runStore.isRunBusy(),
+      ),
   );
 
   // Главная карточка запускает полную выгрузку, поэтому не зависит от выбора мемберов в панели.
-  readonly canStartFullRun = computed(
-    () =>
-      (this.canRunMainOrExtra() || this.adminStore.adminMode()) && !this.runStore.isRunBusy(),
+  readonly canStartFullRun = computed(() =>
+    canStartExport(
+      this.canRunMainOrExtra() || this.adminStore.adminMode(),
+      this.presetStore.presetTask().running,
+      this.runStore.isRunBusy(),
+    ),
   );
 
-  readonly canRunExtra = computed(
-    () =>
-      (this.canRunMainOrExtra() || this.adminStore.adminMode()) &&
-      !this.extraStore.extraTask().running,
+  readonly canRunExtra = computed(() =>
+    canStartExport(
+      this.canRunMainOrExtra() || this.adminStore.adminMode(),
+      this.presetStore.presetTask().running,
+      this.extraStore.extraTask().running,
+    ),
   );
 
   readonly phase = computed(() => resolveWorkflowPhase(this.presetStore.presetState()));
@@ -238,6 +247,9 @@ export class WorkflowStore {
   }
 
   async runExtraAsync(banksOverride?: string[] | null): Promise<void> {
+    if (this.presetStore.presetTask().running) {
+      return;
+    }
     try {
       await this.extraStore.runExtraAsync(banksOverride);
     } catch {
@@ -251,6 +263,9 @@ export class WorkflowStore {
   }
 
   startRunAsync(runAllMembers = false): Promise<void> {
+    if (this.presetStore.presetTask().running) {
+      return Promise.resolve();
+    }
     return this.runStore.startRunAsync(runAllMembers);
   }
 

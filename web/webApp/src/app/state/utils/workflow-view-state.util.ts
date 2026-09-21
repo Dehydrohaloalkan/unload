@@ -32,6 +32,14 @@ export function canUseMainOrExtra(presetState: PresetGateState | null): boolean 
   );
 }
 
+export function canStartExport(
+  workflowAllowed: boolean,
+  presetRunning: boolean,
+  exportRunning: boolean,
+): boolean {
+  return workflowAllowed && !presetRunning && !exportRunning;
+}
+
 export function resolveWorkflowPhase(presetState: PresetGateState | null): WorkflowPhase {
   return presetState?.presetCompleted ? 'tasks' : 'gate';
 }

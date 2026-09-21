@@ -332,6 +332,17 @@ public class MainUnloadEngine
                 {
                     await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
                 }
+
+                await eventEmitter.EmitForScriptAsync(
+                    script,
+                    RunnerStep.ScriptCompleted,
+                    publishToGateway
+                        ? $"Member completed. Gateway batch queued. Files: {memberBatch.Files.Count}."
+                        : "Member completed. Gateway publish skipped by request.",
+                    records: rowsRead,
+                    filePath: null,
+                    workerId: workerId,
+                    cancellationToken: cancellationToken);
             }
             else if (remaining == 0)
             {

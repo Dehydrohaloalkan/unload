@@ -57,6 +57,16 @@ public class MainUnloadHostedService(
                 {
                     _runStateStore.ApplyEvent(@event);
 
+                    if (@event.Step == RunnerStep.Failed)
+                    {
+                        _logger.LogError(
+                            "Run reported a failure. CorrelationId: {CorrelationId}, Member: {MemberName}, Script: {ScriptCode}, Message: {FailureMessage}",
+                            @event.CorrelationId,
+                            @event.MemberName,
+                            @event.ScriptCode,
+                            @event.Message);
+                    }
+
                     await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
 
                     await PublishRunStateAsync(@event.CorrelationId, stoppingToken);

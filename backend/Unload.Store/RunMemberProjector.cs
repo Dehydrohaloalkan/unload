@@ -20,7 +20,7 @@ internal static class RunMemberProjector
 
         if (@event.Step == RunnerStep.Failed && string.IsNullOrWhiteSpace(@event.MemberName))
         {
-            return UpdateAll(map, MemberRunLifecycleStatus.Failed, @event.Step, @event.Message, now);
+            return UpdateUnfinishedAsFailed(map, @event.Message, now);
         }
 
         if (string.IsNullOrWhiteSpace(@event.MemberName))
@@ -66,6 +66,25 @@ internal static class RunMemberProjector
                 Message = message,
                 UpdatedAt = now
             },
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateUnfinishedAsFailed(
+        IReadOnlyDictionary<string, MemberRunStatusInfo> source,
+        string? message,
+        DateTimeOffset now)
+    {
+        return source.ToDictionary(
+            static x => x.Key,
+            x => x.Value.Status == MemberRunLifecycleStatus.Completed
+                ? x.Value
+                : x.Value with
+                {
+                    Status = MemberRunLifecycleStatus.Failed,
+                    LastStep = RunnerStep.Failed,
+                    Message = message,
+                    UpdatedAt = now
+                },
             StringComparer.OrdinalIgnoreCase);
     }
 }

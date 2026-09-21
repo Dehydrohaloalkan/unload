@@ -103,11 +103,13 @@ export const RU = {
   'details.task.banksLoading': 'Загрузка списка банков…',
   'details.task.banksEmpty': 'Список банков пуст.',
   'details.task.banksAllSelected': 'Выбраны все банки — будут выполнены базовые скрипты.',
-  'details.task.banksSubset': 'Выбрано подмножество банков — будут выполнены atomic-скрипты с фильтром.',
-  'details.task.banksNone': 'Не выбран ни один банк — выберите хотя бы один или включите «Выбрать все».',
+  'details.task.banksSubset':
+    'Выбрано подмножество банков — будут выполнены atomic-скрипты с фильтром.',
+  'details.task.banksNone':
+    'Не выбран ни один банк — выберите хотя бы один или включите «Выбрать все».',
   'details.task.banksSelectAll': 'Выбрать все банки',
 
-  'activeRun.sectionTitle': 'Активная выгрузка',
+  'activeRun.sectionTitle': 'Текущая выгрузка',
   'activeRun.correlation': 'Идентификатор запуска',
   'activeRun.startedAt': 'Старт',
   'activeRun.zeroFiles': 'выполнено, 0 файлов',

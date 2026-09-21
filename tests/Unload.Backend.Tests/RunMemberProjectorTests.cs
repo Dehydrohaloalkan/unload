@@ -40,6 +40,25 @@ public class RunMemberProjectorTests
         Assert.Same(original, source["Member A"]);
     }
 
+    [Fact]
+    public void Apply_GlobalFailurePreservesAlreadyCompletedMembers()
+    {
+        var completed = Member("Completed member", MemberRunLifecycleStatus.Completed);
+        var running = Member("Running member", MemberRunLifecycleStatus.Running);
+
+        var result = RunMemberProjector.Apply(
+            new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)
+            {
+                [completed.MemberName] = completed,
+                [running.MemberName] = running
+            },
+            Event(RunnerStep.Failed),
+            Now.AddMinutes(1));
+
+        Assert.Equal(MemberRunLifecycleStatus.Completed, result[completed.MemberName].Status);
+        Assert.Equal(MemberRunLifecycleStatus.Failed, result[running.MemberName].Status);
+    }
+
     private static RunnerEvent Event(RunnerStep step, string? memberName = null)
     {
         return new RunnerEvent(Now, "run-1", step, step.ToString(), memberName);

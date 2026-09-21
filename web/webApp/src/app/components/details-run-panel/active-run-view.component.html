@@ -2,137 +2,130 @@
   <div class="details-section__title">{{ 'activeRun.sectionTitle' | t }}</div>
 
   @if (run(); as activeRun) {
-    @if (isRunActive()) {
-      <div class="details-item active-run">
-        <div class="details-item__row">
-          <span class="details-item__label">{{ 'activeRun.correlation' | t }}</span>
-          <span class="details-item__value">{{ activeRun.correlationId }}</span>
-        </div>
-        <div class="details-item__row">
-          <span class="details-item__label">{{ 'activeRun.startedAt' | t }}</span>
-          <span class="details-item__value">{{ formatTimestamp(activeRun.createdAt) }}</span>
-        </div>
-        <div class="details-item__row">
-          <span class="details-item__label">{{ 'activeRun.status' | t }}</span>
-          <span class="details-item__value">{{ resolveRunStatusLabel(activeRun.status) }}</span>
-        </div>
-        @if (activeRun.message) {
-          <div class="details-item__message">{{ activeRun.message }}</div>
-        }
+    <div class="details-item active-run">
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.correlation' | t }}</span>
+        <span class="details-item__value">{{ activeRun.correlationId }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.startedAt' | t }}</span>
+        <span class="details-item__value">{{ formatTimestamp(activeRun.createdAt) }}</span>
+      </div>
+      <div class="details-item__row">
+        <span class="details-item__label">{{ 'activeRun.status' | t }}</span>
+        <span class="details-item__value">{{ resolveRunStatusLabel(activeRun.status) }}</span>
+      </div>
+      @if (activeRun.message) {
+        <div class="details-item__message">{{ activeRun.message }}</div>
+      }
 
-        @if (activeMemberNames().length === 0) {
-          <div class="details-empty">{{ 'activeRun.noMemberDetails' | t }}</div>
-        } @else {
-          <div class="active-members">
-            @for (memberName of activeMemberNames(); track memberName) {
-              <details class="active-member">
-                <summary class="active-member__summary">
-                  <span class="active-member__name">{{ memberName }}</span>
-                  <span class="active-member__status">
-                    @if (memberStatus(memberName); as status) {
-                      {{ resolveMemberEffectiveStatusLabel(status) }}
-                      @if (isCompletedWithoutFiles(status)) {
-                        · {{ 'activeRun.zeroFiles' | t }}
-                      }
-                    } @else {
-                      —
-                    }
-                    @if (senderBatchForMember(memberName); as batch) {
-                      {{ 'activeRun.gatewayInline' | t }} {{ resolveSenderStatusLabel(batch.status) }}
-                    }
-                  </span>
-                </summary>
-
-                <div class="active-member__body">
+      @if (activeMemberNames().length === 0) {
+        <div class="details-empty">{{ 'activeRun.noMemberDetails' | t }}</div>
+      } @else {
+        <div class="active-members">
+          @for (memberName of activeMemberNames(); track memberName) {
+            <details class="active-member">
+              <summary class="active-member__summary">
+                <span class="active-member__name">{{ memberName }}</span>
+                <span class="active-member__status">
                   @if (memberStatus(memberName); as status) {
-                    <div class="details-item__row">
-                      <span class="details-item__label">{{ 'activeRun.step' | t }}</span>
-                      <span class="details-item__value">{{
-                        resolveRunnerStepLabel(status.lastStep)
-                      }}</span>
-                    </div>
-                    @if (status.message) {
-                      <div class="details-item__message">{{ status.message }}</div>
+                    {{ resolveMemberEffectiveStatusLabel(status) }}
+                    @if (isCompletedWithoutFiles(status)) {
+                      · {{ 'activeRun.zeroFiles' | t }}
                     }
-                  }
-
-                  @if (memberWorkers(memberName).length > 0) {
-                    <div class="active-subtitle">{{ 'activeRun.workers' | t }}</div>
-                    <div class="details-worker-list">
-                      @for (worker of memberWorkers(memberName); track worker.workerId) {
-                        <div class="details-worker-item">
-                          Worker #{{ worker.workerId }}: {{ worker.state }}
-                          @if (worker.scriptCode) {
-                            ({{ worker.scriptCode }})
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  <div class="active-subtitle">{{ 'activeRun.files' | t }}</div>
-                  @if (memberArtifacts(memberName).length === 0) {
-                    <div class="details-empty">{{ 'activeRun.noFilesForMember' | t }}</div>
                   } @else {
-                    <div class="active-files">
-                      @for (
-                        artifact of memberArtifacts(memberName);
-                        track artifact.filePath
-                      ) {
-                        <div class="active-file">
-                          <a
-                            class="history-file-link"
-                            [href]="buildDownloadUrl(artifact.filePath)"
-                            [attr.download]="artifact.fileName"
-                            (click)="onDownloadClick()"
-                          >
-                            {{ artifact.fileName }}
-                          </a>
-                          @if (senderBatchForMember(memberName); as batch) {
-                            @if (isFileSentToGateway(artifact.filePath, batch.sentFiles)) {
-                              <span class="active-file__badge active-file__badge--sent">{{
-                                'activeRun.gatewaySent' | t
-                              }}</span>
-                            } @else {
-                              <span class="active-file__badge active-file__badge--pending">{{
-                                'activeRun.gatewayPending' | t
-                              }}</span>
-                            }
+                    —
+                  }
+                  @if (senderBatchForMember(memberName); as batch) {
+                    {{ 'activeRun.gatewayInline' | t }} {{ resolveSenderStatusLabel(batch.status) }}
+                  }
+                </span>
+              </summary>
+
+              <div class="active-member__body">
+                @if (memberStatus(memberName); as status) {
+                  <div class="details-item__row">
+                    <span class="details-item__label">{{ 'activeRun.step' | t }}</span>
+                    <span class="details-item__value">{{
+                      resolveRunnerStepLabel(status.lastStep)
+                    }}</span>
+                  </div>
+                  @if (status.message) {
+                    <div class="details-item__message">{{ status.message }}</div>
+                  }
+                }
+
+                @if (memberWorkers(memberName).length > 0) {
+                  <div class="active-subtitle">{{ 'activeRun.workers' | t }}</div>
+                  <div class="details-worker-list">
+                    @for (worker of memberWorkers(memberName); track worker.workerId) {
+                      <div class="details-worker-item">
+                        Worker #{{ worker.workerId }}: {{ worker.state }}
+                        @if (worker.scriptCode) {
+                          ({{ worker.scriptCode }})
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                <div class="active-subtitle">{{ 'activeRun.files' | t }}</div>
+                @if (memberArtifacts(memberName).length === 0) {
+                  <div class="details-empty">{{ 'activeRun.noFilesForMember' | t }}</div>
+                } @else {
+                  <div class="active-files">
+                    @for (artifact of memberArtifacts(memberName); track artifact.filePath) {
+                      <div class="active-file">
+                        <a
+                          class="history-file-link"
+                          [href]="buildDownloadUrl(artifact.filePath)"
+                          [attr.download]="artifact.fileName"
+                          (click)="onDownloadClick()"
+                        >
+                          {{ artifact.fileName }}
+                        </a>
+                        @if (senderBatchForMember(memberName); as batch) {
+                          @if (isFileSentToGateway(artifact.filePath, batch.sentFiles)) {
+                            <span class="active-file__badge active-file__badge--sent">{{
+                              'activeRun.gatewaySent' | t
+                            }}</span>
                           } @else {
                             <span class="active-file__badge active-file__badge--pending">{{
-                              'activeRun.gatewayUnknown' | t
+                              'activeRun.gatewayPending' | t
                             }}</span>
                           }
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  @if (senderBatchForMember(memberName); as batch) {
-                    @if (batch.message) {
-                      <div class="details-item__message">{{ batch.message }}</div>
+                        } @else {
+                          <span class="active-file__badge active-file__badge--pending">{{
+                            'activeRun.gatewayUnknown' | t
+                          }}</span>
+                        }
+                      </div>
                     }
-                  }
-                </div>
-              </details>
-            }
-          </div>
-        }
+                  </div>
+                }
 
-        <button
-          mat-stroked-button
-          type="button"
-          class="details-secondary-button"
-          [disabled]="!store.isRunBusy()"
-          (click)="stopRun()"
-        >
-          <span class="app-icon app-icon--stop" aria-hidden="true"></span>
-          {{ 'activeRun.stop' | t }}
-        </button>
-      </div>
-    } @else {
-      <div class="details-empty">{{ 'activeRun.noActive' | t }}</div>
-    }
+                @if (senderBatchForMember(memberName); as batch) {
+                  @if (batch.message) {
+                    <div class="details-item__message">{{ batch.message }}</div>
+                  }
+                }
+              </div>
+            </details>
+          }
+        </div>
+      }
+
+      <button
+        mat-stroked-button
+        type="button"
+        class="details-secondary-button"
+        [disabled]="!store.isRunBusy()"
+        (click)="stopRun()"
+      >
+        <span class="app-icon app-icon--stop" aria-hidden="true"></span>
+        {{ 'activeRun.stop' | t }}
+      </button>
+    </div>
   } @else {
     <div class="details-empty">{{ 'activeRun.noActive' | t }}</div>
   }

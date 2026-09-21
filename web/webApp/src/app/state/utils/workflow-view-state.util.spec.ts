@@ -1,6 +1,7 @@
 import { PresetGateState, RunLifecycleStatus, RunStatusInfo } from '../../app.models';
 import {
   buildExtraBankNamesByCode,
+  canStartExport,
   canUseMainOrExtra,
   resolveExtraLastCompletedAt,
   resolveWorkflowPhase,
@@ -37,8 +38,14 @@ describe('workflow view state', () => {
   it.each([
     { state: null, expected: false },
     { state: createPreset({ requiresPresetExecution: false }), expected: true },
-    { state: createPreset({ requiresPresetExecution: true, presetCompleted: false }), expected: false },
-    { state: createPreset({ requiresPresetExecution: true, presetCompleted: true }), expected: true },
+    {
+      state: createPreset({ requiresPresetExecution: true, presetCompleted: false }),
+      expected: false,
+    },
+    {
+      state: createPreset({ requiresPresetExecution: true, presetCompleted: true }),
+      expected: true,
+    },
   ])('resolves main and extra availability to $expected', ({ state, expected }) => {
     expect(canUseMainOrExtra(state)).toBe(expected);
   });
@@ -48,6 +55,18 @@ describe('workflow view state', () => {
     expect(resolveWorkflowPhase(createPreset({ presetCompleted: false }))).toBe('gate');
     expect(resolveWorkflowPhase(createPreset({ presetCompleted: true }))).toBe('tasks');
   });
+
+  it.each([
+    { workflowAllowed: true, presetRunning: false, exportRunning: false, expected: true },
+    { workflowAllowed: false, presetRunning: false, exportRunning: false, expected: false },
+    { workflowAllowed: true, presetRunning: true, exportRunning: false, expected: false },
+    { workflowAllowed: true, presetRunning: false, exportRunning: true, expected: false },
+  ])(
+    'resolves export availability to $expected while presetRunning=$presetRunning and exportRunning=$exportRunning',
+    ({ workflowAllowed, presetRunning, exportRunning, expected }) => {
+      expect(canStartExport(workflowAllowed, presetRunning, exportRunning)).toBe(expected);
+    },
+  );
 });
 
 function createPreset(overrides: Partial<PresetGateState> = {}): PresetGateState {

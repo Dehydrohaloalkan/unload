@@ -102,6 +102,25 @@ public sealed class MainUnloadChaosTests
         Assert.DoesNotContain(events, static item => item.Step == RunnerStep.Completed);
     }
 
+    [Fact]
+    public async Task SuccessfulGatewayQueue_EmitsMemberCompletionBeforeRunCompletion()
+    {
+        using var scratch = new ScratchDirectory();
+        var engine = CreateEngine(ChaosPoint.None);
+
+        var events = await CollectAsync(engine.RunAsync(
+            Request(scratch.Path, publishToGateway: true),
+            CancellationToken.None));
+
+        var memberCompleted = Assert.Single(events, static item => item.Step == RunnerStep.ScriptCompleted);
+        Assert.Equal("Chaos member", memberCompleted.MemberName);
+        Assert.Contains("Gateway batch queued", memberCompleted.Message, StringComparison.OrdinalIgnoreCase);
+        var orderedEvents = events.ToList();
+        Assert.True(
+            orderedEvents.IndexOf(memberCompleted) <
+            orderedEvents.FindIndex(static item => item.Step == RunnerStep.Completed));
+    }
+
     private static MainUnloadEngine CreateEngine(ChaosPoint chaosPoint)
     {
         ICatalogService catalog = chaosPoint == ChaosPoint.Catalog

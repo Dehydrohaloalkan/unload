@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Unload.Core;
 
 namespace Unload.Gateway;
@@ -8,8 +9,10 @@ namespace Unload.Gateway;
 /// Принимает batch-ready события и feedback через in-process каналы;
 /// фактическая FTP-отправка выполняется в <see cref="FtpGatewayBackgroundService"/>.
 /// </summary>
-public class FtpGatewayPublisher : IGatewayPublisher, IGatewayBatchSource, IGatewaySenderFeedbackSource
+public class FtpGatewayPublisher(ILogger<FtpGatewayPublisher> logger)
+    : IGatewayPublisher, IGatewayBatchSource, IGatewaySenderFeedbackSource
 {
+    private readonly ILogger<FtpGatewayPublisher> _logger = logger;
     private readonly Channel<SenderFileBatchReadyEvent> _batchReadyChannel =
         Channel.CreateUnbounded<SenderFileBatchReadyEvent>(new UnboundedChannelOptions
         {
@@ -27,7 +30,17 @@ public class FtpGatewayPublisher : IGatewayPublisher, IGatewayBatchSource, IGate
     public Task PublishFileBatchReadyAsync(SenderFileBatchReadyEvent @event, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _batchReadyChannel.Writer.TryWrite(@event);
+        if (!_batchReadyChannel.Writer.TryWrite(@event))
+        {
+            throw new InvalidOperationException($"Gateway batch '{@event.BatchId}' could not be queued.");
+        }
+
+        _logger.LogInformation(
+            "Gateway batch queued. CorrelationId: {CorrelationId}, BatchId: {BatchId}, Member: {MemberName}, Files: {FilesCount}",
+            @event.CorrelationId,
+            @event.BatchId,
+            @event.MemberName,
+            @event.Files.Count);
         return Task.CompletedTask;
     }
 

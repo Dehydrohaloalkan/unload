@@ -128,7 +128,7 @@ public class RunStateStoreRunnerEventTests
     }
 
     [Fact]
-    public void FailedRunnerEvent_FailsMembersAndResetsWorkers()
+    public void FailedRunnerEvent_FailsOnlyUnfinishedMembersAndResetsWorkers()
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start(members: ["Member A", "Member B"]);
@@ -137,6 +137,10 @@ public class RunStateStoreRunnerEventTests
             memberName: "Member A",
             scriptCode: "script-a",
             workerId: 1);
+        fixture.ApplyEvent(
+            RunnerStep.ScriptCompleted,
+            memberName: "Member B",
+            scriptCode: "script-b");
 
         fixture.ApplyEvent(RunnerStep.Failed, message: "database failed");
 
@@ -144,9 +148,8 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(RunLifecycleStatus.Failed, state.Status);
         Assert.Equal(RunnerStep.Failed, state.LastStep);
         Assert.Equal("database failed", state.Message);
-        Assert.All(
-            state.MemberStatuses!.Values,
-            member => Assert.Equal(MemberRunLifecycleStatus.Failed, member.Status));
+        Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
+        Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses["Member B"].Status);
         Assert.All(state.WorkerStatuses!.Values, worker => Assert.Equal("idle", worker.State));
     }
 
