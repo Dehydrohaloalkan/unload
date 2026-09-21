@@ -40,6 +40,8 @@ public class SignalRContractTests
         Assert.Equal(
             new[]
             {
+                "batchFileCount",
+                "batchId",
                 "chunkNumber",
                 "correlationId",
                 "estimatedBytes",

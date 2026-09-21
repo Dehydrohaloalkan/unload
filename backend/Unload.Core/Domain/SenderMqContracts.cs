@@ -13,7 +13,8 @@ public enum SenderFeedbackKind
 {
     FileSent,
     BatchCompleted,
-    BatchFailed
+    BatchFailed,
+    BatchStarted
 }
 
 public record SenderFileDescriptor(

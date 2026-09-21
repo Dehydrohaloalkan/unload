@@ -331,6 +331,13 @@ public class MainUnloadEngine
                 if (publishToGateway)
                 {
                     await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                    await eventEmitter.EmitForScriptAsync(
+                        script,
+                        RunnerStep.GatewayBatchQueued,
+                        $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
+                        workerId: workerId,
+                        batchId: memberBatch.BatchId,
+                        batchFileCount: memberBatch.Files.Count);
                 }
 
                 await eventEmitter.EmitForScriptAsync(

@@ -43,9 +43,11 @@ internal class RunnerEventEmitter
         int? records = null,
         string? filePath = null,
         int? chunkNumber = null,
-        long? estimatedBytes = null)
+        long? estimatedBytes = null,
+        string? batchId = null,
+        int? batchFileCount = null)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, CancellationToken.None).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, CancellationToken.None).AsTask();
     }
 
     public Task EmitAsync(
@@ -55,9 +57,11 @@ internal class RunnerEventEmitter
         string? filePath,
         CancellationToken cancellationToken,
         int? chunkNumber = null,
-        long? estimatedBytes = null)
+        long? estimatedBytes = null,
+        string? batchId = null,
+        int? batchFileCount = null)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, cancellationToken).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, cancellationToken).AsTask();
     }
 
     public async Task EmitForScriptAsync(
@@ -68,7 +72,9 @@ internal class RunnerEventEmitter
         string? filePath = null,
         int? workerId = null,
         int? chunkNumber = null,
-        long? estimatedBytes = null)
+        long? estimatedBytes = null,
+        string? batchId = null,
+        int? batchFileCount = null)
     {
         await EmitCoreAsync(
             step,
@@ -79,6 +85,8 @@ internal class RunnerEventEmitter
             workerId,
             chunkNumber,
             estimatedBytes,
+            batchId,
+            batchFileCount,
             CancellationToken.None);
     }
 
@@ -91,7 +99,9 @@ internal class RunnerEventEmitter
         int? workerId,
         CancellationToken cancellationToken,
         int? chunkNumber = null,
-        long? estimatedBytes = null)
+        long? estimatedBytes = null,
+        string? batchId = null,
+        int? batchFileCount = null)
     {
         await EmitCoreAsync(
             step,
@@ -102,6 +112,8 @@ internal class RunnerEventEmitter
             workerId,
             chunkNumber,
             estimatedBytes,
+            batchId,
+            batchFileCount,
             cancellationToken);
     }
 
@@ -109,7 +121,7 @@ internal class RunnerEventEmitter
     {
         try
         {
-            await EmitAsync(step, message, records: null, filePath: null, chunkNumber: null, estimatedBytes: null, cancellationToken: CancellationToken.None);
+            await EmitAsync(step, message, records: null, filePath: null, chunkNumber: null, estimatedBytes: null, batchId: null, batchFileCount: null, cancellationToken: CancellationToken.None);
         }
         catch
         {
@@ -137,6 +149,8 @@ internal class RunnerEventEmitter
         int? workerId,
         int? chunkNumber,
         long? estimatedBytes,
+        string? batchId,
+        int? batchFileCount,
         CancellationToken cancellationToken)
     {
         var @event = new RunnerEvent(
@@ -150,7 +164,9 @@ internal class RunnerEventEmitter
             filePath,
             workerId,
             chunkNumber,
-            estimatedBytes);
+            estimatedBytes,
+            batchId,
+            batchFileCount);
         await _channel.Writer.WriteAsync(@event, cancellationToken);
     }
 }

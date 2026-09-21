@@ -20,5 +20,9 @@ public enum RunnerStep
     /// <summary>
     /// Чанк передан writer-у для записи. Этап включает возможное ожидание внутренней блокировки файла.
     /// </summary>
-    FileWriteStarted
+    FileWriteStarted,
+    /// <summary>
+    /// Партия файлов была успешно передана в очередь gateway.
+    /// </summary>
+    GatewayBatchQueued
 }

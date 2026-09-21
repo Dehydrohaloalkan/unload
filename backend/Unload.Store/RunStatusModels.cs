@@ -177,7 +177,10 @@ public record SenderBatchStatusInfo(
     SenderBatchStatus Status,
     DateTimeOffset UpdatedAt,
     IReadOnlyCollection<SenderFileDispatchStateInfo> SentFiles,
-    string? Message = null);
+    string? Message = null,
+    DateTimeOffset? QueuedAt = null,
+    DateTimeOffset? StartedAt = null,
+    int? FileCount = null);
 
 /// <summary>
 /// Снимок состояния конкретного запуска выгрузки.

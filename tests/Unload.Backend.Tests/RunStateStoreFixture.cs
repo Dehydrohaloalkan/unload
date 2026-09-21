@@ -51,7 +51,9 @@ internal sealed class RunStateStoreFixture : IDisposable
         string? message = null,
         int? records = null,
         int? chunkNumber = null,
-        long? estimatedBytes = null)
+        long? estimatedBytes = null,
+        string? batchId = null,
+        int? batchFileCount = null)
     {
         Store.ApplyEvent(new RunnerEvent(
             DateTimeOffset.UtcNow,
@@ -64,7 +66,9 @@ internal sealed class RunStateStoreFixture : IDisposable
             filePath,
             workerId,
             chunkNumber,
-            estimatedBytes));
+            estimatedBytes,
+            batchId,
+            batchFileCount));
     }
 
     public void ApplyFeedback(

@@ -51,6 +51,16 @@ public class FtpGatewayBackgroundService(
                 "Gateway sender started batch. CorrelationId: {CorrelationId}, Member: {MemberName}, Files: {FilesCount}",
                 batch.CorrelationId, memberName, batch.Files.Count);
 
+            await _gatewayPublisher.PublishSenderFeedbackAsync(
+                new SenderFileDispatchFeedback(
+                    OccurredAt: DateTimeOffset.UtcNow,
+                    CorrelationId: batch.CorrelationId,
+                    MemberName: memberName,
+                    BatchId: batch.BatchId,
+                    Kind: SenderFeedbackKind.BatchStarted,
+                    Message: $"Batch started. Files: {batch.Files.Count}."),
+                cancellationToken);
+
             var sortedFiles = batch.Files
                 .OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();

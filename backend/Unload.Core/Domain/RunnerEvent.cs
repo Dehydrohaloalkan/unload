@@ -15,6 +15,8 @@ namespace Unload.Core;
 /// <param name="WorkerId">Идентификатор worker-потока, если событие относится к конкретному worker.</param>
 /// <param name="ChunkNumber">Номер чанка в рамках мембера (если событие относится к файлу).</param>
 /// <param name="EstimatedBytes">Оценочный размер чанка до записи либо размер записанного чанка (если применимо).</param>
+/// <param name="BatchId">Идентификатор gateway-партии, если событие относится к постановке партии в очередь.</param>
+/// <param name="BatchFileCount">Число файлов в gateway-партии, если применимо.</param>
 public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -26,4 +28,6 @@ public record RunnerEvent(
     string? FilePath = null,
     int? WorkerId = null,
     int? ChunkNumber = null,
-    long? EstimatedBytes = null);
+    long? EstimatedBytes = null,
+    string? BatchId = null,
+    int? BatchFileCount = null);

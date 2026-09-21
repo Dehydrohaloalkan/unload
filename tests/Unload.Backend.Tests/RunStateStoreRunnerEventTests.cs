@@ -135,6 +135,26 @@ public class RunStateStoreRunnerEventTests
     }
 
     [Fact]
+    public void GatewayBatchQueuedRunnerEvent_ProjectsReadyBatchAndEnrichesEarlierStartedFeedback()
+    {
+        using var fixture = new RunStateStoreFixture();
+        fixture.Start();
+        fixture.ApplyFeedback(SenderFeedbackKind.BatchStarted, batchId: "batch-a");
+
+        fixture.ApplyEvent(
+            RunnerStep.GatewayBatchQueued,
+            memberName: "Member A",
+            batchId: "batch-a",
+            batchFileCount: 3);
+
+        var batch = fixture.Store.Get("run-1")!.SenderBatches!["batch-a"];
+        Assert.Equal(SenderBatchStatus.InProgress, batch.Status);
+        Assert.NotNull(batch.StartedAt);
+        Assert.NotNull(batch.QueuedAt);
+        Assert.Equal(3, batch.FileCount);
+    }
+
+    [Fact]
     public void FailedRunnerEvent_FailsOnlyUnfinishedMembersAndResetsWorkers()
     {
         using var fixture = new RunStateStoreFixture();

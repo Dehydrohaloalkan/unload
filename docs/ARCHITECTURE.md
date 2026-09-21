@@ -589,6 +589,17 @@ Browser storage хранит только локальные UI-настройк
 соответствующее терминальное состояние; `OutputArtifacts` при этом сохраняет прежнюю, независимую
 проекцию готовых файлов.
 
+`RunStatusInfo.SenderBatches` — отдельная проекция lifecycle партий gateway. После успешного
+`PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии
+и количеством файлов: это создаёт batch в `Ready` с `QueuedAt`. Когда FTP worker действительно
+начинает `ProcessBatchAsync`, он публикует `BatchStarted`, переводящий batch в `InProgress` и
+фиксирующий `StartedAt` до подключения к FTP. `FileSent`, `BatchCompleted` и `BatchFailed`
+сохраняют прежние роли. Runner events и sender feedback приходят по независимым каналам, поэтому
+проекция допускает обратный порядок: поздний `GatewayBatchQueued` дополняет `QueuedAt` и
+`FileCount`, не меняя уже достигнутый `InProgress` или терминальный статус и его `UpdatedAt`.
+Повторная отправка пока публикует batch напрямую и не создаёт runner `GatewayBatchQueued`, поэтому
+для её партий `QueuedAt` может отсутствовать.
+
 ## 14. HTTP и SignalR contracts
 
 OpenAPI schema публикуется API только в `Development` по `/openapi/v1.json`. Зафиксированная

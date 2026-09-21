@@ -105,6 +105,7 @@ internal sealed class RunStateProjector
             MemberStatuses = RunMemberProjector.Apply(current.MemberStatuses, @event, now),
             OutputArtifacts = RunArtifactProjector.Apply(current.OutputArtifacts, @event),
             WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, @event, now),
+            SenderBatches = GatewayFeedbackProjector.ApplyQueued(current.SenderBatches, @event, now),
             ScriptStatuses = RunScriptProjector.Apply(current.ScriptStatuses, @event),
             FileStatuses = RunFileProjector.Apply(current.FileStatuses, @event)
         };

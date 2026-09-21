@@ -32,6 +32,7 @@ export const RunnerStep = {
   Completed: 9,
   Failed: 10,
   FileWriteStarted: 11,
+  GatewayBatchQueued: 12,
 } as const satisfies Record<string, RunnerStep>;
 
 export type MemberRunStatusInfo = ApiModels.MemberRunStatusInfo;
@@ -65,6 +66,8 @@ export interface RunnerEvent {
   workerId: number | null;
   chunkNumber: number | null;
   estimatedBytes: number | null;
+  batchId: string | null;
+  batchFileCount: number | null;
 }
 
 export type MemberCatalogItem = ApiModels.MemberCatalogItem;

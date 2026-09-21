@@ -5,9 +5,12 @@ import { SenderBatchStatus } from '../models/sender-batch-status';
 import { SenderFileDispatchStateInfo } from '../models/sender-file-dispatch-state-info';
 export interface SenderBatchStatusInfo {
   batchId: string;
+  fileCount?: (number | string | null);
   memberName: string;
   message?: (string | null);
+  queuedAt?: (string | null);
   sentFiles: Array<SenderFileDispatchStateInfo>;
+  startedAt?: (string | null);
   status: SenderBatchStatus;
   updatedAt: string;
 }

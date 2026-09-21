@@ -86,6 +86,7 @@ public class SystemController(
 
         var kind = request.Kind.Trim().ToUpperInvariant() switch
         {
+            "BATCH_STARTED" => SenderFeedbackKind.BatchStarted,
             "FILE_SENT" => SenderFeedbackKind.FileSent,
             "BATCH_COMPLETED" => SenderFeedbackKind.BatchCompleted,
             "BATCH_FAILED" => SenderFeedbackKind.BatchFailed,

@@ -140,6 +140,50 @@ public sealed class MainUnloadChaosTests
             orderedEvents.FindIndex(static item => item.Step == RunnerStep.Completed));
     }
 
+    [Fact]
+    public async Task SuccessfulGatewayPublish_EmitsQueuedBatchBeforeScriptCompleted()
+    {
+        using var scratch = new ScratchDirectory();
+        var engine = CreateEngine(ChaosPoint.None);
+
+        var events = (await CollectAsync(engine.RunAsync(
+            Request(scratch.Path, publishToGateway: true),
+            CancellationToken.None))).ToList();
+
+        var queued = Assert.Single(events, static item => item.Step == RunnerStep.GatewayBatchQueued);
+        var scriptCompleted = Assert.Single(events, static item => item.Step == RunnerStep.ScriptCompleted);
+        Assert.Equal("chaos-run-1:Chaos member", queued.BatchId);
+        Assert.Equal(1, queued.BatchFileCount);
+        Assert.True(events.IndexOf(queued) < events.IndexOf(scriptCompleted));
+    }
+
+    [Fact]
+    public async Task GatewayPublishSkipped_DoesNotEmitQueuedBatch()
+    {
+        using var scratch = new ScratchDirectory();
+        var engine = CreateEngine(ChaosPoint.None);
+
+        var events = await CollectAsync(engine.RunAsync(
+            Request(scratch.Path, publishToGateway: false),
+            CancellationToken.None));
+
+        Assert.DoesNotContain(events, static item => item.Step == RunnerStep.GatewayBatchQueued);
+    }
+
+    [Fact]
+    public async Task GatewayPublishFailure_DoesNotEmitQueuedBatchOrScriptCompletion()
+    {
+        using var scratch = new ScratchDirectory();
+        var engine = CreateEngine(ChaosPoint.GatewayPublish);
+
+        var events = await CollectAsync(engine.RunAsync(
+            Request(scratch.Path, publishToGateway: true),
+            CancellationToken.None));
+
+        Assert.DoesNotContain(events, static item => item.Step == RunnerStep.GatewayBatchQueued);
+        Assert.DoesNotContain(events, static item => item.Step == RunnerStep.ScriptCompleted);
+    }
+
     private static MainUnloadEngine CreateEngine(ChaosPoint chaosPoint)
     {
         ICatalogService catalog = chaosPoint == ChaosPoint.Catalog
