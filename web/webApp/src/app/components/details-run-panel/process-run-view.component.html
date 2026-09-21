@@ -34,7 +34,10 @@
     } @else {
       <div class="process-rows">
         @for (row of rows(); track row.key) {
-          <article class="process-member-row" [attr.aria-labelledby]="'process-member-' + row.key">
+          <article
+            [class]="'process-member-row process-tone--' + memberTone(row.status)"
+            [attr.aria-labelledby]="'process-member-' + row.key"
+          >
             <header class="process-member-row__header">
               <div class="process-member-row__identity">
                 <h3 [id]="'process-member-' + row.key">{{ row.name }}</h3>
@@ -56,12 +59,14 @@
 
             <div class="process-stages">
               <section
-                class="process-stage process-stage--member"
+                [class]="
+                  'process-stage process-stage--member process-tone--' + memberTone(row.status)
+                "
                 [attr.aria-labelledby]="'member-stage-' + row.key"
               >
                 <h4 [id]="'member-stage-' + row.key">{{ 'process.stage.member' | t }}</h4>
                 <ul class="process-card-list">
-                  <li class="process-card">
+                  <li [class]="'process-card process-tone--' + memberTone(row.status)">
                     <strong class="process-card__title">{{ row.name }}</strong>
                     <span class="process-card__status">{{
                       resolveMemberStatusLabel(row.status)
@@ -76,14 +81,17 @@
                 </ul>
               </section>
 
-              <section class="process-stage" [attr.aria-labelledby]="'scripts-stage-' + row.key">
+              <section
+                [class]="'process-stage process-tone--' + scriptsStageTone(row)"
+                [attr.aria-labelledby]="'scripts-stage-' + row.key"
+              >
                 <h4 [id]="'scripts-stage-' + row.key">{{ 'process.stage.scripts' | t }}</h4>
                 @if (row.scripts.length === 0) {
                   <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
                 } @else {
                   <ul class="process-card-list">
                     @for (script of row.scripts; track script.id) {
-                      <li class="process-card">
+                      <li [class]="'process-card process-tone--' + scriptTone(script.stage)">
                         <strong class="process-card__title">{{
                           script.scriptCode || script.id
                         }}</strong>
@@ -119,7 +127,10 @@
                 }
               </section>
 
-              <section class="process-stage" [attr.aria-labelledby]="'files-stage-' + row.key">
+              <section
+                [class]="'process-stage process-tone--' + filesStageTone(row)"
+                [attr.aria-labelledby]="'files-stage-' + row.key"
+              >
                 <h4 [id]="'files-stage-' + row.key">{{ 'process.stage.files' | t }}</h4>
                 @if (filesFor(row).length === 0) {
                   <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
@@ -127,7 +138,7 @@
                   <ul class="process-card-list">
                     @for (fileView of filesFor(row); track fileView.file.id) {
                       @let file = fileView.file;
-                      <li class="process-card">
+                      <li [class]="'process-card process-tone--' + fileTone(file.stage)">
                         <strong class="process-card__title">{{ fileName(file) }}</strong>
                         <span class="process-card__status">{{
                           resolveFileStageLabel(file.stage)
@@ -171,14 +182,17 @@
                 }
               </section>
 
-              <section class="process-stage" [attr.aria-labelledby]="'gateway-stage-' + row.key">
+              <section
+                [class]="'process-stage process-tone--' + gatewayStageTone(row)"
+                [attr.aria-labelledby]="'gateway-stage-' + row.key"
+              >
                 <h4 [id]="'gateway-stage-' + row.key">{{ 'process.stage.gateway' | t }}</h4>
                 @if (row.batches.length === 0) {
                   <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
                 } @else {
                   <ul class="process-card-list">
                     @for (batch of row.batches; track batch.id) {
-                      <li class="process-card">
+                      <li [class]="'process-card process-tone--' + batchTone(batch.status)">
                         <strong class="process-card__title">{{
                           'process.card.batch' | t: { id: batch.id }
                         }}</strong>

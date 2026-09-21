@@ -26,6 +26,14 @@ import {
   getElapsedSince,
 } from '../../state/utils/process-display.util';
 import { buildProcessMemberRows } from '../../state/utils/process-projection.util';
+import {
+  ProcessTone,
+  resolveBatchTone,
+  resolveFileTone,
+  resolveMemberTone,
+  resolveScriptTone,
+  resolveStageTone,
+} from '../../state/utils/process-tone.util';
 import { formatTimestamp } from '../../state/utils/time.util';
 
 interface ProcessFileView {
@@ -72,6 +80,10 @@ export class ProcessRunViewComponent {
   formatProcessDuration = formatProcessDuration;
   formatProcessBytes = formatProcessBytes;
   formatProcessCount = formatProcessCount;
+  memberTone = resolveMemberTone;
+  scriptTone = resolveScriptTone;
+  fileTone = resolveFileTone;
+  batchTone = resolveBatchTone;
 
   constructor() {
     effect(() => {
@@ -98,6 +110,18 @@ export class ProcessRunViewComponent {
 
   fileName(file: ProcessFileCard): string {
     return file.fileName || file.path || file.id;
+  }
+
+  scriptsStageTone(row: ProcessMemberRow): ProcessTone {
+    return resolveStageTone(row.scripts.map((script) => resolveScriptTone(script.stage)));
+  }
+
+  filesStageTone(row: ProcessMemberRow): ProcessTone {
+    return resolveStageTone(this.filesFor(row).map(({ file }) => resolveFileTone(file.stage)));
+  }
+
+  gatewayStageTone(row: ProcessMemberRow): ProcessTone {
+    return resolveStageTone(row.batches.map((batch) => resolveBatchTone(batch.status)));
   }
 
   private startClock(): void {
