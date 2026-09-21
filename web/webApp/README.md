@@ -10,6 +10,8 @@ Angular-клиент для `Unload.Api`.
 - открывает отдельные right-drawer панели деталей для этапов 2, 3 и 4;
 - запускает `preset`, `run`, `extra`, поддерживает `admin mode` с передачей `adminOverride`;
 - для этапа 3 дает выбор мемберов по группам в виде grid карточек;
+- в деталях этапа 3 показывает вкладку `Процесс`: вертикальные строки мемберов с lineage
+  `мембер → скрипты → файлы → шлюз`, фактическими длительностями и secondary worker-бейджами;
 - показывает историю запусков за день и ссылки на скачивание файлов результатов;
 - поддерживает on-demand скачивание ZIP архива результата через system API;
 - восстанавливает active run, dashboard snapshot и историю после перезагрузки страницы.
@@ -138,6 +140,7 @@ Dev-server использует `proxy.conf.json`, поэтому запросы
 - `src/app/components/extra-card.component.ts` — карточка этапа 4.
 - `src/app/components/details-preset-panel.component.ts` — drawer-детали этапа 2.
 - `src/app/components/details-run-panel.component.ts` — drawer-детали этапа 3.
+- `src/app/components/details-run-panel/process-run-view.component.ts` — вкладка процесса main run.
 - `src/app/components/details-extra-panel.component.ts` — drawer-детали этапа 4.
 - `src/app/state/utils/history-projection.util.ts` — стабильная точка сборки истории;
   main, extra и gateway/requeue проекции находятся в соседних специализированных util-файлах.

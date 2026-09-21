@@ -1,7 +1,9 @@
 import {
+  FileRunStage,
   MemberRunLifecycleStatus,
   RunLifecycleStatus,
   RunnerStep,
+  ScriptRunStage,
   SenderBatchStatus,
 } from '../../app.models';
 import { t } from '../../i18n/i18n';
@@ -32,6 +34,21 @@ const SENDER_STATUS_KEYS: Record<SenderBatchStatus, I18nKey> = {
   [SenderBatchStatus.SkippedByRequest]: 'status.sender.skipped',
 };
 
+const SCRIPT_STAGE_KEYS: Record<ScriptRunStage, I18nKey> = {
+  [ScriptRunStage.AwaitingWorker]: 'status.script.awaitingWorker',
+  [ScriptRunStage.Running]: 'status.script.running',
+  [ScriptRunStage.Completed]: 'status.script.completed',
+  [ScriptRunStage.Failed]: 'status.script.failed',
+  [ScriptRunStage.Cancelled]: 'status.script.cancelled',
+};
+
+const FILE_STAGE_KEYS: Record<FileRunStage, I18nKey> = {
+  [FileRunStage.QueuedForWrite]: 'status.file.queuedForWrite',
+  [FileRunStage.Written]: 'status.file.written',
+  [FileRunStage.Failed]: 'status.file.failed',
+  [FileRunStage.Cancelled]: 'status.file.cancelled',
+};
+
 const RUNNER_STEP_KEYS: Record<RunnerStep, I18nKey> = {
   [RunnerStep.RequestAccepted]: 'runner.steps.requestAccepted',
   [RunnerStep.TargetsResolved]: 'runner.steps.targetsResolved',
@@ -60,6 +77,14 @@ export function resolveMemberStatusLabel(
 
 export function resolveSenderStatusLabel(status: SenderBatchStatus | null | undefined): string {
   return status == null ? t('status.unknown') : t(SENDER_STATUS_KEYS[status] ?? 'status.unknown');
+}
+
+export function resolveScriptStageLabel(stage: ScriptRunStage | null | undefined): string {
+  return stage == null ? t('status.unknown') : t(SCRIPT_STAGE_KEYS[stage] ?? 'status.unknown');
+}
+
+export function resolveFileStageLabel(stage: FileRunStage | null | undefined): string {
+  return stage == null ? t('status.unknown') : t(FILE_STAGE_KEYS[stage] ?? 'status.unknown');
 }
 
 export function resolveRunnerStepLabel(step: RunnerStep | null | undefined): string {

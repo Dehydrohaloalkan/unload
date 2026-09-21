@@ -1,0 +1,221 @@
+<section class="details-section process-run" aria-labelledby="process-run-title">
+  <h2 id="process-run-title" class="details-section__title">{{ 'process.title' | t }}</h2>
+
+  @if (run(); as activeRun) {
+    <div class="process-summary" aria-live="polite">
+      <div class="process-summary__item">
+        <span>{{ 'process.summary.status' | t }}</span>
+        <strong>{{ resolveRunStatusLabel(activeRun.status) }}</strong>
+      </div>
+      <div class="process-summary__item">
+        <span>{{ 'process.summary.memberRows' | t }}</span>
+        <strong>{{ formatProcessCount(rows().length) }}</strong>
+      </div>
+      <div class="process-summary__item">
+        <span>{{ 'process.summary.activeCards' | t }}</span>
+        <strong>{{ formatProcessCount(activeCardCount()) }}</strong>
+      </div>
+      @if (activeRun.updatedAt) {
+        <div class="process-summary__item">
+          <span>{{ 'process.summary.updated' | t }}</span>
+          <strong>{{ formatTimestamp(activeRun.updatedAt) }}</strong>
+          @let age = snapshotAgeMs();
+          @if (age !== null) {
+            <small>{{
+              'process.summary.updatedAgo' | t: { duration: formatProcessDuration(age) }
+            }}</small>
+          }
+        </div>
+      }
+    </div>
+
+    @if (!hasProcessCards()) {
+      <p class="details-empty">{{ 'process.emptyNoCards' | t }}</p>
+    } @else {
+      <div class="process-rows">
+        @for (row of rows(); track row.key) {
+          <article class="process-member-row" [attr.aria-labelledby]="'process-member-' + row.key">
+            <header class="process-member-row__header">
+              <div class="process-member-row__identity">
+                <h3 [id]="'process-member-' + row.key">{{ row.name }}</h3>
+                <span class="process-status-badge">{{ resolveMemberStatusLabel(row.status) }}</span>
+              </div>
+              <div class="process-member-row__summary">
+                <span>{{
+                  'process.member.activeCards'
+                    | t: { count: formatProcessCount(row.activeItemSummary.count) }
+                }}</span>
+                @let oldestElapsed = row.activeItemSummary.oldestElapsedMs;
+                @if (oldestElapsed !== null) {
+                  <span>{{
+                    'process.member.longest' | t: { duration: formatProcessDuration(oldestElapsed) }
+                  }}</span>
+                }
+              </div>
+            </header>
+
+            <div class="process-stages">
+              <section
+                class="process-stage process-stage--member"
+                [attr.aria-labelledby]="'member-stage-' + row.key"
+              >
+                <h4 [id]="'member-stage-' + row.key">{{ 'process.stage.member' | t }}</h4>
+                <ul class="process-card-list">
+                  <li class="process-card">
+                    <strong class="process-card__title">{{ row.name }}</strong>
+                    <span class="process-card__status">{{
+                      resolveMemberStatusLabel(row.status)
+                    }}</span>
+                    @if (row.updatedAt) {
+                      <span class="process-card__meta"
+                        >{{ 'process.card.updated' | t }}:
+                        {{ formatTimestamp(row.updatedAt) }}</span
+                      >
+                    }
+                  </li>
+                </ul>
+              </section>
+
+              <section class="process-stage" [attr.aria-labelledby]="'scripts-stage-' + row.key">
+                <h4 [id]="'scripts-stage-' + row.key">{{ 'process.stage.scripts' | t }}</h4>
+                @if (row.scripts.length === 0) {
+                  <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
+                } @else {
+                  <ul class="process-card-list">
+                    @for (script of row.scripts; track script.id) {
+                      <li class="process-card">
+                        <strong class="process-card__title">{{
+                          script.scriptCode || script.id
+                        }}</strong>
+                        <span class="process-card__status">{{
+                          resolveScriptStageLabel(script.stage)
+                        }}</span>
+                        @if (script.workerId !== null) {
+                          <span class="process-worker-badge">{{
+                            'process.card.worker' | t: { id: script.workerId }
+                          }}</span>
+                        }
+                        @if (script.records !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.records'
+                              | t: { count: formatProcessCount(script.records) }
+                          }}</span>
+                        }
+                        @if (script.queueWaitMs !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.queueWait'
+                              | t: { duration: formatProcessDuration(script.queueWaitMs) }
+                          }}</span>
+                        }
+                        @if (script.stageElapsedMs !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.execution'
+                              | t: { duration: formatProcessDuration(script.stageElapsedMs) }
+                          }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </section>
+
+              <section class="process-stage" [attr.aria-labelledby]="'files-stage-' + row.key">
+                <h4 [id]="'files-stage-' + row.key">{{ 'process.stage.files' | t }}</h4>
+                @if (filesFor(row).length === 0) {
+                  <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
+                } @else {
+                  <ul class="process-card-list">
+                    @for (fileView of filesFor(row); track fileView.file.id) {
+                      @let file = fileView.file;
+                      <li class="process-card">
+                        <strong class="process-card__title">{{ fileName(file) }}</strong>
+                        <span class="process-card__status">{{
+                          resolveFileStageLabel(file.stage)
+                        }}</span>
+                        @if (fileView.parentScriptCode) {
+                          <span class="process-card__meta">{{
+                            'process.card.script' | t: { code: fileView.parentScriptCode }
+                          }}</span>
+                        } @else {
+                          <span class="process-card__meta">{{ 'process.card.orphan' | t }}</span>
+                        }
+                        @if (file.chunk !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.chunk' | t: { number: file.chunk }
+                          }}</span>
+                        }
+                        @if (file.workerId !== null) {
+                          <span class="process-worker-badge">{{
+                            'process.card.worker' | t: { id: file.workerId }
+                          }}</span>
+                        }
+                        @if (file.rows !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.rows' | t: { count: formatProcessCount(file.rows) }
+                          }}</span>
+                        }
+                        @if (file.bytes !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.size' | t: { size: formatProcessBytes(file.bytes) }
+                          }}</span>
+                        }
+                        @if (file.writeElapsedMs !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.writeElapsed'
+                              | t: { duration: formatProcessDuration(file.writeElapsedMs) }
+                          }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </section>
+
+              <section class="process-stage" [attr.aria-labelledby]="'gateway-stage-' + row.key">
+                <h4 [id]="'gateway-stage-' + row.key">{{ 'process.stage.gateway' | t }}</h4>
+                @if (row.batches.length === 0) {
+                  <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
+                } @else {
+                  <ul class="process-card-list">
+                    @for (batch of row.batches; track batch.id) {
+                      <li class="process-card">
+                        <strong class="process-card__title">{{
+                          'process.card.batch' | t: { id: batch.id }
+                        }}</strong>
+                        <span class="process-card__status">{{
+                          resolveSenderStatusLabel(batch.status)
+                        }}</span>
+                        @if (batch.fileCount !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.files' | t: { count: formatProcessCount(batch.fileCount) }
+                          }}</span>
+                        }
+                        <span class="process-card__meta">{{
+                          'process.card.sent' | t: { count: formatProcessCount(batch.sentCount) }
+                        }}</span>
+                        @if (batch.queueWaitMs !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.gatewayWait'
+                              | t: { duration: formatProcessDuration(batch.queueWaitMs) }
+                          }}</span>
+                        }
+                        @if (batch.sendElapsedMs !== null) {
+                          <span class="process-card__meta">{{
+                            'process.card.sending'
+                              | t: { duration: formatProcessDuration(batch.sendElapsedMs) }
+                          }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </section>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  } @else {
+    <p class="details-empty">{{ 'process.emptyNoRun' | t }}</p>
+  }
+</section>

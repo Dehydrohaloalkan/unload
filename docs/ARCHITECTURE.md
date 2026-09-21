@@ -554,20 +554,25 @@ Material отвечает за доступное поведение диало�
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
 | `process-projection.models.ts` | типы строк процесса и lineage-карточек member → script → file → gateway batch |
 | `process-projection.util.ts` | чистая проекция `RunStatusInfo` в детерминированные вертикальные member rows с длительностями и orphan-файлами |
+| `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
+| `ProcessRunViewComponent` | третья вкладка main-run drawer: responsive member rows с четырьмя stage-секциями |
 
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.
 `WorkflowStore` сохраняет orchestration и координацию stores; чистые presentation-преобразования
 находятся в util-файлах и проверяются без Angular DI. Бизнес-допуск всё равно принимает backend:
 frontend availability управляет только состоянием кнопок и не заменяет `TaskWorkflow`.
 
-Подготовка третьей вкладки деталей «Процесс» начинается с `buildProcessMemberRows`: pure projection
-принимает один `RunStatusInfo` и явно переданный `now`, возвращая одну вертикальную строку на мембер.
+Третья вкладка деталей «Процесс» использует `buildProcessMemberRows`: pure projection принимает один
+`RunStatusInfo` и явно переданный `now`, возвращая одну вертикальную строку на мембер.
 Внутри строки сохраняется lineage `member → scripts → files`, отдельные файлы без известного
 родительского script попадают в `orphanFiles`, а все sender batches мембера остаются отдельными
 карточками. Проекция объединяет имена без учета регистра, сохраняет частичные/legacy snapshots,
 нормализует числовые API-поля (`number|string`) и вычисляет queue/stage/write/send durations без
 `Date.now`; терминальные длительности используют серверные `completedAt`/`updatedAt`, активные —
-переданный `now`. Это только view-model слой: store и компоненты пока не подключены.
+переданный `now`. `ProcessRunViewComponent` получает active run только через `WorkflowStore`, передаёт
+свой clock в проекцию и обновляет его раз в секунду лишь при busy run или активных карточках;
+`DestroyRef` очищает timer. Файлы показаны один раз в file-stage, а связь с parent script видна как
+lineage, поэтому attached и orphan files не дублируются.
 
 ### 13.2. Bootstrap страницы
 
