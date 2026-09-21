@@ -295,7 +295,11 @@ public class RunStateStore
             UpdatedAt = recoveredAt,
             LastStep = RunnerStep.Failed,
             Message = "Run was interrupted due to server restart.",
-            WorkerStatuses = RunWorkerProjector.Reset(run.WorkerStatuses, recoveredAt)
+            WorkerStatuses = RunWorkerProjector.Reset(run.WorkerStatuses, recoveredAt),
+            ScriptStatuses = RunScriptProjector.CancelUnfinished(
+                run.ScriptStatuses,
+                "Run was interrupted due to server restart.",
+                recoveredAt)
         };
     }
 }

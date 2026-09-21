@@ -58,6 +58,47 @@ public record RunWorkerStatusInfo(
     DateTimeOffset UpdatedAt);
 
 /// <summary>
+/// Перечисляет этапы script-карточки в проекции выполнения запуска.
+/// </summary>
+public enum ScriptRunStage
+{
+    AwaitingWorker,
+    Running,
+    Completed,
+    Failed,
+    Cancelled
+}
+
+/// <summary>
+/// Снимок прохождения одного скрипта через этапы выполнения запуска.
+/// </summary>
+/// <param name="Id">Детерминированный идентификатор пары мембер + скрипт без учета регистра.</param>
+/// <param name="MemberName">Имя мембера, которому принадлежит скрипт.</param>
+/// <param name="ScriptCode">Код скрипта.</param>
+/// <param name="Stage">Текущий этап выполнения скрипта.</param>
+/// <param name="DiscoveredAt">Время обнаружения скрипта.</param>
+/// <param name="StageEnteredAt">Время входа в текущий этап.</param>
+/// <param name="UpdatedAt">Время последнего события, изменившего карточку.</param>
+/// <param name="StartedAt">Время начала выполнения запроса, если оно уже началось.</param>
+/// <param name="CompletedAt">Время терминального завершения скрипта, если оно уже завершено.</param>
+/// <param name="WorkerId">Worker, выполняющий или выполнивший скрипт, если он известен.</param>
+/// <param name="Records">Количество обработанных записей после завершения запроса, если оно известно.</param>
+/// <param name="Message">Последнее человекочитаемое сообщение раннера для скрипта.</param>
+public record ScriptRunStatusInfo(
+    string Id,
+    string MemberName,
+    string ScriptCode,
+    ScriptRunStage Stage,
+    DateTimeOffset DiscoveredAt,
+    DateTimeOffset StageEnteredAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? StartedAt = null,
+    DateTimeOffset? CompletedAt = null,
+    int? WorkerId = null,
+    int? Records = null,
+    string? Message = null);
+
+/// <summary>
 /// Снимок выходного артефакта, созданного в рамках запуска.
 /// </summary>
 /// <param name="FileName">Имя файла артефакта.</param>
@@ -99,6 +140,7 @@ public record SenderBatchStatusInfo(
 /// <param name="MemberStatuses">Статусы мемберов, участвующих в запуске.</param>
 /// <param name="OutputArtifacts">Список файлов, созданных в рамках запуска.</param>
 /// <param name="WorkerStatuses">Текущие состояния worker-потоков.</param>
+/// <param name="ScriptStatuses">Карточки скриптов и их текущие этапы выполнения.</param>
 public record RunStatusInfo(
     string CorrelationId,
     string TaskCode,
@@ -113,4 +155,5 @@ public record RunStatusInfo(
     IReadOnlyCollection<RunOutputArtifactInfo>? OutputArtifacts = null,
     IReadOnlyDictionary<int, RunWorkerStatusInfo>? WorkerStatuses = null,
     IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null,
-    bool PublishToGateway = true);
+    bool PublishToGateway = true,
+    IReadOnlyDictionary<string, ScriptRunStatusInfo>? ScriptStatuses = null);

@@ -45,6 +45,10 @@ public class RunStateStorePersistenceTests
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
         fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
+        fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
             scriptCode: "script-a",
@@ -63,6 +67,7 @@ public class RunStateStorePersistenceTests
         Assert.Equal("idle", state.WorkerStatuses![1].State);
         Assert.Null(state.WorkerStatuses[1].ScriptCode);
         Assert.Null(state.WorkerStatuses[1].MemberName);
+        Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
     }
 
     [Theory]

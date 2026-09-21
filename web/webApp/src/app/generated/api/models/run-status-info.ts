@@ -6,6 +6,7 @@ import { RunLifecycleStatus } from '../models/run-lifecycle-status';
 import { RunnerStep } from '../models/runner-step';
 import { RunOutputArtifactInfo } from '../models/run-output-artifact-info';
 import { RunWorkerStatusInfo } from '../models/run-worker-status-info';
+import { ScriptRunStatusInfo } from '../models/script-run-status-info';
 import { SenderBatchStatusInfo } from '../models/sender-batch-status-info';
 export interface RunStatusInfo {
   correlationId: string;
@@ -18,6 +19,9 @@ export interface RunStatusInfo {
   outputArtifacts?: (Array<RunOutputArtifactInfo> | null);
   outputPath?: (string | null);
   publishToGateway?: boolean;
+  scriptStatuses?: ({
+[key: string]: ScriptRunStatusInfo;
+} | null);
   senderBatches?: ({
 [key: string]: SenderBatchStatusInfo;
 } | null);

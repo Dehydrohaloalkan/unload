@@ -1976,6 +1976,15 @@
           "publishToGateway": {
             "type": "boolean",
             "default": true
+          },
+          "scriptStatuses": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScriptRunStatusInfo"
+            }
           }
         }
       },
@@ -2015,6 +2024,85 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ScriptRunStage": {
+        "type": "integer"
+      },
+      "ScriptRunStatusInfo": {
+        "required": [
+          "id",
+          "memberName",
+          "scriptCode",
+          "stage",
+          "discoveredAt",
+          "stageEnteredAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "scriptCode": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/ScriptRunStage"
+          },
+          "discoveredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stageEnteredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "workerId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "records": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

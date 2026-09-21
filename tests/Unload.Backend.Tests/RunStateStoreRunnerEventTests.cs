@@ -61,6 +61,10 @@ public class RunStateStoreRunnerEventTests
         fixture.Start();
 
         fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
+        fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
             scriptCode: "script-a",
@@ -98,6 +102,9 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal("script-a", artifact.ScriptCode);
         Assert.Equal("idle", state.WorkerStatuses![2].State);
         Assert.Null(state.WorkerStatuses[2].ScriptCode);
+        var script = Assert.Single(state.ScriptStatuses!).Value;
+        Assert.Equal(ScriptRunStage.Completed, script.Stage);
+        Assert.Equal("script-a", script.ScriptCode);
     }
 
     [Fact]
@@ -133,6 +140,10 @@ public class RunStateStoreRunnerEventTests
         using var fixture = new RunStateStoreFixture();
         fixture.Start(members: ["Member A", "Member B"]);
         fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
+        fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
             scriptCode: "script-a",
@@ -151,6 +162,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
         Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses["Member B"].Status);
         Assert.All(state.WorkerStatuses!.Values, worker => Assert.Equal("idle", worker.State));
+        Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
     }
 
     [Fact]
@@ -158,6 +170,10 @@ public class RunStateStoreRunnerEventTests
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
+        fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
         fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
@@ -171,6 +187,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal("worker crashed", state.Message);
         Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
         Assert.Equal("idle", state.WorkerStatuses![1].State);
+        Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
     }
 
     [Fact]
@@ -178,6 +195,10 @@ public class RunStateStoreRunnerEventTests
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
+        fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
         fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
@@ -192,6 +213,7 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal("cancelled by user", state.Message);
         Assert.Equal(MemberRunLifecycleStatus.Cancelled, state.MemberStatuses!["Member A"].Status);
         Assert.Equal("idle", state.WorkerStatuses![1].State);
+        Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
     }
 
     [Fact]

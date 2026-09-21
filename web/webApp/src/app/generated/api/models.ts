@@ -30,6 +30,8 @@ export type { RunOutputArtifactInfo } from './models/run-output-artifact-info';
 export type { RunStartRequest } from './models/run-start-request';
 export type { RunStatusInfo } from './models/run-status-info';
 export type { RunWorkerStatusInfo } from './models/run-worker-status-info';
+export type { ScriptRunStage } from './models/script-run-stage';
+export type { ScriptRunStatusInfo } from './models/script-run-status-info';
 export type { ScriptTaskRunResult } from './models/script-task-run-result';
 export type { SenderBatchStatus } from './models/sender-batch-status';
 export type { SenderBatchStatusInfo } from './models/sender-batch-status-info';

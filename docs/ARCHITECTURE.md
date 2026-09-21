@@ -94,7 +94,7 @@ flowchart LR
 | `Unload.Store` / `RunStateStore` | Предоставляет публичные доменные операции и последовательно выполняет mutation вместе с persistence | Это серверный источник истины и небольшой фасад над правилами проекции |
 | `Unload.Store` / `RunStatePersistence` | Последовательно захватывает актуальный набор состояний и записывает snapshot через один writer | Конкурентные вызовы не могут сохранить устаревший snapshot после более нового |
 | `Unload.Store` / `RunStateProjector` | Создаёт начальные снимки, применяет runner events к immutable `RunStatusInfo` и координирует специализированные projections | Правила построения состояния не смешиваются с конкурентным хранением |
-| `Unload.Store` / `RunMemberProjector`, `RunArtifactProjector`, `RunWorkerProjector` | Обновляют соответственно состояния мемберов, список файлов и занятость workers | Каждое простое правило можно прочитать и проверить без полного жизненного цикла запуска |
+| `Unload.Store` / `RunMemberProjector`, `RunArtifactProjector`, `RunWorkerProjector`, `RunScriptProjector` | Обновляют соответственно состояния мемберов, список файлов, занятость workers и persisted-карточки скриптов | Каждое простое правило можно прочитать и проверить без полного жизненного цикла запуска |
 | `Unload.Store` / `GatewayFeedbackProjector` | Проецирует `FileSent`, `BatchCompleted` и `BatchFailed` в карту sender batches | Нормализация путей, дедупликация и статусы доставки изолированы от runner events |
 | `Unload.Store` / `RunCompletionPolicy` | Чисто вычисляет terminal status после runner completion и gateway feedback | Условия `Completed`/`Failed` и режим без gateway покрываются отдельной таблицей тестов |
 | `Unload.Store` / `RunTaskCodeResolver` | Изолирует fallback-определение task code для feedback с неизвестным correlation ID | Зависимость от строковых префиксов находится в одном явно названном и тестируемом месте |
@@ -115,6 +115,13 @@ flowchart LR
 | `Unload.Api` / `RunStatusController` | Возвращает список, active run и состояние по correlation ID | Простые state-запросы зависят только от store и main activation channel |
 | `Unload.Api` / `RunHistoryController` | Возвращает today, dashboard и history | Исторические проекции и retention default находятся в одной transport-зоне |
 | `Unload.Api` / `GatewayRequeueController` | Принимает запрос повторной публикации готовых файлов | Gateway-команда не смешивается с запуском SQL-выгрузки |
+
+`RunScriptProjector` использует нормализованный без учета регистра ключ пары `memberName` +
+`scriptCode`: case-варианты одного скрипта не создают дубликатов. `RunnerEvent` пока не несёт
+target code, поэтому проекция не может различить одинаковую пару member/script из разных targets;
+расширять event contract для этого отдельно потребуется перед появлением такого сценария.
+Карточка появляется только из `ScriptDiscovered` с обоими полями; legacy-события, включая текущий
+Extra pipeline без `MemberName` и без `ScriptDiscovered`, намеренно не синтезируют карточку.
 
 Все четыре run-контроллера сохраняют общий route prefix `/api/runs`. `RunLaunchController`
 использует один private launch-wrapper для преобразования `TaskLaunchException` в прежний

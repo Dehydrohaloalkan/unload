@@ -49,7 +49,8 @@ internal sealed class RunStateProjector
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
             WorkerStatuses: CreateInitialWorkerStatuses(now),
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            PublishToGateway: publishToGateway);
+            PublishToGateway: publishToGateway,
+            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
     }
 
     public RunStatusInfo CreateFromEvent(RunnerEvent @event, DateTimeOffset now)
@@ -71,7 +72,10 @@ internal sealed class RunStateProjector
                 now),
             OutputArtifacts: RunArtifactProjector.Apply(Array.Empty<RunOutputArtifactInfo>(), @event),
             WorkerStatuses: _workerProjector.Apply(CreateInitialWorkerStatuses(now), @event, now),
-            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase));
+            SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
+            ScriptStatuses: RunScriptProjector.Apply(
+                new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                @event));
     }
 
     public RunStatusInfo ApplyRunnerEvent(RunStatusInfo current, RunnerEvent @event, DateTimeOffset now)
@@ -96,7 +100,8 @@ internal sealed class RunStateProjector
             OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
             MemberStatuses = RunMemberProjector.Apply(current.MemberStatuses, @event, now),
             OutputArtifacts = RunArtifactProjector.Apply(current.OutputArtifacts, @event),
-            WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, @event, now)
+            WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, @event, now),
+            ScriptStatuses = RunScriptProjector.Apply(current.ScriptStatuses, @event)
         };
 
         return RunCompletionPolicy.Apply(updated, now);
@@ -119,7 +124,8 @@ internal sealed class RunStateProjector
             SenderBatches: GatewayFeedbackProjector.Apply(
                 source: null,
                 feedback,
-                now));
+                now),
+            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
     }
 
     public RunStatusInfo ApplySenderFeedback(RunStatusInfo current, SenderFileDispatchFeedback feedback, DateTimeOffset now)
@@ -164,7 +170,11 @@ internal sealed class RunStateProjector
                 RunnerStep.Failed,
                 message,
                 now),
-            WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now)
+            WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now),
+            ScriptStatuses = RunScriptProjector.FailUnfinished(
+                current.ScriptStatuses,
+                message,
+                now)
         };
     }
 
@@ -205,7 +215,8 @@ internal sealed class RunStateProjector
                 RunnerStep.Failed,
                 message,
                 now),
-            WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now)
+            WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now),
+            ScriptStatuses = RunScriptProjector.CancelUnfinished(current.ScriptStatuses, message, now)
         };
     }
 
