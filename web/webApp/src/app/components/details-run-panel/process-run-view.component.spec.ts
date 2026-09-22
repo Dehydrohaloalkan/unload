@@ -134,4 +134,130 @@ describe('ProcessRunViewComponent', () => {
       ),
     ).toHaveLength(1);
   });
+
+  it('does not rebuild the static process projection when only the duration clock ticks', () => {
+    activeRun.set({
+      correlationId: 'run-clock',
+      taskCode: 'run',
+      status: RunLifecycleStatus.Running,
+      targetCodes: [],
+      createdAt: '2026-09-21T10:00:00Z',
+      updatedAt: '2026-09-21T10:00:00Z',
+      scriptStatuses: {
+        script: {
+          id: 'script',
+          memberName: 'Bank A',
+          scriptCode: 'SCRIPT',
+          stage: ScriptRunStage.Running,
+          discoveredAt: '2026-09-21T10:00:00Z',
+          stageEnteredAt: '2026-09-21T10:00:00Z',
+          startedAt: '2026-09-21T10:00:00Z',
+          updatedAt: '2026-09-21T10:00:00Z',
+          workerId: 1,
+        },
+      },
+    });
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const firstRows = fixture.componentInstance.rows();
+
+    fixture.componentInstance.now.set(new Date('2026-09-21T10:01:00Z'));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.rows()).toBe(firstRows);
+    expect(fixture.nativeElement.textContent).toContain('00:01:00');
+  });
+
+  it('renders a member-only resolver failure and its reason', () => {
+    activeRun.set({
+      correlationId: 'run-member-failure',
+      taskCode: 'run',
+      status: RunLifecycleStatus.Failed,
+      targetCodes: [],
+      createdAt: '2026-09-21T10:00:00Z',
+      updatedAt: '2026-09-21T10:01:00Z',
+      memberStatuses: {
+        bank: {
+          memberName: 'Bank failed in resolver',
+          status: MemberRunLifecycleStatus.Failed,
+          lastStep: null,
+          message: 'safe resolver failure',
+          updatedAt: '2026-09-21T10:01:00Z',
+          failure: failure('member', 'resolver', 'resolver-code', 'safe resolver failure'),
+        },
+      },
+    });
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.process-member-row')).not.toBeNull();
+    expect(host.querySelector('.process-card')?.textContent).toContain('resolver-code');
+    expect(host.querySelector('.process-card')?.textContent).toContain('safe resolver failure');
+  });
+
+  it('keeps file DOM bounded while surfacing a hidden file failure in aggregate tone and text', () => {
+    const fileStatuses = Object.fromEntries(
+      Array.from({ length: 25 }, (_, index) => {
+        const failed = index === 24;
+        const id = `file-${index + 1}`;
+        return [
+          id,
+          {
+            id,
+            parentScriptId: 'script-1',
+            memberName: 'Bank with many files',
+            scriptCode: 'SCRIPT_1',
+            chunkNumber: index + 1,
+            stage: failed ? FileRunStage.Failed : FileRunStage.Written,
+            createdAt: '2026-09-21T10:00:00Z',
+            queuedAt: '2026-09-21T10:00:00Z',
+            stageEnteredAt: '2026-09-21T10:00:00Z',
+            updatedAt: '2026-09-21T10:01:00Z',
+            completedAt: '2026-09-21T10:01:00Z',
+            fileName: `${id}.txt`,
+            failure: failed
+              ? failure('file', 'writer', 'disk-full', 'safe hidden file failure')
+              : null,
+          },
+        ];
+      }),
+    );
+    activeRun.set({
+      correlationId: 'run-file-failure',
+      taskCode: 'run',
+      status: RunLifecycleStatus.Failed,
+      targetCodes: [],
+      createdAt: '2026-09-21T10:00:00Z',
+      updatedAt: '2026-09-21T10:01:00Z',
+      fileStatuses,
+    });
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const fileStage = host.querySelectorAll<HTMLElement>('.process-stage')[2];
+
+    expect(fileStage.querySelectorAll('.process-card')).toHaveLength(20);
+    expect(fileStage.classList.contains('process-tone--danger')).toBe(true);
+    expect(fileStage.textContent).toContain('20 из 25');
+    expect(fileStage.textContent).toContain('disk-full');
+    expect(fileStage.textContent).toContain('safe hidden file failure');
+  });
 });
+
+function failure(entityType: string, stage: string, code: string, message: string) {
+  return {
+    entityType,
+    entityId: `${entityType}-id`,
+    stage,
+    code,
+    message,
+    occurredAt: '2026-09-21T10:01:00Z',
+    memberName: null,
+    scriptCode: null,
+    workerId: null,
+    filePath: null,
+    chunkNumber: null,
+    batchId: null,
+  };
+}

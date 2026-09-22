@@ -348,8 +348,9 @@ sequenceDiagram
 
 ### 8.3.1. Backend contract для будущего вертикального Process UI
 
-Backend сохраняет данные, достаточные для будущей вертикальной state machine, но этот срез не
-переделывает Angular Process UI. `RunStatusInfo.MemberStatuses` создаётся сразу с
+Backend сохраняет данные, достаточные для вертикальной state machine; Angular уже имеет нормализованную
+projection foundation, а переход разметки на вертикальные зоны выполняется отдельным UI-срезом.
+`RunStatusInfo.MemberStatuses` создаётся сразу с
 case-insensitive dedupe и `QueuePosition`, поэтому target launch не теряет выбранных участников до
 первого resolver event. Script cards получают стабильный `WorkOrder`, а `RunnerEvent.Sequence`
 монотонен внутри correlation ID и назначается под lock перед публикацией, включая параллельные
@@ -581,8 +582,8 @@ Material отвечает за доступное поведение диало�
 | `gateway-history-projection.util.ts` | delivery status, принятые requeue paths, фактические `sentAt`, история партий и summary |
 | `history-selection.util.ts` | единые правила массового выбора file/member/script/bank/run/all и indeterminate state |
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
-| `process-projection.models.ts` | типы строк процесса и lineage-карточек member → script → file → gateway batch |
-| `process-projection.util.ts` | чистая проекция `RunStatusInfo` в детерминированные вертикальные member rows с длительностями и orphan-файлами |
+| `process-projection.models.ts` | immutable `ProcessPipelineViewModel`: вход мемберов, resolver, очередь скриптов, четыре worker slots, группы файлов, sender/delivery и click-ready failures; legacy row adapter остаётся только для текущей разметки |
+| `process-projection.util.ts` | чистая clock-independent проекция `RunStatusInfo`; порядок задают `QueuePosition`/`WorkOrder`/`Sequence`, файлы агрегируются по member+script и выдаются bounded pages |
 | `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
 | `ProcessRunViewComponent` | третья вкладка main-run drawer: responsive member rows с четырьмя stage-секциями |
 
@@ -591,17 +592,20 @@ UI-компоненты должны обращаться к `WorkflowStore`, а
 находятся в util-файлах и проверяются без Angular DI. Бизнес-допуск всё равно принимает backend:
 frontend availability управляет только состоянием кнопок и не заменяет `TaskWorkflow`.
 
-Третья вкладка деталей «Процесс» использует `buildProcessMemberRows`: pure projection принимает один
-`RunStatusInfo` и явно переданный `now`, возвращая одну вертикальную строку на мембер.
-Внутри строки сохраняется lineage `member → scripts → files`, отдельные файлы без известного
-родительского script попадают в `orphanFiles`, а все sender batches мембера остаются отдельными
-карточками. Проекция объединяет имена без учета регистра, сохраняет частичные/legacy snapshots,
-нормализует числовые API-поля (`number|string`) и вычисляет queue/stage/write/send durations без
-`Date.now`; терминальные длительности используют серверные `completedAt`/`updatedAt`, активные —
-переданный `now`. `ProcessRunViewComponent` получает active run только через `WorkflowStore`, передаёт
-свой clock в проекцию и обновляет его раз в секунду лишь при busy run или активных карточках;
-`DestroyRef` очищает timer. Файлы показаны один раз в file-stage, а связь с parent script видна как
-lineage, поэтому attached и orphan files не дублируются.
+`buildProcessPipeline` строит immutable `ProcessPipelineViewModel` без зависимости от часов UI.
+Failed entity остаётся в физической зоне сбоя: resolver, script queue/worker, file group или sender;
+`ProcessFailureDetail` сохраняет stage/code/message и ссылку на member/script/file/worker/batch/run.
+Четыре worker slots существуют даже до назначения работы. Детерминированный member identity — один из
+восьми CSS-token классов, полученный из имени без случайных или inline-цветов; состояние всегда также
+передаётся текстом и не кодируется одним цветом.
+
+Файлы группируются по member+script с counts, rows, bytes и status breakdown. Начальное окно деталей
+ограничено 20 карточками, следующие chunks выдаёт `getProcessFileGroupPage`, поэтому snapshot из сотни
+файлов не превращается по умолчанию в сотню DOM-карточек. Текущая четырёхколоночная разметка временно
+получает bounded compatibility rows через `buildProcessMemberRows`; связь с parent script сохраняется.
+Статическая projection computed зависит только от server snapshot. Отдельный секундный clock меняет
+только отображаемые активные durations и freshness, не пересобирая массивы и группировки; `DestroyRef`
+очищает timer.
 
 ### 13.2. Bootstrap страницы
 

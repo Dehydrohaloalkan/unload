@@ -1,6 +1,7 @@
 import {
   FileRunStage,
   FileRunStatusInfo,
+  MemberRunStatusInfo,
   RunLifecycleStatus,
   RunStatusInfo,
   ScriptRunStage,
@@ -8,11 +9,198 @@ import {
   SenderBatchStatus,
   SenderBatchStatusInfo,
 } from '../../app.models';
-import { buildProcessMemberRows } from './process-projection.util';
+import {
+  PROCESS_FILE_DETAIL_PAGE_SIZE,
+  buildProcessMemberRows,
+  buildProcessPipeline,
+  getProcessFileGroupPage,
+  resolveProcessMemberIdentity,
+} from './process-projection.util';
 
 const NOW = new Date('2026-09-21T12:00:00.000Z');
 
 describe('process projection', () => {
+  it('projects cards into pipeline zones and always exposes exactly four worker slots', () => {
+    const waiting = scriptStatus(
+      'WAITING',
+      'Queue member',
+      'waiting',
+      ScriptRunStage.AwaitingWorker,
+    );
+    waiting.workOrder = 2;
+    const running = scriptStatus('RUNNING', 'Worker member', 'running', ScriptRunStage.Running);
+    running.workerId = 3;
+    const ready = batchStatus('Sender member', 'ready');
+    const sending = batchStatus('Sending member', 'sending');
+    sending.status = SenderBatchStatus.InProgress;
+    sending.startedAt = '2026-09-21T11:01:00Z';
+    const delivered = batchStatus('Delivered member', 'delivered');
+    delivered.status = SenderBatchStatus.Completed;
+    const pipeline = buildProcessPipeline(
+      run({
+        memberStatuses: {
+          input: {
+            ...memberStatus('Input member', '2026-09-21T11:00:00Z'),
+            status: 0,
+            queuePosition: 1,
+          },
+          resolver: memberStatus('Resolver member', '2026-09-21T11:00:00Z'),
+          completed: { ...memberStatus('Completed member', '2026-09-21T11:00:00Z'), status: 2 },
+        },
+        scriptStatuses: { waiting, running },
+        fileStatuses: { file: fileStatus('File member', 'running', 'file') },
+        senderBatches: { ready, sending, delivered },
+        workerStatuses: {
+          three: {
+            workerId: 3,
+            state: 'Running',
+            memberName: 'Worker member',
+            scriptCode: 'RUNNING',
+            updatedAt: '2026-09-21T11:00:00Z',
+          },
+        },
+      }),
+    );
+
+    expect(pipeline.memberInput.map((item) => item.name)).toEqual(['Input member']);
+    expect(pipeline.resolver.map((item) => item.name)).toEqual(['Resolver member']);
+    expect(pipeline.scriptQueue.map((item) => item.id)).toEqual(['waiting']);
+    expect(pipeline.workers).toHaveLength(4);
+    expect(pipeline.workers[2].assignment?.id).toBe('running');
+    expect(pipeline.fileGroups).toHaveLength(1);
+    expect(pipeline.senderQueue.map((item) => item.id)).toEqual(['ready']);
+    expect(pipeline.senderInProgress.map((item) => item.id)).toEqual(['sending']);
+    expect(pipeline.delivered.map((item) => item.id)).toEqual(['delivered']);
+    expect(pipeline.completedMembers.map((item) => item.name)).toEqual(['Completed member']);
+  });
+
+  it('uses queue/work/sequence order before mutable timestamps', () => {
+    const lateFirst = memberStatus('Member late timestamp', '2026-09-21T12:00:00Z');
+    lateFirst.status = 0;
+    lateFirst.queuePosition = 1;
+    lateFirst.sequence = 20;
+    const earlySecond = memberStatus('Member early timestamp', '2026-09-21T10:00:00Z');
+    earlySecond.status = 0;
+    earlySecond.queuePosition = 2;
+    earlySecond.sequence = 1;
+    const scriptSecond = scriptStatus(
+      'SECOND',
+      'Member early timestamp',
+      'second',
+      ScriptRunStage.AwaitingWorker,
+    );
+    scriptSecond.workOrder = 2;
+    scriptSecond.sequence = 1;
+    scriptSecond.updatedAt = '2026-09-21T10:00:00Z';
+    const scriptFirst = scriptStatus(
+      'FIRST',
+      'Member late timestamp',
+      'first',
+      ScriptRunStage.AwaitingWorker,
+    );
+    scriptFirst.workOrder = 1;
+    scriptFirst.sequence = 50;
+    scriptFirst.updatedAt = '2026-09-21T12:00:00Z';
+
+    const pipeline = buildProcessPipeline(
+      run({
+        memberStatuses: { lateFirst, earlySecond },
+        scriptStatuses: { scriptSecond, scriptFirst },
+      }),
+    );
+
+    expect(pipeline.memberInput.map((item) => item.queuePosition)).toEqual([1, 2]);
+    expect(pipeline.scriptQueue.map((item) => item.workOrder)).toEqual([1, 2]);
+  });
+
+  it('groups 100 files without putting all details into the default render window', () => {
+    const fileStatuses = Object.fromEntries(
+      Array.from({ length: 100 }, (_, index) => {
+        const file = fileStatus(
+          'Big member',
+          'script-1',
+          `file-${index + 1}`,
+          index + 1,
+          FileRunStage.QueuedForWrite,
+        );
+        file.rows = 10;
+        file.estimatedBytes = 20;
+        file.sequence = index + 1;
+        return [file.id, file];
+      }),
+    );
+    const pipeline = buildProcessPipeline(run({ fileStatuses }));
+    const group = pipeline.fileGroups[0];
+
+    expect(group.count).toBe(100);
+    expect(group.totalRows).toBe(1_000);
+    expect(group.totalBytes).toBe(2_000);
+    expect(group.statusCounts.queued).toBe(100);
+    expect(group.initialDetails).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
+    expect(getProcessFileGroupPage(group, 20)).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
+    expect(getProcessFileGroupPage(group, 95)).toHaveLength(5);
+    const rows = buildProcessMemberRows(run({ fileStatuses }), NOW);
+    expect(rows[0].files).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
+    expect(rows[0].activeItemSummary.fileCount).toBe(100);
+  });
+
+  it('keeps resolver, script, file and sender failures in their physical zones with safe references', () => {
+    const resolver = memberStatus('Resolver', '2026-09-21T11:00:00Z');
+    resolver.status = 3;
+    resolver.failure = failure('member', 'resolver', 'resolver-failed');
+    const script = scriptStatus('SCRIPT', 'Script member', 'script', ScriptRunStage.Failed);
+    script.workerId = 2;
+    script.startedAt = '2026-09-21T11:00:00Z';
+    script.failure = failure('script', 'query', 'query-failed');
+    const file = fileStatus('File member', 'parent', 'file', 1, FileRunStage.Failed);
+    file.failure = failure('file', 'writer', 'write-failed');
+    const batch = batchStatus('Sender member', 'batch');
+    batch.status = SenderBatchStatus.Failed;
+    batch.startedAt = '2026-09-21T11:00:00Z';
+    batch.failure = failure('batch', 'sender', 'send-failed');
+
+    const pipeline = buildProcessPipeline(
+      run({
+        memberStatuses: { resolver },
+        scriptStatuses: { script },
+        fileStatuses: { file },
+        senderBatches: { batch },
+      }),
+    );
+
+    expect(pipeline.resolver[0].failure?.code).toBe('resolver-failed');
+    expect(pipeline.workers[1].retainedFailures[0].failure?.reference.type).toBe('script');
+    expect(pipeline.fileGroups[0].failure?.reference.id).toBe('file-id');
+    expect(pipeline.senderInProgress[0].failure?.stage).toBe('sender');
+    expect(pipeline.failures.map((item) => item.code)).toEqual([
+      'resolver-failed',
+      'query-failed',
+      'write-failed',
+      'send-failed',
+    ]);
+  });
+
+  it('uses deterministic palette tokens and never mutates the input snapshot', () => {
+    const snapshot = run({
+      memberStatuses: {
+        bank: { ...memberStatus('Bank A', '2026-09-21T11:00:00Z'), queuePosition: 1 },
+      },
+      scriptStatuses: { script: scriptStatus('SCRIPT', 'Bank A') },
+      fileStatuses: { file: fileStatus('Bank A', 'script', 'file') },
+    });
+    const before = structuredClone(snapshot);
+    const first = resolveProcessMemberIdentity('Bank A');
+    const sameCaseInsensitive = resolveProcessMemberIdentity(' bank a ');
+
+    buildProcessPipeline(snapshot);
+
+    expect(first).toEqual(sameCaseInsensitive);
+    expect(first.index).toBeGreaterThanOrEqual(0);
+    expect(first.index).toBeLessThan(8);
+    expect(first.className).toMatch(/^process-member-accent--[0-7]$/);
+    expect(snapshot).toEqual(before);
+  });
+
   it('unions member names case-insensitively and keeps one stable row per member', () => {
     const rows = buildProcessMemberRows(
       run({
@@ -274,7 +462,7 @@ function run(overrides: Partial<RunStatusInfo>): RunStatusInfo {
   };
 }
 
-function memberStatus(memberName: string, updatedAt: string) {
+function memberStatus(memberName: string, updatedAt: string): MemberRunStatusInfo {
   return { memberName, status: 1, lastStep: null, message: null, updatedAt };
 }
 
@@ -358,4 +546,21 @@ function batchStatus(
 
 function setLegacyField(target: object, key: string, value: unknown): void {
   Reflect.set(target, key, value);
+}
+
+function failure(entityType: string, stage: string, code: string) {
+  return {
+    entityType,
+    entityId: `${entityType}-id`,
+    stage,
+    code,
+    message: `<unsafe>${code}</unsafe>`,
+    occurredAt: '2026-09-21T11:00:00Z',
+    memberName: null,
+    scriptCode: null,
+    workerId: null,
+    filePath: null,
+    chunkNumber: null,
+    batchId: null,
+  };
 }

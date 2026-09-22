@@ -48,7 +48,7 @@
                   'process.member.activeCards'
                     | t: { count: formatProcessCount(row.activeItemSummary.count) }
                 }}</span>
-                @let oldestElapsed = row.activeItemSummary.oldestElapsedMs;
+                @let oldestElapsed = oldestActiveElapsed(row);
                 @if (oldestElapsed !== null) {
                   <span>{{
                     'process.member.longest' | t: { duration: formatProcessDuration(oldestElapsed) }
@@ -76,6 +76,19 @@
                         >{{ 'process.card.updated' | t }}:
                         {{ formatTimestamp(row.updatedAt) }}</span
                       >
+                    }
+                    @if (row.memberFailure; as failure) {
+                      <span class="process-card__meta">
+                        {{
+                          'process.card.failure'
+                            | t
+                              : {
+                                  stage: failure.stage,
+                                  code: failure.code,
+                                  message: failure.message,
+                                }
+                        }}
+                      </span>
                     }
                   </li>
                 </ul>
@@ -109,16 +122,18 @@
                               | t: { count: formatProcessCount(script.records) }
                           }}</span>
                         }
-                        @if (script.queueWaitMs !== null) {
+                        @let queueWait = scriptQueueWait(script);
+                        @if (queueWait !== null) {
                           <span class="process-card__meta">{{
                             'process.card.queueWait'
-                              | t: { duration: formatProcessDuration(script.queueWaitMs) }
+                              | t: { duration: formatProcessDuration(queueWait) }
                           }}</span>
                         }
-                        @if (script.stageElapsedMs !== null) {
+                        @let execution = scriptExecution(script);
+                        @if (execution !== null) {
                           <span class="process-card__meta">{{
                             'process.card.execution'
-                              | t: { duration: formatProcessDuration(script.stageElapsedMs) }
+                              | t: { duration: formatProcessDuration(execution) }
                           }}</span>
                         }
                       </li>
@@ -132,11 +147,11 @@
                 [attr.aria-labelledby]="'files-stage-' + row.key"
               >
                 <h4 [id]="'files-stage-' + row.key">{{ 'process.stage.files' | t }}</h4>
-                @if (filesFor(row).length === 0) {
+                @if (row.files.length === 0) {
                   <p class="process-stage__empty">{{ 'process.emptyNoCards' | t }}</p>
                 } @else {
                   <ul class="process-card-list">
-                    @for (fileView of filesFor(row); track fileView.file.id) {
+                    @for (fileView of row.files; track fileView.file.id) {
                       @let file = fileView.file;
                       <li [class]="'process-card process-tone--' + fileTone(file.stage)">
                         <strong class="process-card__title">{{ fileName(file) }}</strong>
@@ -170,15 +185,49 @@
                             'process.card.size' | t: { size: formatProcessBytes(file.bytes) }
                           }}</span>
                         }
-                        @if (file.writeElapsedMs !== null) {
+                        @let writeElapsed = fileWriteElapsed(file);
+                        @if (writeElapsed !== null) {
                           <span class="process-card__meta">{{
                             'process.card.writeElapsed'
-                              | t: { duration: formatProcessDuration(file.writeElapsedMs) }
+                              | t: { duration: formatProcessDuration(writeElapsed) }
                           }}</span>
                         }
                       </li>
                     }
                   </ul>
+                  @if (row.fileTotalCount > row.files.length) {
+                    <p class="process-stage__empty">
+                      {{
+                        'process.files.preview'
+                          | t
+                            : {
+                                shown: formatProcessCount(row.files.length),
+                                total: formatProcessCount(row.fileTotalCount),
+                              }
+                      }}
+                    </p>
+                  }
+                  @if (row.fileFailure; as failure) {
+                    <p class="process-stage__empty">
+                      {{
+                        'process.files.failure'
+                          | t
+                            : {
+                                count: formatProcessCount(row.fileFailureCount),
+                                stage: failure.stage,
+                                code: failure.code,
+                                message: failure.message,
+                              }
+                      }}
+                    </p>
+                  } @else if (row.fileFailureCount > 0) {
+                    <p class="process-stage__empty">
+                      {{
+                        'process.files.failedCount'
+                          | t: { count: formatProcessCount(row.fileFailureCount) }
+                      }}
+                    </p>
+                  }
                 }
               </section>
 
@@ -207,16 +256,17 @@
                         <span class="process-card__meta">{{
                           'process.card.sent' | t: { count: formatProcessCount(batch.sentCount) }
                         }}</span>
-                        @if (batch.queueWaitMs !== null) {
+                        @let gatewayWait = batchQueueWait(batch);
+                        @if (gatewayWait !== null) {
                           <span class="process-card__meta">{{
                             'process.card.gatewayWait'
-                              | t: { duration: formatProcessDuration(batch.queueWaitMs) }
+                              | t: { duration: formatProcessDuration(gatewayWait) }
                           }}</span>
                         }
-                        @if (batch.sendElapsedMs !== null) {
+                        @let sending = batchSendElapsed(batch);
+                        @if (sending !== null) {
                           <span class="process-card__meta">{{
-                            'process.card.sending'
-                              | t: { duration: formatProcessDuration(batch.sendElapsedMs) }
+                            'process.card.sending' | t: { duration: formatProcessDuration(sending) }
                           }}</span>
                         }
                       </li>

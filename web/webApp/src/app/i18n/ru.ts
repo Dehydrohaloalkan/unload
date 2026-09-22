@@ -113,6 +113,10 @@ export const RU = {
   'process.card.sent': 'Отправлено: {count}',
   'process.card.gatewayWait': 'Ожидание шлюза: {duration}',
   'process.card.sending': 'Отправка: {duration}',
+  'process.card.failure': 'Ошибка на этапе {stage} ({code}): {message}',
+  'process.files.preview': 'Показано файлов: {shown} из {total}',
+  'process.files.failure': 'Ошибок файлов: {count}. {stage} ({code}): {message}',
+  'process.files.failedCount': 'Ошибок файлов: {count}',
 
   'details.task.sectionScripts': 'Скрипты и статусы',
   'details.task.status': 'Статус',

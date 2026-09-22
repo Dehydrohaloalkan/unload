@@ -9,8 +9,14 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ProcessFileCard, ProcessMemberRow } from '../../state/utils/process-projection.models';
+import {
+  ProcessBatchCard,
+  ProcessFileCard,
+  ProcessMemberRow,
+  ProcessScriptCard,
+} from '../../state/utils/process-projection.models';
 import { WorkflowStore } from '../../app.store';
+import { FileRunStage, ScriptRunStage, SenderBatchStatus } from '../../app.models';
 import { TPipe } from '../../i18n/i18n';
 import {
   resolveFileStageLabel,
@@ -32,14 +38,8 @@ import {
   resolveFileTone,
   resolveMemberTone,
   resolveScriptTone,
-  resolveStageTone,
 } from '../../state/utils/process-tone.util';
 import { formatTimestamp } from '../../state/utils/time.util';
-
-interface ProcessFileView {
-  file: ProcessFileCard;
-  parentScriptCode: string | null;
-}
 
 @Component({
   selector: 'app-process-run-view',
@@ -59,12 +59,12 @@ export class ProcessRunViewComponent {
   /** Единственный обновляемый clock: pure projection никогда не вызывает Date.now самостоятельно. */
   readonly now = signal(new Date());
   readonly run = this.store.activeRun;
-  readonly rows = computed(() => buildProcessMemberRows(this.run(), this.now()));
-  readonly hasProcessCards = computed(() =>
-    this.rows().some(
-      (row) => row.scripts.length > 0 || row.orphanFiles.length > 0 || row.batches.length > 0,
-    ),
-  );
+  /** Static projection changes only when a server snapshot changes, not on every clock tick. */
+  readonly rows = computed(() => {
+    const run = this.run();
+    return buildProcessMemberRows(run, snapshotDate(run?.updatedAt));
+  });
+  readonly hasProcessCards = computed(() => this.rows().length > 0);
   readonly activeCardCount = computed(() =>
     this.rows().reduce((total, row) => total + row.activeItemSummary.count, 0),
   );
@@ -97,31 +97,57 @@ export class ProcessRunViewComponent {
     this.destroyRef.onDestroy(() => this.stopClock());
   }
 
-  /** Files are rendered once in their own stage; the parent script remains visible as lineage. */
-  filesFor(row: ProcessMemberRow): ProcessFileView[] {
-    const attached = row.scripts.flatMap((script) =>
-      script.files.map((file) => ({
-        file,
-        parentScriptCode: script.scriptCode || script.id,
-      })),
-    );
-    return [...attached, ...row.orphanFiles.map((file) => ({ file, parentScriptCode: null }))];
-  }
-
   fileName(file: ProcessFileCard): string {
     return file.fileName || file.path || file.id;
   }
 
+  scriptQueueWait(script: ProcessScriptCard): number | null {
+    return script.startedAt || isTerminalScript(script.stage)
+      ? script.queueWaitMs
+      : getElapsedSince(script.discoveredAt, this.now());
+  }
+
+  scriptExecution(script: ProcessScriptCard): number | null {
+    return isTerminalScript(script.stage)
+      ? script.stageElapsedMs
+      : getElapsedSince(script.startedAt ?? script.stageEnteredAt, this.now());
+  }
+
+  fileWriteElapsed(file: ProcessFileCard): number | null {
+    return isTerminalFile(file.stage)
+      ? file.writeElapsedMs
+      : getElapsedSince(file.queuedAt, this.now());
+  }
+
+  batchQueueWait(batch: ProcessBatchCard): number | null {
+    return batch.startedAt || isTerminalBatch(batch.status)
+      ? batch.queueWaitMs
+      : getElapsedSince(batch.queuedAt, this.now());
+  }
+
+  batchSendElapsed(batch: ProcessBatchCard): number | null {
+    return isTerminalBatch(batch.status)
+      ? batch.sendElapsedMs
+      : getElapsedSince(batch.startedAt, this.now());
+  }
+
+  oldestActiveElapsed(row: ProcessMemberRow): number | null {
+    return getElapsedSince(row.oldestActiveAt, this.now());
+  }
+
   scriptsStageTone(row: ProcessMemberRow): ProcessTone {
-    return resolveStageTone(row.scripts.map((script) => resolveScriptTone(script.stage)));
+    return stageTone(row.scripts, scriptToneOf);
   }
 
   filesStageTone(row: ProcessMemberRow): ProcessTone {
-    return resolveStageTone(this.filesFor(row).map(({ file }) => resolveFileTone(file.stage)));
+    if (row.fileFailureCount > 0) return 'danger';
+    if (row.fileStatusCounts.queued > 0) return 'active';
+    if (row.fileStatusCounts.written > 0) return 'success';
+    return stageTone(row.files, fileViewToneOf);
   }
 
   gatewayStageTone(row: ProcessMemberRow): ProcessTone {
-    return resolveStageTone(row.batches.map((batch) => resolveBatchTone(batch.status)));
+    return stageTone(row.batches, batchToneOf);
   }
 
   private startClock(): void {
@@ -138,4 +164,56 @@ export class ProcessRunViewComponent {
     clearInterval(this.intervalId);
     this.intervalId = null;
   }
+}
+
+function scriptToneOf(script: ProcessScriptCard): ProcessTone {
+  return resolveScriptTone(script.stage);
+}
+
+function fileViewToneOf(view: ProcessMemberRow['files'][number]): ProcessTone {
+  return resolveFileTone(view.file.stage);
+}
+
+function batchToneOf(batch: ProcessBatchCard): ProcessTone {
+  return resolveBatchTone(batch.status);
+}
+
+function stageTone<T>(items: readonly T[], toneOf: (item: T) => ProcessTone): ProcessTone {
+  let highest: ProcessTone = 'neutral';
+  for (const item of items) {
+    const tone = toneOf(item);
+    if (tone === 'danger') return 'danger';
+    if (tone === 'active') highest = 'active';
+    else if (tone === 'success' && highest === 'neutral') highest = 'success';
+  }
+  return highest;
+}
+
+function snapshotDate(value: string | null | undefined): Date {
+  const epoch = value ? Date.parse(value) : Number.NaN;
+  return new Date(Number.isFinite(epoch) ? epoch : 0);
+}
+
+function isTerminalScript(stage: number | null): boolean {
+  return (
+    stage === ScriptRunStage.Completed ||
+    stage === ScriptRunStage.Failed ||
+    stage === ScriptRunStage.Cancelled
+  );
+}
+
+function isTerminalFile(stage: number | null): boolean {
+  return (
+    stage === FileRunStage.Written ||
+    stage === FileRunStage.Failed ||
+    stage === FileRunStage.Cancelled
+  );
+}
+
+function isTerminalBatch(status: number | null): boolean {
+  return (
+    status === SenderBatchStatus.Completed ||
+    status === SenderBatchStatus.Failed ||
+    status === SenderBatchStatus.SkippedByRequest
+  );
 }
