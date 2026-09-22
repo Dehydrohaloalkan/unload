@@ -15,12 +15,9 @@ public sealed class SyncExecutor(TextFileTransformer textTransformer)
             throw new InvalidOperationException($"Действие {invalid.Action} нельзя применить автоматически.");
         }
 
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        var backupRoot = Path.Combine(plan.TargetRoot, configuration.BackupDirectoryName, timestamp);
         var added = 0;
         var updated = 0;
         var deleted = 0;
-        var backupCount = 0;
 
         foreach (var item in selectedItems)
         {
@@ -34,16 +31,6 @@ public sealed class SyncExecutor(TextFileTransformer textTransformer)
             var targetDirectory = Path.GetDirectoryName(item.TargetFullPath)
                 ?? throw new InvalidOperationException($"Не удалось определить каталог: {item.TargetFullPath}");
             Directory.CreateDirectory(targetDirectory);
-
-            if (File.Exists(item.TargetFullPath))
-            {
-                var backupPath = Path.Combine(
-                    backupRoot,
-                    item.TargetRelativePath.Replace('/', Path.DirectorySeparatorChar));
-                Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
-                File.Copy(item.TargetFullPath, backupPath, overwrite: true);
-                backupCount++;
-            }
 
             if (item.Action == SyncAction.Delete)
             {
@@ -100,15 +87,11 @@ public sealed class SyncExecutor(TextFileTransformer textTransformer)
         return new SyncExecutionResult(
             Added: added,
             Updated: updated,
-            Deleted: deleted,
-            BackupCount: backupCount,
-            BackupDirectory: backupCount > 0 ? backupRoot : null);
+            Deleted: deleted);
     }
 }
 
 public sealed record SyncExecutionResult(
     int Added,
     int Updated,
-    int Deleted,
-    int BackupCount,
-    string? BackupDirectory);
+    int Deleted);

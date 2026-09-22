@@ -49,6 +49,5 @@
     "**/*.html",
     "**/*.css",
     "**/*.md"
-  ],
-  "backupDirectoryName": "_sync-backups"
+  ]
 }

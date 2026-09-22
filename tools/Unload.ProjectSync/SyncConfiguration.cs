@@ -34,11 +34,8 @@ public sealed class SyncConfiguration
 
     public IReadOnlyList<string> TransformTextIn { get; init; } = [];
 
-    public string BackupDirectoryName { get; init; } = "_sync-backups";
-
     public IReadOnlyList<string> AllIgnorePatterns => RequiredIgnorePatterns
         .Concat(Ignore)
-        .Append($"{BackupDirectoryName}/**")
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
@@ -94,15 +91,6 @@ public sealed class SyncConfiguration
                 throw new InvalidOperationException(
                     $"Значение rename.to '{rename.To}' не должно содержать '..' или разделители пути.");
             }
-        }
-
-        if (string.IsNullOrWhiteSpace(BackupDirectoryName) ||
-            BackupDirectoryName.Contains("..", StringComparison.Ordinal) ||
-            BackupDirectoryName.Contains('/') ||
-            BackupDirectoryName.Contains('\\'))
-        {
-            throw new InvalidOperationException(
-                "backupDirectoryName должен быть простым именем каталога без '..' и разделителей пути.");
         }
     }
 

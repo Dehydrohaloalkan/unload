@@ -120,10 +120,6 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine(
             $"Готово. Добавлено: {result.Added}, обновлено: {result.Updated}, удалено: {result.Deleted}.");
-        if (result.BackupDirectory is not null)
-        {
-            Console.WriteLine($"Резервные копии ({result.BackupCount}): {result.BackupDirectory}");
-        }
 
         return 0;
     }
