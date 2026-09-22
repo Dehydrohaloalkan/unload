@@ -171,6 +171,9 @@ export class WorkflowStore {
     // SignalR шлёт preset_state только на изменение; пропущенный во время дисконнекта переход
     // добираем полным re-fetch'ем дашборда при реконнекте.
     this.hub.reconnected$.subscribe(() => void this.dashboardStore.refreshDashboardAsync());
+    // Открытая вкладка должна перейти на новый рабочий день и без SignalR: серверные часы
+    // служат независимым триггером полного refresh на границе локальной даты сервера.
+    this.clock.dayChanged$.subscribe(() => void this.bootstrapAsync());
 
     void this.hub.connect();
     void this.bootstrapAsync();
@@ -293,7 +296,11 @@ export class WorkflowStore {
           this.api.fetchTodayRuns(),
         ]);
 
-      this.clock.applyFromResponse(serverTime.serverLocalTime, serverTime.timeZoneId);
+      this.clock.applyFromResponse(
+        serverTime.serverLocalTime,
+        serverTime.timeZoneId,
+        serverTime.utcOffsetMinutes,
+      );
       this.catalogStore.setCatalog(catalog);
       this.catalogStore.setMembers(members);
       this.presetStore.setPresetState(dashboard.presetState ?? presetState);

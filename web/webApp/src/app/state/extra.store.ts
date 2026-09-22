@@ -178,6 +178,9 @@ export const ExtraStore = signalStore(
           // Снапшот из /runs/today мог устареть (часть событий хаба пропущена при перезагрузке),
           // поэтому сразу дотягиваем актуальное состояние; дальше держит polling-эффект.
           void refreshTrackedExtraAsync();
+        } else if (!store.isExtraBusy()) {
+          // Полный refresh нового дня не должен оставлять в карточке завершённый extra прошлого дня.
+          patchState(store, { trackedExtraId: null, activeExtraRun: null });
         }
       },
 

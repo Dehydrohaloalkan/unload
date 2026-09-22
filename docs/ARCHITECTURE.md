@@ -538,6 +538,7 @@ Material отвечает за доступное поведение диало�
 |---|---|
 | `ApiClientService` | Все HTTP-вызовы и построение download URL |
 | `RealtimeHubService` | SignalR connection, reconnect и потоки событий |
+| `ServerClockService` | Синхронизированные серверные часы и однократный сигнал смены локальной даты сервера |
 | `WorkflowStore` | Фасад для компонентов и координация нескольких stores |
 | `DashboardStore` | snapshot дня, история и timestamps |
 | `RunStore` | активный main run, polling fallback, start/stop/requeue |
@@ -587,6 +588,12 @@ lineage, поэтому attached и orphan files не дублируются.
 - сегодняшние `run` и `extra`.
 
 Затем stores согласуются между собой, загружаются файлы истории, сохранённый выбор targets фильтруется по актуальному каталогу, а найденный active run синхронизируется по `correlationId`.
+
+`ServerClockService` тикает локально с поправкой на время и UTC offset сервера. При смене серверной
+календарной даты он один раз уведомляет `WorkflowStore`, который повторяет полный bootstrap без ручного
+refresh страницы. Это сбрасывает yesterday-only dashboard/history и заново получает preset gate даже
+если соответствующее событие SignalR было пропущено. SignalR остаётся быстрым каналом, а граница суток
+имеет независимый клиентский fallback.
 
 ### 13.3. SignalR и fallback
 
