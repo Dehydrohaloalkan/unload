@@ -16,6 +16,7 @@ import { ApiClientService } from './api-client.service';
 import { OutputFilesStore } from './output-files.store';
 import { PresetStore } from './preset.store';
 import { byDescDate } from './utils/compare.util';
+import { newerTimestamp } from './utils/run-lifecycle.util';
 import { isExtraRunEntry, isMainRunHistoryEntry } from './utils/run-status.util';
 
 interface DashboardState {
@@ -56,14 +57,18 @@ export const DashboardStore = signalStore(
     const api = inject(ApiClientService);
     const outputFiles = inject(OutputFilesStore);
     const preset = inject(PresetStore);
+    let serverDayEpoch = 0;
 
     const recalculateFromRuns = (runs: RunStatusInfo[]): void => {
       const sorted = [...runs].sort(byDescDate<RunStatusInfo>((run) => run.createdAt));
       const completedRun =
         sorted.find((run) => run.status === RunLifecycleStatus.Completed) ?? null;
       patchState(store, {
-        hasRunToday: sorted.length > 0,
-        runLastCompletedAt: completedRun?.updatedAt ?? null,
+        // A terminal run can arrive over SignalR before history/dashboard
+        // persistence catches up. Never let that accepted local fact disappear
+        // because a stale empty response arrived later in the same server day.
+        hasRunToday: store.hasRunToday() || sorted.length > 0,
+        runLastCompletedAt: newerTimestamp(store.runLastCompletedAt(), completedRun?.updatedAt),
       });
     };
 
@@ -76,25 +81,33 @@ export const DashboardStore = signalStore(
       if (completedExtra) {
         patchState(store, {
           hasExtraToday: true,
-          extraLastCompletedAt: completedExtra.updatedAt,
+          extraLastCompletedAt: newerTimestamp(
+            store.extraLastCompletedAt(),
+            completedExtra.updatedAt,
+          ),
         });
       }
     };
 
     return {
-      applySnapshot(snapshot: WorkflowDashboardSnapshotResponse): void {
+      applySnapshot(snapshot: WorkflowDashboardSnapshotResponse, epoch = serverDayEpoch): void {
+        if (epoch !== serverDayEpoch) return;
         patchState(store, {
-          hasRunToday: Boolean(snapshot.hasRunToday),
-          hasExtraToday: Boolean(snapshot.hasExtraToday),
-          runLastCompletedAt: snapshot.runLastCompletedAt ?? null,
-          extraLastCompletedAt: snapshot.extraLastCompletedAt ?? null,
+          hasRunToday: store.hasRunToday() || Boolean(snapshot.hasRunToday),
+          hasExtraToday: store.hasExtraToday() || Boolean(snapshot.hasExtraToday),
+          runLastCompletedAt: newerTimestamp(store.runLastCompletedAt(), snapshot.runLastCompletedAt),
+          extraLastCompletedAt: newerTimestamp(
+            store.extraLastCompletedAt(),
+            snapshot.extraLastCompletedAt,
+          ),
           todayHistory: snapshot.todayHistory ?? [],
         });
         const nextPresetState = snapshot.presetState ?? preset.presetState();
         preset.setPresetState(nextPresetState);
       },
 
-      applyTodayRuns(runs: RunStatusInfo[]): void {
+      applyTodayRuns(runs: RunStatusInfo[], epoch = serverDayEpoch): void {
+        if (epoch !== serverDayEpoch) return;
         const all = runs ?? [];
         const filtered = all.filter(isMainRunHistoryEntry);
         patchState(store, { allTodayRuns: all, todayRuns: filtered });
@@ -106,16 +119,32 @@ export const DashboardStore = signalStore(
         patchState(store, {
           hasRunToday: true,
           ...(run.status === RunLifecycleStatus.Completed
-            ? { runLastCompletedAt: run.updatedAt }
+            ? { runLastCompletedAt: newerTimestamp(store.runLastCompletedAt(), run.updatedAt) }
             : {}),
         });
       },
 
+      resetForNewServerDay(): void {
+        serverDayEpoch += 1;
+        patchState(store, {
+          hasRunToday: false,
+          hasExtraToday: false,
+          runLastCompletedAt: null,
+          extraLastCompletedAt: null,
+          todayHistory: [],
+          todayRuns: [],
+          allTodayRuns: [],
+        });
+      },
+
       async refreshDashboardAsync(): Promise<void> {
+        const epoch = serverDayEpoch;
         try {
           const snapshot = await api.fetchDashboardSnapshot();
-          this.applySnapshot(snapshot);
-          await this.refreshTodayRunsAsync();
+          if (epoch !== serverDayEpoch) return;
+          this.applySnapshot(snapshot, epoch);
+          await this.refreshTodayRunsAsync(epoch);
+          if (epoch !== serverDayEpoch) return;
           await outputFiles.refreshForHistory(snapshot.todayHistory ?? []);
         } catch (error) {
           if (isDevMode()) {
@@ -124,10 +153,10 @@ export const DashboardStore = signalStore(
         }
       },
 
-      async refreshTodayRunsAsync(): Promise<void> {
+      async refreshTodayRunsAsync(epoch = serverDayEpoch): Promise<void> {
         try {
           const runs = await api.fetchTodayRuns();
-          this.applyTodayRuns(runs);
+          this.applyTodayRuns(runs, epoch);
         } catch (error) {
           if (isDevMode()) {
             console.error(error);

@@ -541,7 +541,7 @@ Material отвечает за доступное поведение диало�
 | `ServerClockService` | Синхронизированные серверные часы и однократный сигнал смены локальной даты сервера |
 | `WorkflowStore` | Фасад для компонентов и координация нескольких stores |
 | `DashboardStore` | snapshot дня, история и timestamps |
-| `RunStore` | активный main run, polling fallback, start/stop/requeue |
+| `RunStore` | активный main run, локальный launch guard, polling fallback, start/stop/requeue |
 | `ExtraStore` | банки, active extra, start/stop и polling fallback |
 | `PresetStore` | состояние окна и выполнение preset |
 | `CatalogStore` | каталог и доступные мемберы |
@@ -600,6 +600,16 @@ refresh страницы. Это сбрасывает yesterday-only dashboard/h
 `RealtimeHubService` слушает `status`, `run_status`, `preset_state`, автоматически переподключается и вручную перезапускает полностью закрытое соединение.
 
 Если SignalR недоступен во время активной задачи, `RunStore` и `ExtraStore` включают HTTP polling статуса. После reconnect stores обновляют snapshot, чтобы добрать пропущенные события. Таким образом SignalR ускоряет отображение, но не является единственным способом восстановить состояние.
+
+Для main run `RunStore` устанавливает локальный `runLaunchPending` до отправки POST. Главная карточка и выборочный запуск используют один и тот же `startRunAsync`, поэтому медленный POST не может породить второй запрос. После принятого `202` guard не снимается, пока status не принят либо `GET /api/runs/active` явно не подтвердит отсутствие активного запуска; `404`/ошибка status-запроса переводят состояние в conservative reconciliation, а не в «свободно». После terminal-состояния store сохраняет busy-состояние до тех пор, пока `GET /api/runs/active` не вернёт `404`: terminal snapshot и освобождение `RunActivationChannel` — разные моменты lifecycle.
+
+Сбой отдельного status-запроса обрабатывается как неизвестное состояние: polling не создаёт unhandled rejection и повторяет reconciliation на следующем интервале. После reconnect `RunStore` заново запрашивает tracked status, чтобы добрать пропущенный terminal event.
+
+Событие `run_status` транслируется всем подключённым клиентам, поэтому клиент принимает main snapshot только для correlation ID, явно установленного bootstrap, принятого POST или обработки конфликта `409`. Для одного correlation ID stale snapshot с более ранним `updatedAt` и любой non-terminal snapshot после terminal игнорируются. Это защищает UI от гонки SignalR и polling без изменения broadcast-контракта.
+
+`DashboardStore` монотонно сохраняет `hasRunToday` и timestamp принятого terminal run до сигнала `ServerClockService.dayChanged$`; stale dashboard/today-runs ответ не стирает факт запуска в пределах server-day. На границе server-day optimistic state сбрасывается перед новым bootstrap.
+
+Каждый bootstrap получает generation token. Если параллельный refresh стартовал позже, поздний результат старого bootstrap не меняет stores, loading/error или active-run projection. `DashboardStore` дополнительно маркирует asynchronous dashboard/today-runs refresh текущим server-day epoch; rollover очищает flags, timestamps и коллекции `todayHistory`, `todayRuns`, `allTodayRuns`, а ответы предыдущего дня игнорируются.
 
 Browser storage хранит только локальные UI-настройки, например выбор targets и часть preset-view state. Он не является источником истины о серверном lifecycle.
 

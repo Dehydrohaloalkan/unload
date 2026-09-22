@@ -15,6 +15,7 @@ import { RunStore } from './run.store';
 import { SelectionStore } from './selection.store';
 import { ServerClockService } from './server-clock.service';
 import { toErrorMessage } from './utils/error-message.util';
+import { AsyncEpoch } from './utils/async-epoch.util';
 import { buildMemberGroups } from './utils/member-projections.util';
 import {
   buildExtraBankNamesByCode,
@@ -46,6 +47,7 @@ export class WorkflowStore {
   private readonly browser = isPlatformBrowser(this.platformId);
 
   private initialized = false;
+  private readonly bootstrapEpoch = new AsyncEpoch();
 
   readonly loading = signal(true);
   readonly ready = signal(false);
@@ -173,7 +175,10 @@ export class WorkflowStore {
     this.hub.reconnected$.subscribe(() => void this.dashboardStore.refreshDashboardAsync());
     // Открытая вкладка должна перейти на новый рабочий день и без SignalR: серверные часы
     // служат независимым триггером полного refresh на границе локальной даты сервера.
-    this.clock.dayChanged$.subscribe(() => void this.bootstrapAsync());
+    this.clock.dayChanged$.subscribe(() => {
+      this.dashboardStore.resetForNewServerDay();
+      void this.bootstrapAsync();
+    });
 
     void this.hub.connect();
     void this.bootstrapAsync();
@@ -281,6 +286,7 @@ export class WorkflowStore {
   }
 
   private async bootstrapAsync(): Promise<void> {
+    const epoch = this.bootstrapEpoch.begin();
     this.loading.set(true);
     this.errorStore.clear();
 
@@ -296,6 +302,8 @@ export class WorkflowStore {
           this.api.fetchTodayRuns(),
         ]);
 
+      if (!this.bootstrapEpoch.isCurrent(epoch)) return;
+
       this.clock.applyFromResponse(
         serverTime.serverLocalTime,
         serverTime.timeZoneId,
@@ -308,6 +316,7 @@ export class WorkflowStore {
       this.dashboardStore.applyTodayRuns(runsToday);
       this.extraStore.adoptActiveFromRuns(runsToday);
       await this.outputFilesStore.refreshForHistory(dashboard.todayHistory ?? []);
+      if (!this.bootstrapEpoch.isCurrent(epoch)) return;
       this.selectionStore.reconcileFromCatalog(catalog);
 
       const { correlationId, status } = this.runStore.applyInitialActiveRun(activeRunPayload);
@@ -315,11 +324,17 @@ export class WorkflowStore {
         await this.runStore.syncActiveRunAsync(correlationId, status);
       }
 
+      if (!this.bootstrapEpoch.isCurrent(epoch)) return;
+
       this.ready.set(true);
     } catch (error) {
-      this.errorStore.setError(toErrorMessage(error, t('errors.bootstrapFailed')));
+      if (this.bootstrapEpoch.isCurrent(epoch)) {
+        this.errorStore.setError(toErrorMessage(error, t('errors.bootstrapFailed')));
+      }
     } finally {
-      this.loading.set(false);
+      if (this.bootstrapEpoch.isCurrent(epoch)) {
+        this.loading.set(false);
+      }
     }
   }
 }
