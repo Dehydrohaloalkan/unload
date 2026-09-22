@@ -285,7 +285,9 @@ sequenceDiagram
 `POST /api/runs` принимает либо `memberCodes`, либо `targetCodes`:
 
 - для `memberCodes` `MainUnloadTask` загружает каталог и разворачивает мемберов в targets;
-- для `targetCodes` используются переданные targets;
+- для `targetCodes` `MainUnloadTask` читает каталог до активации и восстанавливает из targets
+  выбранные member names для начальной ordered-pending очереди; SQL resolver при этом ещё не
+  запускается;
 - коды нормализуются, дубликаты удаляются, неизвестные мемберы отклоняются;
 - `RunRequestFactory` создаёт `correlationId`, hash и запрос движка;
 - `RunActivationChannel.TryActivate` резервирует единственный main slot;
@@ -343,6 +345,26 @@ sequenceDiagram
 11. записывается `run-report.csv`.
 
 Почему используются события: движок не должен напрямую менять Angular-модели или вызывать SignalR. `MainUnloadHostedService` принимает события, а `RunStateStore` строит из них единую проекцию состояния.
+
+### 8.3.1. Backend contract для будущего вертикального Process UI
+
+Backend сохраняет данные, достаточные для будущей вертикальной state machine, но этот срез не
+переделывает Angular Process UI. `RunStatusInfo.MemberStatuses` создаётся сразу с
+case-insensitive dedupe и `QueuePosition`, поэтому target launch не теряет выбранных участников до
+первого resolver event. Script cards получают стабильный `WorkOrder`, а `RunnerEvent.Sequence`
+монотонен внутри correlation ID и назначается под lock перед публикацией, включая параллельные
+worker events. Проекции member/script/file/worker/batch сохраняют эти additive поля в
+`runs.json`; сортировка не должна зависеть от `UpdatedAt`.
+
+Ошибка — это additive `Failure`/`RunnerFailureInfo`, а не только текст сообщения. Она содержит
+`Stage`, `EntityType`/`EntityId`, member/script, worker, chunk/file/batch identity, стабильный
+`Code`, message и `OccurredAt`. Resolver, query/row-read, file-write, report/gateway publish и
+sender catch sites создают scoped или run-level failure с доступным контекстом. Scoped failure
+переводит конкретные member/script/file/batch cards и worker assignment в `Failed`; worker не
+сбрасывается в `idle`. Run-level preflight/background failure может завершить незавершённые
+карточки как failed, но не подменяет уже завершённую scoped карточку. Это backend data contract
+для будущего UI: карточка может замереть на точном этапе и показать причину; текущая Angular
+разметка в рамках этого изменения не заявляется изменённой.
 
 ### 8.4. Когда `run` считается завершённым
 
@@ -492,7 +514,13 @@ in-memory состояния и его записи. Если несколько
 
 Бизнес-ошибки `TaskWorkflow` оформляются как `TaskLaunchException`, преобразуются в `application/problem+json` и содержат стабильный `errorCode`. Непредвиденные ошибки обрабатывает `GlobalExceptionHandler`; background workers ловят исключения сами, переводят состояние в `Failed` и продолжают читать следующие активации.
 
-Общий `RunnerStep.Failed` переводит run в `Failed`, но не перезаписывает уже завершённых мемберов: ошибочными становятся только незавершённые. `MainUnloadHostedService` журналирует текст failure event вместе с `correlationId`, member и script, а `FtpGatewayPublisher` журналирует каждый успешно поставленный в in-process очередь batch с `batchId`, мембером и количеством файлов. Это позволяет отличить ошибку обработки от продолжающейся доставки уже поставленных в очередь файлов.
+Общий `RunnerStep.Failed` переводит run в `Failed`, но не перезаписывает уже завершённых мемберов:
+ошибочными становятся только незавершённые. Для member/script/file/worker/batch failure сохраняется
+`Failure` с точным этапом и entity identity; одна scoped failure не копируется массово по всем
+незавершённым карточкам. `MainUnloadHostedService` журналирует correlation/member/script, а
+`FtpGatewayBackgroundService` публикует structured sender failure. Worker assignment остаётся
+`failed` с исходным worker/member/script контекстом, чтобы причина не исчезала при финальном
+снимке.
 
 Angular сводит workflow-ошибки и исключения `GlobalAppErrorHandler` в один Material `alertdialog`.
 Диалог показывает категорию, полный человекочитаемый текст причины, рекомендацию по восстановлению
@@ -633,6 +661,10 @@ Browser storage хранит только локальные UI-настройк
 Повторная отправка пока публикует batch напрямую и не создаёт runner `GatewayBatchQueued`, поэтому
 для её партий `QueuedAt` может отсутствовать.
 
+Для sender failure `SenderBatchStatusInfo.Failure` содержит stage `sender`, batch/member identity,
+код и причину. Этот failure также доступен на run и соответствующем member status, если member
+известен.
+
 ## 14. HTTP и SignalR contracts
 
 OpenAPI schema публикуется API только в `Development` по `/openapi/v1.json`. Зафиксированная
@@ -683,7 +715,7 @@ Hub: `/hubs/status`.
 
 | Событие | Payload | Назначение |
 |---|---|---|
-| `status` | `RunnerEvent` | Детальный шаг движка |
+| `status` | `RunnerEvent` | Детальный шаг движка, включая additive `sequence`, `workOrder` и `failure` |
 | `run_status` | `RunStatusInfo` | Агрегированное persisted-состояние main/extra |
 | `preset_state` | `PresetGateState` | Состояние дневного окна |
 | `preset_replayed` | `ScriptTaskRunResult` | Результат повторного preset в admin mode |

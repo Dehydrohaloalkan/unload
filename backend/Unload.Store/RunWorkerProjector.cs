@@ -21,10 +21,10 @@ internal sealed class RunWorkerProjector
             .ToDictionary(
                 static workerId => workerId,
                 workerId => new RunWorkerStatusInfo(
-                    workerId,
-                    "idle",
-                    null,
-                    null,
+                workerId,
+                "idle",
+                null,
+                null,
                     now));
     }
 
@@ -37,9 +37,40 @@ internal sealed class RunWorkerProjector
             ? new Dictionary<int, RunWorkerStatusInfo>()
             : new Dictionary<int, RunWorkerStatusInfo>(source);
 
-        if (@event.Step is RunnerStep.Completed or RunnerStep.Failed)
+        if (@event.Step == RunnerStep.Completed)
         {
             return Reset(map, now);
+        }
+
+        if (@event.Step == RunnerStep.Failed)
+        {
+            if (@event.WorkerId is int failedWorkerId && map.TryGetValue(failedWorkerId, out var currentWorker))
+            {
+                map[failedWorkerId] = currentWorker with
+                {
+                    State = "failed",
+                    ScriptCode = @event.ScriptCode ?? currentWorker.ScriptCode,
+                    MemberName = @event.MemberName ?? currentWorker.MemberName,
+                    UpdatedAt = now,
+                    Sequence = SequenceOf(@event),
+                    Failure = @event.Failure ?? currentWorker.Failure
+                };
+            }
+            else
+            {
+                foreach (var worker in map.Values.Where(static worker => worker.State == "running").ToArray())
+                {
+                    map[worker.WorkerId] = worker with
+                    {
+                        State = "failed",
+                        UpdatedAt = now,
+                        Sequence = SequenceOf(@event),
+                        Failure = @event.Failure ?? worker.Failure
+                    };
+                }
+            }
+
+            return map;
         }
 
         var workerId = @event.WorkerId ?? TryExtractWorkerId(@event.Message);
@@ -55,7 +86,9 @@ internal sealed class RunWorkerProjector
                 "running",
                 @event.ScriptCode,
                 @event.MemberName,
-                now);
+                now,
+                SequenceOf(@event),
+                Failure: null);
             return map;
         }
 
@@ -66,7 +99,9 @@ internal sealed class RunWorkerProjector
                 "idle",
                 null,
                 null,
-                now);
+                now,
+                SequenceOf(@event),
+                Failure: null);
         }
 
         return map;
@@ -88,7 +123,9 @@ internal sealed class RunWorkerProjector
                 State = "idle",
                 ScriptCode = null,
                 MemberName = null,
-                UpdatedAt = now
+                UpdatedAt = now,
+                Sequence = x.Value.Sequence,
+                Failure = null
             });
     }
 
@@ -104,4 +141,6 @@ internal sealed class RunWorkerProjector
             ? workerId
             : null;
     }
+
+    private static long? SequenceOf(RunnerEvent @event) => @event.Sequence > 0 ? @event.Sequence : null;
 }

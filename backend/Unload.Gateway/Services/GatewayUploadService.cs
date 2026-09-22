@@ -109,12 +109,17 @@ public class GatewayUploadService(
             }
             catch (Exception ex)
             {
+                _logger.LogWarning(
+                    ex,
+                    "Gateway upload failed for file {FileName}. RequestId: {RequestId}",
+                    safeName,
+                    requestId);
                 failed++;
                 results.Add(new GatewayUploadFileResult(
                     FileName: safeName,
                     SizeBytes: formFile.Length,
                     Status: "failed",
-                    Message: ex.Message));
+                    Message: "File upload failed. Check gateway service logs for details."));
             }
         }
 

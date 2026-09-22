@@ -17,6 +17,9 @@ namespace Unload.Core;
 /// <param name="EstimatedBytes">Оценочный размер чанка до записи либо размер записанного чанка (если применимо).</param>
 /// <param name="BatchId">Идентификатор gateway-партии, если событие относится к постановке партии в очередь.</param>
 /// <param name="BatchFileCount">Число файлов в gateway-партии, если применимо.</param>
+/// <param name="Sequence">Монотонный порядковый номер события внутри запуска.</param>
+/// <param name="WorkOrder">Стабильный порядковый номер скрипта в discovery/queue order.</param>
+/// <param name="Failure">Структурированная диагностика ошибки, если событие сообщает об ошибке.</param>
 public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -30,4 +33,7 @@ public record RunnerEvent(
     int? ChunkNumber = null,
     long? EstimatedBytes = null,
     string? BatchId = null,
-    int? BatchFileCount = null);
+    int? BatchFileCount = null,
+    long Sequence = 0,
+    int? WorkOrder = null,
+    RunnerFailureInfo? Failure = null);

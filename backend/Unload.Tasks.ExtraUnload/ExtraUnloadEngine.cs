@@ -46,13 +46,29 @@ public class ExtraUnloadEngine(
             SingleReader = true,
             SingleWriter = false,
         });
+        var sequencer = new RunnerEventSequencer();
+        var emitLock = new SemaphoreSlim(1, 1);
+
+        async Task EmitAsync(RunnerEvent @event, CancellationToken token)
+        {
+            await emitLock.WaitAsync(token);
+            try
+            {
+                var normalized = RunnerFailureMessages.Sanitize(@event);
+                await channel.Writer.WriteAsync(normalized with { Sequence = sequencer.Next() }, token);
+            }
+            finally
+            {
+                emitLock.Release();
+            }
+        }
 
         // По задаче на скрипт. Task.Run уводит работу в пул, поэтому скрипты реально стартуют
         // одновременно (стаб-БД блокирует поток Thread.Sleep'ом). ct НЕ передаём в Task.Run, чтобы
         // отмена приходила как Faulted-исключение и доходила до потребителя через Complete(error).
         var scriptTasks = request.ScriptPaths
             .Select(scriptPath => Task.Run(
-                () => ProcessScriptAsync(scriptPath, request, filesDirectory, channel.Writer, cancellationToken)))
+                () => ProcessScriptAsync(scriptPath, request, filesDirectory, EmitAsync, cancellationToken)))
             .ToArray();
 
         // Когда все скрипты завершатся — закрываем канал (с ошибкой, если хоть один упал).
@@ -83,7 +99,8 @@ public class ExtraUnloadEngine(
             Message: totalFiles == 0
                 ? "Доп-выгрузка завершена, 0 файлов."
                 : $"Доп-выгрузка завершена. Файлов: {totalFiles}.",
-            FilePath: runDirectory);
+            FilePath: runDirectory,
+            Sequence: sequencer.Next());
     }
 
     /// <summary>Выполняет один скрипт, пишет его события в <paramref name="writer"/> и возвращает число файлов.</summary>
@@ -91,49 +108,130 @@ public class ExtraUnloadEngine(
         string scriptPath,
         ExtraRunRequest request,
         string filesDirectory,
-        ChannelWriter<RunnerEvent> writer,
+        Func<RunnerEvent, CancellationToken, Task> emitAsync,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var scriptCode = Path.GetFileNameWithoutExtension(scriptPath);
-
-        await writer.WriteAsync(
-            Event(request, RunnerStep.QueryStarted, scriptCode, $"Выполняется скрипт {scriptCode}."),
-            cancellationToken);
-
-        var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
-        if (request.BanksFilter is not null)
+        var failureStage = "query";
+        try
         {
-            if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
+            await emitAsync(
+                Event(request, RunnerStep.QueryStarted, scriptCode, $"Выполняется скрипт {scriptCode}."),
+                cancellationToken);
+
+            var sql = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+            if (request.BanksFilter is not null)
             {
-                throw new InvalidOperationException(
-                    $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
+                if (!sql.Contains(BanksPlaceholder, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Atomic script '{scriptCode}' does not contain required placeholder '{BanksPlaceholder}'.");
+                }
+
+                sql = sql.Replace(BanksPlaceholder, request.BanksFilter, StringComparison.OrdinalIgnoreCase);
             }
 
-            sql = sql.Replace(BanksPlaceholder, request.BanksFilter, StringComparison.OrdinalIgnoreCase);
-        }
+            failureStage = "query";
+            var execResult = await _scriptExecutor.ExecuteAsync(scriptCode, sql, request.CorrelationId, cancellationToken);
+            failureStage = "file_write";
+            var writeResult = await _outputWriter.WriteScriptAsync(
+                filesDirectory, request.CorrelationId, execResult, request.PublishToGateway, cancellationToken);
 
-        var execResult = await _scriptExecutor.ExecuteAsync(scriptCode, sql, request.CorrelationId, cancellationToken);
-        var writeResult = await _outputWriter.WriteScriptAsync(
-            filesDirectory, request.CorrelationId, execResult, request.PublishToGateway, cancellationToken);
+            foreach (var file in writeResult.Files)
+            {
+                await emitAsync(
+                    Event(request, RunnerStep.FileWritten, scriptCode, file.FileName, filePath: file.FilePath),
+                    cancellationToken);
+            }
 
-        foreach (var file in writeResult.Files)
-        {
-            await writer.WriteAsync(
-                Event(request, RunnerStep.FileWritten, scriptCode, file.FileName, filePath: file.FilePath),
+            // 0 файлов — явно сообщаем «выполнено, 0 файлов».
+            var completedMessage = writeResult.FilesWritten == 0
+                ? $"Скрипт {scriptCode} выполнен, 0 файлов."
+                : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";
+            await emitAsync(
+                Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage, records: execResult.Records),
                 cancellationToken);
+
+            return writeResult.FilesWritten;
         }
-
-        // 0 файлов — явно сообщаем «выполнено, 0 файлов».
-        var completedMessage = writeResult.FilesWritten == 0
-            ? $"Скрипт {scriptCode} выполнен, 0 файлов."
-            : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";
-        await writer.WriteAsync(
-            Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage, records: execResult.Records),
-            cancellationToken);
-
-        return writeResult.FilesWritten;
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await TryEmitFailureAsync(
+                emitAsync,
+                Event(
+                    request,
+                    RunnerStep.Failed,
+                    scriptCode,
+                    "Extra run was cancelled.",
+                    filePath: null) with
+                {
+                    Failure = CreateFailure(
+                        failureStage,
+                        "EXTRA_CANCELLED",
+                        "Extra run was cancelled.",
+                        request,
+                        scriptCode)
+                });
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Extra script failed. CorrelationId: {CorrelationId}, Script: {ScriptCode}, Stage: {Stage}",
+                request.CorrelationId,
+                scriptCode,
+                failureStage);
+            var safeMessage = RunnerFailureMessages.ForStage(
+                failureStage,
+                scriptCode: scriptCode);
+            await TryEmitFailureAsync(
+                emitAsync,
+                Event(request, RunnerStep.Failed, scriptCode, safeMessage) with
+                {
+                    Failure = CreateFailure(
+                        failureStage,
+                        failureStage == "file_write" ? "EXTRA_FILE_WRITE_FAILED" : "EXTRA_QUERY_FAILED",
+                        safeMessage,
+                        request,
+                        scriptCode)
+                });
+            throw;
+        }
     }
+
+    private static async Task TryEmitFailureAsync(
+        Func<RunnerEvent, CancellationToken, Task> emitAsync,
+        RunnerEvent @event)
+    {
+        try
+        {
+            await emitAsync(@event, CancellationToken.None);
+        }
+        catch
+        {
+        }
+    }
+
+    private static RunnerFailureInfo CreateFailure(
+        string stage,
+        string code,
+        string message,
+        ExtraRunRequest request,
+        string scriptCode) => new(
+        stage,
+        "script",
+        scriptCode,
+        scriptCode,
+        scriptCode,
+        null,
+        null,
+        null,
+        null,
+        code,
+        message,
+        DateTimeOffset.UtcNow);
 
     private static RunnerEvent Event(
         ExtraRunRequest request,

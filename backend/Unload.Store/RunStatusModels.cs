@@ -40,7 +40,10 @@ public record MemberRunStatusInfo(
     MemberRunLifecycleStatus Status,
     RunnerStep? LastStep,
     string? Message,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? QueuePosition = null,
+    long? Sequence = null,
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Снимок состояния worker-потока в рамках активного запуска.
@@ -55,7 +58,9 @@ public record RunWorkerStatusInfo(
     string State,
     string? ScriptCode,
     string? MemberName,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    long? Sequence = null,
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Перечисляет этапы script-карточки в проекции выполнения запуска.
@@ -96,7 +101,10 @@ public record ScriptRunStatusInfo(
     DateTimeOffset? CompletedAt = null,
     int? WorkerId = null,
     int? Records = null,
-    string? Message = null);
+    string? Message = null,
+    int? WorkOrder = null,
+    long? Sequence = null,
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Перечисляет наблюдаемые этапы file-карточки в рамках main run.
@@ -150,7 +158,9 @@ public record FileRunStatusInfo(
     long? EstimatedBytes = null,
     string? FileName = null,
     string? FilePath = null,
-    string? Message = null);
+    string? Message = null,
+    long? Sequence = null,
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Снимок выходного артефакта, созданного в рамках запуска.
@@ -180,7 +190,9 @@ public record SenderBatchStatusInfo(
     string? Message = null,
     DateTimeOffset? QueuedAt = null,
     DateTimeOffset? StartedAt = null,
-    int? FileCount = null);
+    int? FileCount = null,
+    long? Sequence = null,
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Снимок состояния конкретного запуска выгрузки.
@@ -215,4 +227,5 @@ public record RunStatusInfo(
     IReadOnlyDictionary<string, SenderBatchStatusInfo>? SenderBatches = null,
     bool PublishToGateway = true,
     IReadOnlyDictionary<string, ScriptRunStatusInfo>? ScriptStatuses = null,
-    IReadOnlyDictionary<string, FileRunStatusInfo>? FileStatuses = null);
+    IReadOnlyDictionary<string, FileRunStatusInfo>? FileStatuses = null,
+    RunnerFailureInfo? Failure = null);

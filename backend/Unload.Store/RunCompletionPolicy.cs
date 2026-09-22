@@ -27,7 +27,8 @@ internal static class RunCompletionPolicy
             {
                 Status = RunLifecycleStatus.Failed,
                 UpdatedAt = now,
-                Message = "Sender batch failed."
+                Message = RunnerFailureMessages.ForStage("sender"),
+                Failure = senderBatches.Values.First(batch => batch.Status == SenderBatchStatus.Failed).Failure ?? current.Failure
             };
         }
 

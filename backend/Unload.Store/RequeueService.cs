@@ -184,7 +184,7 @@ public class RequeueService(
                         MemberName: "unknown",
                         BatchId: "failed",
                         Status: SenderBatchStatus.Failed,
-                        Message: ex.Message)
+                        Message: "Requeue failed. Check server logs for details.")
                 ]);
         }
     }

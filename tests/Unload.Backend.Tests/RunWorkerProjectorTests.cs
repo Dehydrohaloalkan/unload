@@ -52,10 +52,8 @@ public class RunWorkerProjectorTests
         Assert.Equal("running", result[2].State);
     }
 
-    [Theory]
-    [InlineData(RunnerStep.Completed)]
-    [InlineData(RunnerStep.Failed)]
-    public void Apply_TerminalEventResetsAllWorkers(RunnerStep step)
+    [Fact]
+    public void Apply_CompletedEventResetsAllWorkers()
     {
         var projector = new RunWorkerProjector(workerCount: 1);
         var running = projector.Apply(
@@ -63,11 +61,30 @@ public class RunWorkerProjectorTests
             Event(RunnerStep.QueryStarted, workerId: 1),
             Now.AddMinutes(1));
 
-        var result = projector.Apply(running, Event(step), Now.AddMinutes(2));
+        var result = projector.Apply(running, Event(RunnerStep.Completed), Now.AddMinutes(2));
 
         Assert.Equal("idle", result[1].State);
         Assert.Null(result[1].MemberName);
         Assert.Null(result[1].ScriptCode);
+    }
+
+    [Fact]
+    public void Apply_FailedEventKeepsFailedWorkerAssignment()
+    {
+        var projector = new RunWorkerProjector(workerCount: 1);
+        var running = projector.Apply(
+            projector.CreateInitial(Now),
+            Event(RunnerStep.QueryStarted, workerId: 1),
+            Now.AddMinutes(1));
+
+        var result = projector.Apply(
+            running,
+            Event(RunnerStep.Failed, workerId: 1),
+            Now.AddMinutes(2));
+
+        Assert.Equal("failed", result[1].State);
+        Assert.Equal("Member A", result[1].MemberName);
+        Assert.Equal("script-1", result[1].ScriptCode);
     }
 
     private static RunnerEvent Event(RunnerStep step, int? workerId = null, string? message = null)

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Core;
 using Unload.Store;
 using Unload.Tasks;
 using Unload.Tasks.ExtraUnload;
@@ -69,7 +70,22 @@ public class ExtraUnloadHostedService(
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Extra run '{CorrelationId}' failed in background worker.", request.CorrelationId);
-                _runStateStore.SetFailed(request.CorrelationId, ex.Message);
+                _runStateStore.SetFailed(
+                    request.CorrelationId,
+                    RunnerFailureMessages.ForStage("background_worker"),
+                    new RunnerFailureInfo(
+                        "background_worker",
+                        "run",
+                        request.CorrelationId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "EXTRA_BACKGROUND_WORKER_FAILED",
+                        RunnerFailureMessages.ForStage("background_worker"),
+                        DateTimeOffset.UtcNow));
                 await PublishRunStateAsync(request.CorrelationId, stoppingToken);
             }
             finally

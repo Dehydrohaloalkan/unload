@@ -19,6 +19,31 @@ public class MainUnloadEngine
     private readonly IGatewayPublisher _gatewayPublisher;
     private readonly RunnerOptions _options;
 
+    private sealed class RunnerScopedFailureException : Exception
+    {
+        public RunnerScopedFailureException(
+            RunnerFailureInfo failure,
+            ScriptDefinition script,
+            int workerId,
+            int? chunkNumber,
+            string? batchId,
+            Exception innerException)
+            : base(failure.Message, innerException)
+        {
+            Failure = failure;
+            Script = script;
+            WorkerId = workerId;
+            ChunkNumber = chunkNumber;
+            BatchId = batchId;
+        }
+
+        public RunnerFailureInfo Failure { get; }
+        public ScriptDefinition Script { get; }
+        public int WorkerId { get; }
+        public int? ChunkNumber { get; }
+        public string? BatchId { get; }
+    }
+
     public MainUnloadEngine(
         ICatalogService catalogService,
         IDatabaseClientFactory databaseClientFactory,
@@ -66,19 +91,22 @@ public class MainUnloadEngine
         string? runOutputDirectory = null;
         var reportRows = new ConcurrentBag<RunReportRow>();
         var senderBatchBuilder = new SenderBatchBuilder();
-        RunnerEventEmitter? eventEmitter = null;
+        var eventEmitter = new RunnerEventEmitter(writer, request, cancellationToken);
+        var failureStage = "preflight";
 
         try
         {
             RunnerEngineGuard.ValidateRequest(request);
+            failureStage = "database_connectivity";
             RunnerEngineGuard.ValidateDatabaseConnectivity(_databaseClientFactory.CreateClient());
 
+            failureStage = "output_directory";
             runOutputDirectory = RunnerOutputDirectoryFactory.CreateRunOutputDirectory(request.OutputDirectory);
             var runFilesDirectory = RunnerOutputDirectoryFactory.CreateRunFilesDirectory(runOutputDirectory);
-            eventEmitter = new RunnerEventEmitter(writer, request, cancellationToken);
 
             await eventEmitter.EmitAsync(RunnerStep.RequestAccepted, "Run request accepted.");
 
+            failureStage = "resolver";
             var (resolvedTargets, bigScriptTargetCodes) = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
             await eventEmitter.EmitAsync(
                 RunnerStep.TargetsResolved,
@@ -90,6 +118,7 @@ public class MainUnloadEngine
                 .OrderBy(static x => x.FirstCodeDigit)
                 .ThenBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static x => x.ScriptCode, StringComparer.OrdinalIgnoreCase)
+                .Select(static (script, index) => script with { WorkOrder = index + 1 })
                 .ToArray();
 
             foreach (var script in scripts)
@@ -139,6 +168,7 @@ public class MainUnloadEngine
                     cancellationToken));
             }
 
+            failureStage = "report_write";
             await Task.WhenAll(workers);
 
             var reportPath = Path.Combine(runOutputDirectory, RunnerOutputDirectoryFactory.RunReportFileName);
@@ -160,6 +190,7 @@ public class MainUnloadEngine
                 return;
             }
 
+            failureStage = "gateway_publish";
             foreach (var batchEvent in senderBatchBuilder.BuildBatchEvents(request.CorrelationId))
             {
                 await _gatewayPublisher.PublishFileBatchReadyAsync(batchEvent, cancellationToken);
@@ -167,17 +198,42 @@ public class MainUnloadEngine
         }
         catch (OperationCanceledException)
         {
-            if (eventEmitter is not null)
-                await eventEmitter.TryEmitFailureAsync(RunnerStep.Failed, "Run was cancelled.");
+            await eventEmitter.TryEmitFailureAsync(
+                RunnerStep.Failed,
+                "Run was cancelled.",
+                CreateFailure(
+                    stage: "cancellation",
+                    code: "RUN_CANCELLED",
+                    message: "Run was cancelled.",
+                    entityType: "run",
+                    entityId: request.CorrelationId));
         }
-        catch (Exception ex)
+        catch (RunnerScopedFailureException ex)
         {
-            if (eventEmitter is not null)
-                await eventEmitter.TryEmitFailureAsync(RunnerStep.Failed, ex.Message);
+            await eventEmitter.TryEmitFailureAsync(
+                RunnerStep.Failed,
+                ex.Failure.Message,
+                ex.Failure,
+                ex.Script,
+                ex.WorkerId,
+                ex.ChunkNumber,
+                ex.BatchId);
+        }
+        catch (Exception)
+        {
+            await eventEmitter.TryEmitFailureAsync(
+                RunnerStep.Failed,
+                RunnerFailureMessages.ForStage(failureStage),
+                CreateFailure(
+                    failureStage,
+                    FailureCodeForStage(failureStage),
+                    RunnerFailureMessages.ForStage(failureStage),
+                    entityType: "run",
+                    entityId: request.CorrelationId));
         }
         finally
         {
-            await (eventEmitter?.CompleteAsync() ?? Task.CompletedTask);
+            await eventEmitter.CompleteAsync();
         }
     }
 
@@ -242,41 +298,71 @@ public class MainUnloadEngine
         string correlationId,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.QueryStarted,
-            $"Worker #{workerId} running query for script {script.ScriptCode}.",
-            workerId: workerId);
-
-        await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
-        var columns = RunnerEngineDataReader.GetColumns(reader);
-
-        if (columns.Count == 0)
-            throw new InvalidOperationException($"Query for script '{script.ScriptCode}' returned no columns.");
-
-        var dayOfYear = DateTimeOffset.Now.DayOfYear;
-        var headerLine =
-            $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
-        var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
-
-        var rowsRead = 0;
-        var currentRows = new List<DatabaseRow>();
-        var currentSize = headerSize;
-
-        while (await reader.ReadAsync(cancellationToken))
+        var failureStage = "query";
+        int? activeChunkNumber = null;
+        string? activeBatchId = null;
+        try
         {
-            var row = RunnerEngineDataReader.ReadRow(reader, columns);
-            var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
-            var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
-            if (rowSize + headerSize > _options.ChunkSizeBytes)
-                throw new InvalidOperationException($"Single row exceeds chunk size {_options.ChunkSizeBytes} bytes.");
-            if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+            await eventEmitter.EmitForScriptAsync(
+                script,
+                RunnerStep.QueryStarted,
+                $"Worker #{workerId} running query for script {script.ScriptCode}.",
+                workerId: workerId);
+
+            await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
+            var columns = RunnerEngineDataReader.GetColumns(reader);
+
+            if (columns.Count == 0)
+                throw new InvalidOperationException($"Query for script '{script.ScriptCode}' returned no columns.");
+
+            var dayOfYear = DateTimeOffset.Now.DayOfYear;
+            var headerLine =
+                $"#|{script.ScriptType}|{script.OutputFileStem}{dayOfYear:D3}{int.MaxValue}{script.OutputFileExtension}|{OutputFormatConstants.SenderCode}|{DateTimeOffset.Now:yyyy-MM-dd}|{int.MaxValue}|{script.FirstCodeDigit}";
+            var headerSize = PipeDelimitedFormatter.EstimateLineBytes(headerLine);
+
+            var rowsRead = 0;
+            var currentRows = new List<DatabaseRow>();
+            var currentSize = headerSize;
+
+            failureStage = "row_read";
+            while (await reader.ReadAsync(cancellationToken))
             {
-                var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
+                var row = RunnerEngineDataReader.ReadRow(reader, columns);
+                var line = PipeDelimitedFormatter.BuildDataLine(row, columns);
+                var rowSize = PipeDelimitedFormatter.EstimateLineBytes(line);
+                if (rowSize + headerSize > _options.ChunkSizeBytes)
+                    throw new InvalidOperationException($"Single row exceeds chunk size {_options.ChunkSizeBytes} bytes.");
+                if (currentRows.Count > 0 && currentSize + rowSize > _options.ChunkSizeBytes)
+                {
+                    failureStage = "file_write";
+                    activeChunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
+                    await WriteAndPublishChunkAsync(
+                        script,
+                        workerId,
+                        activeChunkNumber.Value,
+                        currentRows.ToArray(),
+                        currentSize,
+                        runFilesDirectory,
+                        eventEmitter,
+                        senderBatchBuilder,
+                        reportRows,
+                        cancellationToken);
+                    currentRows = [];
+                    currentSize = headerSize;
+                }
+                currentRows.Add(row);
+                currentSize += rowSize;
+                rowsRead++;
+            }
+
+            if (currentRows.Count > 0)
+            {
+                failureStage = "file_write";
+                activeChunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
                 await WriteAndPublishChunkAsync(
                     script,
                     workerId,
-                    chunkNumber,
+                    activeChunkNumber.Value,
                     currentRows.ToArray(),
                     currentSize,
                     runFilesDirectory,
@@ -284,86 +370,138 @@ public class MainUnloadEngine
                     senderBatchBuilder,
                     reportRows,
                     cancellationToken);
-                currentRows = [];
-                currentSize = headerSize;
             }
-            currentRows.Add(row);
-            currentSize += rowSize;
-            rowsRead++;
-        }
+            else if (rowsRead == 0)
+                reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
 
-        if (currentRows.Count > 0)
-        {
-            var chunkNumber = memberChunkCounters.AddOrUpdate(script.MemberName, 1, static (_, c) => checked(c + 1));
-            await WriteAndPublishChunkAsync(
+            await eventEmitter.EmitForScriptAsync(
                 script,
-                workerId,
-                chunkNumber,
-                currentRows.ToArray(),
-                currentSize,
-                runFilesDirectory,
-                eventEmitter,
-                senderBatchBuilder,
-                reportRows,
-                cancellationToken);
-        }
-        else if (rowsRead == 0)
-            reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
+                RunnerStep.QueryCompleted,
+                $"Worker #{workerId} finished query for script {script.ScriptCode}.",
+                records: rowsRead,
+                workerId: workerId);
 
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.QueryCompleted,
-            $"Worker #{workerId} finished query for script {script.ScriptCode}.",
-            records: rowsRead,
-            workerId: workerId);
-
-        if (!string.IsNullOrWhiteSpace(script.MemberName))
-        {
-            var memberName = script.MemberName.Trim();
-            var remaining = remainingScriptsByMember.AddOrUpdate(
-                memberName,
-                0,
-                static (_, current) => current <= 0 ? 0 : checked(current - 1));
-
-            if (remaining == 0 &&
-                senderBatchBuilder.TryBuildMemberBatchEvent(correlationId, memberName, out var memberBatch))
+            if (!string.IsNullOrWhiteSpace(script.MemberName))
             {
-                if (publishToGateway)
+                var memberName = script.MemberName.Trim();
+                var remaining = remainingScriptsByMember.AddOrUpdate(
+                    memberName,
+                    0,
+                    static (_, current) => current <= 0 ? 0 : checked(current - 1));
+
+                if (remaining == 0 &&
+                    senderBatchBuilder.TryBuildMemberBatchEvent(correlationId, memberName, out var memberBatch))
                 {
-                    await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                    activeBatchId = memberBatch.BatchId;
+                    if (publishToGateway)
+                    {
+                        failureStage = "gateway_publish";
+                        await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                        await eventEmitter.EmitForScriptAsync(
+                            script,
+                            RunnerStep.GatewayBatchQueued,
+                            $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
+                            workerId: workerId,
+                            batchId: memberBatch.BatchId,
+                            batchFileCount: memberBatch.Files.Count);
+                    }
+
                     await eventEmitter.EmitForScriptAsync(
                         script,
-                        RunnerStep.GatewayBatchQueued,
-                        $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
+                        RunnerStep.ScriptCompleted,
+                        publishToGateway
+                            ? $"Member completed. Gateway batch queued. Files: {memberBatch.Files.Count}."
+                            : "Member completed. Gateway publish skipped by request.",
+                        records: rowsRead,
+                        filePath: null,
                         workerId: workerId,
-                        batchId: memberBatch.BatchId,
-                        batchFileCount: memberBatch.Files.Count);
+                        cancellationToken: cancellationToken);
                 }
-
-                await eventEmitter.EmitForScriptAsync(
-                    script,
-                    RunnerStep.ScriptCompleted,
-                    publishToGateway
-                        ? $"Member completed. Gateway batch queued. Files: {memberBatch.Files.Count}."
-                        : "Member completed. Gateway publish skipped by request.",
-                    records: rowsRead,
-                    filePath: null,
-                    workerId: workerId,
-                    cancellationToken: cancellationToken);
-            }
-            else if (remaining == 0)
-            {
-                await eventEmitter.EmitForScriptAsync(
-                    script,
-                    RunnerStep.ScriptCompleted,
-                    "Member completed. No output files were produced.",
-                    records: rowsRead,
-                    filePath: null,
-                    workerId: workerId,
-                    cancellationToken: cancellationToken);
+                else if (remaining == 0)
+                {
+                    await eventEmitter.EmitForScriptAsync(
+                        script,
+                        RunnerStep.ScriptCompleted,
+                        "Member completed. No output files were produced.",
+                        records: rowsRead,
+                        filePath: null,
+                        workerId: workerId,
+                        cancellationToken: cancellationToken);
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var safeMessage = RunnerFailureMessages.ForStage(
+                failureStage,
+                script.MemberName,
+                script.ScriptCode);
+            var failure = CreateFailure(
+                failureStage,
+                FailureCodeForStage(failureStage),
+                safeMessage,
+                entityType: "script",
+                entityId: $"{script.MemberName}:{script.ScriptCode}",
+                memberName: script.MemberName,
+                scriptCode: script.ScriptCode,
+                workerId: workerId,
+                chunkNumber: activeChunkNumber,
+                batchId: activeBatchId);
+            throw new RunnerScopedFailureException(
+                failure,
+                script,
+                workerId,
+                activeChunkNumber,
+                activeBatchId,
+                ex);
+        }
     }
+
+    private static RunnerFailureInfo CreateFailure(
+        string stage,
+        string code,
+        string message,
+        string entityType,
+        string? entityId = null,
+        string? memberName = null,
+        string? scriptCode = null,
+        int? workerId = null,
+        int? chunkNumber = null,
+        string? filePath = null,
+        string? batchId = null)
+    {
+        return new RunnerFailureInfo(
+            stage,
+            entityType,
+            entityId,
+            memberName,
+            scriptCode,
+            workerId,
+            chunkNumber,
+            filePath,
+            batchId,
+            code,
+            message,
+            DateTimeOffset.UtcNow);
+    }
+
+    private static string FailureCodeForStage(string stage) => stage switch
+    {
+        "database_connectivity" => "RUNNER_DATABASE_UNAVAILABLE",
+        "output_directory" => "RUNNER_OUTPUT_DIRECTORY_FAILED",
+        "resolver" => "RUNNER_RESOLVER_FAILED",
+        "query" => "RUNNER_QUERY_FAILED",
+        "row_read" => "RUNNER_ROW_READ_FAILED",
+        "file_write" => "RUNNER_FILE_WRITE_FAILED",
+        "gateway_publish" => "RUNNER_GATEWAY_PUBLISH_FAILED",
+        "report_write" => "RUNNER_REPORT_WRITE_FAILED",
+        "cancellation" => "RUN_CANCELLED",
+        _ => "RUNNER_PIPELINE_FAILED"
+    };
 
     private async Task WriteAndPublishChunkAsync(
         ScriptDefinition script,

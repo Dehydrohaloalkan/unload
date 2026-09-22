@@ -45,14 +45,17 @@ public class SignalRContractTests
                 "chunkNumber",
                 "correlationId",
                 "estimatedBytes",
+                "failure",
                 "filePath",
                 "memberName",
                 "message",
                 "occurredAt",
                 "records",
                 "scriptCode",
+                "sequence",
                 "step",
-                "workerId"
+                "workerId",
+                "workOrder"
             },
             propertyNames);
     }

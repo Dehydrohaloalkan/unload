@@ -27,6 +27,7 @@ export type { RequeueToGatewayResponse } from './models/requeue-to-gateway-respo
 export type { RunAcceptedResponse } from './models/run-accepted-response';
 export type { RunCancellationAcceptedResponse } from './models/run-cancellation-accepted-response';
 export type { RunLifecycleStatus } from './models/run-lifecycle-status';
+export type { RunnerFailureInfo } from './models/runner-failure-info';
 export type { RunnerStep } from './models/runner-step';
 export type { RunOutputArtifactInfo } from './models/run-output-artifact-info';
 export type { RunStartRequest } from './models/run-start-request';

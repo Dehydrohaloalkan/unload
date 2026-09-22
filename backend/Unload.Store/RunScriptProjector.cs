@@ -17,7 +17,7 @@ internal static class RunScriptProjector
 
         if (@event.Step == RunnerStep.Failed && !HasScriptIdentity(@event))
         {
-            return FailUnfinished(map, @event.Message, @event.OccurredAt);
+            return FailUnfinished(map, @event.Message, @event.OccurredAt, @event.Failure);
         }
 
         if (!HasScriptIdentity(@event))
@@ -42,9 +42,10 @@ internal static class RunScriptProjector
     public static IReadOnlyDictionary<string, ScriptRunStatusInfo> FailUnfinished(
         IReadOnlyDictionary<string, ScriptRunStatusInfo>? source,
         string? message,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        RunnerFailureInfo? failure = null)
     {
-        return UpdateUnfinishedCore(source, ScriptRunStage.Failed, message, now);
+        return UpdateUnfinishedCore(source, ScriptRunStage.Failed, message, now, failure);
     }
 
     public static IReadOnlyDictionary<string, ScriptRunStatusInfo> CancelUnfinished(
@@ -85,7 +86,9 @@ internal static class RunScriptProjector
             @event.OccurredAt,
             @event.OccurredAt,
             @event.OccurredAt,
-            Message: @event.Message);
+            Message: @event.Message,
+            WorkOrder: @event.WorkOrder,
+            Sequence: SequenceOf(@event));
         return map;
     }
 
@@ -110,7 +113,9 @@ internal static class RunScriptProjector
             {
                 UpdatedAt = @event.OccurredAt,
                 WorkerId = @event.WorkerId ?? current.WorkerId,
-                Message = @event.Message
+                Message = @event.Message,
+                WorkOrder = @event.WorkOrder ?? current.WorkOrder,
+                Sequence = SequenceOf(@event)
             };
             return map;
         }
@@ -122,7 +127,9 @@ internal static class RunScriptProjector
             UpdatedAt = @event.OccurredAt,
             StartedAt = current.StartedAt ?? @event.OccurredAt,
             WorkerId = @event.WorkerId ?? current.WorkerId,
-            Message = @event.Message
+            Message = @event.Message,
+            WorkOrder = @event.WorkOrder ?? current.WorkOrder,
+            Sequence = SequenceOf(@event)
         };
         return map;
     }
@@ -149,7 +156,9 @@ internal static class RunScriptProjector
                 UpdatedAt = @event.OccurredAt,
                 WorkerId = @event.WorkerId ?? current.WorkerId,
                 Records = @event.Records ?? current.Records,
-                Message = @event.Message
+                Message = @event.Message,
+                WorkOrder = @event.WorkOrder ?? current.WorkOrder,
+                Sequence = SequenceOf(@event)
             };
             return map;
         }
@@ -162,7 +171,9 @@ internal static class RunScriptProjector
             CompletedAt = @event.OccurredAt,
             WorkerId = @event.WorkerId ?? current.WorkerId,
             Records = @event.Records,
-            Message = @event.Message
+            Message = @event.Message,
+            WorkOrder = @event.WorkOrder ?? current.WorkOrder,
+            Sequence = SequenceOf(@event)
         };
         return map;
     }
@@ -183,7 +194,9 @@ internal static class RunScriptProjector
             {
                 UpdatedAt = @event.OccurredAt,
                 WorkerId = @event.WorkerId ?? current.WorkerId,
-                Message = @event.Message
+                Message = @event.Message,
+                Sequence = SequenceOf(@event),
+                Failure = @event.Failure ?? current.Failure
             };
             return map;
         }
@@ -195,7 +208,9 @@ internal static class RunScriptProjector
             UpdatedAt = @event.OccurredAt,
             CompletedAt = @event.OccurredAt,
             WorkerId = @event.WorkerId ?? current.WorkerId,
-            Message = @event.Message
+            Message = @event.Message,
+            Sequence = SequenceOf(@event),
+            Failure = @event.Failure
         };
         return map;
     }
@@ -204,7 +219,8 @@ internal static class RunScriptProjector
         IReadOnlyDictionary<string, ScriptRunStatusInfo>? source,
         ScriptRunStage terminalStage,
         string? message,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        RunnerFailureInfo? failure = null)
     {
         if (source is null || source.Count == 0)
         {
@@ -221,7 +237,9 @@ internal static class RunScriptProjector
                     StageEnteredAt = now,
                     UpdatedAt = now,
                     CompletedAt = now,
-                    Message = message
+                    Message = message,
+                    Failure = failure,
+                    Sequence = x.Value.Sequence
                 },
             StringComparer.OrdinalIgnoreCase);
     }
@@ -231,4 +249,6 @@ internal static class RunScriptProjector
         return !string.IsNullOrWhiteSpace(@event.MemberName) &&
                !string.IsNullOrWhiteSpace(@event.ScriptCode);
     }
+
+    private static long? SequenceOf(RunnerEvent @event) => @event.Sequence > 0 ? @event.Sequence : null;
 }

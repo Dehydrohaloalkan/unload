@@ -225,6 +225,21 @@ public class GatewayFeedbackProjectorTests
         Assert.Equal(sentPath, Assert.Single(batch.SentFiles).FilePath);
     }
 
+    [Fact]
+    public void FailedFeedback_DoesNotPublishRawExceptionMessage()
+    {
+        const string sentinel = "SQL password=sentinel; /srv/internal/ftp/path";
+
+        var result = GatewayFeedbackProjector.Apply(
+            source: null,
+            Feedback(SenderFeedbackKind.BatchFailed, message: sentinel),
+            Now.AddMinutes(1));
+
+        var batch = result["batch-1"];
+        Assert.DoesNotContain(sentinel, batch.Message, StringComparison.Ordinal);
+        Assert.Contains("Gateway sender failed", batch.Message, StringComparison.Ordinal);
+    }
+
     private static SenderFileDispatchFeedback Feedback(
         SenderFeedbackKind kind,
         string? filePath = null,

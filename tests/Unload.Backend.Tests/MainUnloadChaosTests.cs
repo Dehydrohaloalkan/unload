@@ -12,13 +12,13 @@ namespace Unload.Backend.Tests;
 public sealed class MainUnloadChaosTests
 {
     [Theory]
-    [InlineData(ChaosPoint.Catalog, "catalog unavailable")]
-    [InlineData(ChaosPoint.DatabaseQuery, "database query refused")]
-    [InlineData(ChaosPoint.FileWrite, "disk write failed")]
-    [InlineData(ChaosPoint.GatewayPublish, "gateway publish failed")]
+    [InlineData(ChaosPoint.Catalog, "RUNNER_RESOLVER_FAILED")]
+    [InlineData(ChaosPoint.DatabaseQuery, "RUNNER_QUERY_FAILED")]
+    [InlineData(ChaosPoint.FileWrite, "RUNNER_FILE_WRITE_FAILED")]
+    [InlineData(ChaosPoint.GatewayPublish, "RUNNER_GATEWAY_PUBLISH_FAILED")]
     public async Task FailureAfterEventStreamStarted_EndsWithFailedEvent(
         ChaosPoint chaosPoint,
-        string expectedMessage)
+        string expectedCode)
     {
         using var scratch = new ScratchDirectory();
         var engine = CreateEngine(chaosPoint);
@@ -28,12 +28,14 @@ public sealed class MainUnloadChaosTests
             CancellationToken.None));
 
         var failed = Assert.Single(events, static item => item.Step == RunnerStep.Failed);
-        Assert.Contains(expectedMessage, failed.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(expectedCode, failed.Failure!.Code);
+        Assert.DoesNotContain("database query refused", failed.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("database query refused", failed.Failure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(events, static item => item.Step == RunnerStep.Completed);
     }
 
     [Fact]
-    public async Task DisconnectedDatabaseBeforeEventStream_CurrentlyProducesNoTerminalEvent()
+    public async Task DisconnectedDatabaseBeforeEventStream_ProducesStructuredRunFailure()
     {
         using var scratch = new ScratchDirectory();
         var engine = new MainUnloadEngine(
@@ -45,14 +47,14 @@ public sealed class MainUnloadChaosTests
 
         var events = await CollectAsync(engine.RunAsync(Request(scratch.Path), CancellationToken.None));
 
-        // Safety canary: this documents a known gap. MainUnloadHostedService has already changed
-        // the aggregate to Running, but the engine cannot emit Failed because its emitter is
-        // created only after this connectivity check.
-        Assert.Empty(events);
+        var failed = Assert.Single(events);
+        Assert.Equal(RunnerStep.Failed, failed.Step);
+        Assert.Equal("database_connectivity", failed.Failure!.Stage);
+        Assert.Equal("RUNNER_DATABASE_UNAVAILABLE", failed.Failure.Code);
     }
 
     [Fact]
-    public async Task UnwritableOutputRootBeforeEventStream_CurrentlyProducesNoTerminalEvent()
+    public async Task UnwritableOutputRootBeforeEventStream_ProducesStructuredRunFailure()
     {
         using var scratch = new ScratchDirectory();
         var blockedOutputRoot = System.IO.Path.Combine(scratch.Path, "output-is-a-file");
@@ -61,8 +63,10 @@ public sealed class MainUnloadChaosTests
 
         var events = await CollectAsync(engine.RunAsync(Request(blockedOutputRoot), CancellationToken.None));
 
-        // Same pre-emitter gap as the disconnected database case above.
-        Assert.Empty(events);
+        var failed = Assert.Single(events);
+        Assert.Equal(RunnerStep.Failed, failed.Step);
+        Assert.Equal("output_directory", failed.Failure!.Stage);
+        Assert.Equal("RUNNER_OUTPUT_DIRECTORY_FAILED", failed.Failure.Code);
     }
 
     [Fact]

@@ -38,4 +38,5 @@ public record SenderFileDispatchFeedback(
     string BatchId,
     SenderFeedbackKind Kind,
     string? FilePath = null,
-    string? Message = null);
+    string? Message = null,
+    RunnerFailureInfo? Failure = null);

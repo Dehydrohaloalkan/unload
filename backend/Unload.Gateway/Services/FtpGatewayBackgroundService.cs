@@ -126,7 +126,20 @@ public class FtpGatewayBackgroundService(
                 MemberName: memberName,
                 BatchId: batch.BatchId,
                 Kind: SenderFeedbackKind.BatchFailed,
-                Message: "Gateway sender was cancelled."));
+                Message: "Gateway sender was cancelled.",
+                Failure: new RunnerFailureInfo(
+                    "sender",
+                    "batch",
+                    batch.BatchId,
+                    memberName,
+                    null,
+                    null,
+                    null,
+                    null,
+                    batch.BatchId,
+                    "SENDER_CANCELLED",
+                    "Gateway sender was cancelled.",
+                    DateTimeOffset.UtcNow)));
         }
         catch (Exception ex)
         {
@@ -141,7 +154,20 @@ public class FtpGatewayBackgroundService(
                 MemberName: memberName,
                 BatchId: batch.BatchId,
                 Kind: SenderFeedbackKind.BatchFailed,
-                Message: ex.Message));
+                Message: RunnerFailureMessages.ForStage("sender"),
+                Failure: new RunnerFailureInfo(
+                    "sender",
+                    "batch",
+                    batch.BatchId,
+                    memberName,
+                    null,
+                    null,
+                    null,
+                    null,
+                    batch.BatchId,
+                    "SENDER_BATCH_FAILED",
+                    RunnerFailureMessages.ForStage("sender"),
+                    DateTimeOffset.UtcNow)));
         }
     }
 

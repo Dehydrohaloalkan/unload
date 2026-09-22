@@ -78,7 +78,9 @@ public class RunStateStoreGatewayCompletionTests
 
         var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
         Assert.Equal(RunLifecycleStatus.Failed, state.Status);
-        Assert.Equal("Sender batch failed.", state.Message);
+        Assert.Equal("Gateway sender failed. Check gateway service logs.", state.Message);
+        Assert.DoesNotContain("ftp failed", state.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ftp failed", state.Failure!.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SenderBatchStatus.Failed, state.SenderBatches!["batch-1"].Status);
     }
 

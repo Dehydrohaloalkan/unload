@@ -1407,6 +1407,25 @@
               "null",
               "string"
             ]
+          },
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
+            ]
           }
         }
       },
@@ -1570,6 +1589,34 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "queuePosition": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
+            ]
           }
         }
       },
@@ -1924,6 +1971,89 @@
       "RunLifecycleStatus": {
         "type": "integer"
       },
+      "RunnerFailureInfo": {
+        "required": [
+          "stage",
+          "entityType",
+          "entityId",
+          "memberName",
+          "scriptCode",
+          "workerId",
+          "chunkNumber",
+          "filePath",
+          "batchId",
+          "code",
+          "message",
+          "occurredAt"
+        ],
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "memberName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scriptCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workerId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "chunkNumber": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "filePath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "batchId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "RunnerStep": {
         "type": "integer"
       },
@@ -2105,6 +2235,16 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/FileRunStatusInfo"
             }
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
+            ]
           }
         }
       },
@@ -2144,6 +2284,25 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
+            ]
           }
         }
       },
@@ -2222,6 +2381,34 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "workOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
             ]
           }
         }
@@ -2330,6 +2517,25 @@
               "string"
             ],
             "format": "int32"
+          },
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunnerFailureInfo"
+              }
+            ]
           }
         }
       },

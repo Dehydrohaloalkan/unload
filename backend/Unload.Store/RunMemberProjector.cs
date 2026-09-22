@@ -20,7 +20,7 @@ internal static class RunMemberProjector
 
         if (@event.Step == RunnerStep.Failed && string.IsNullOrWhiteSpace(@event.MemberName))
         {
-            return UpdateUnfinishedAsFailed(map, @event.Message, now);
+            return UpdateUnfinishedAsFailed(map, @event.Message, now, @event.Failure);
         }
 
         if (string.IsNullOrWhiteSpace(@event.MemberName))
@@ -35,12 +35,16 @@ internal static class RunMemberProjector
             RunnerStep.ScriptCompleted => MemberRunLifecycleStatus.Completed,
             _ => MemberRunLifecycleStatus.Running
         };
+        map.TryGetValue(memberName, out var existing);
         map[memberName] = new MemberRunStatusInfo(
             memberName,
             status,
             @event.Step,
             @event.Message,
-            now);
+            now,
+            QueuePosition: existing?.QueuePosition,
+            Sequence: @event.Sequence > 0 ? @event.Sequence : existing?.Sequence,
+            Failure: @event.Step == RunnerStep.Failed ? @event.Failure : existing?.Failure);
 
         return map;
     }
@@ -50,7 +54,8 @@ internal static class RunMemberProjector
         MemberRunLifecycleStatus status,
         RunnerStep step,
         string? message,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        RunnerFailureInfo? failure = null)
     {
         if (source is null || source.Count == 0)
         {
@@ -64,7 +69,9 @@ internal static class RunMemberProjector
                 Status = status,
                 LastStep = step,
                 Message = message,
-                UpdatedAt = now
+                UpdatedAt = now,
+                Failure = failure,
+                Sequence = x.Value.Sequence
             },
             StringComparer.OrdinalIgnoreCase);
     }
@@ -72,7 +79,8 @@ internal static class RunMemberProjector
     private static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateUnfinishedAsFailed(
         IReadOnlyDictionary<string, MemberRunStatusInfo> source,
         string? message,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        RunnerFailureInfo? failure = null)
     {
         return source.ToDictionary(
             static x => x.Key,
@@ -83,8 +91,44 @@ internal static class RunMemberProjector
                     Status = MemberRunLifecycleStatus.Failed,
                     LastStep = RunnerStep.Failed,
                     Message = message,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    Failure = failure,
+                    Sequence = x.Value.Sequence
                 },
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    public static IReadOnlyDictionary<string, MemberRunStatusInfo> ApplyFailure(
+        IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
+        string memberName,
+        RunnerFailureInfo failure,
+        DateTimeOffset now)
+    {
+        var map = source is null
+            ? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, MemberRunStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
+        var normalized = memberName.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return map;
+        }
+
+        map[normalized] = map.TryGetValue(normalized, out var current)
+            ? current with
+            {
+                Status = MemberRunLifecycleStatus.Failed,
+                LastStep = RunnerStep.Failed,
+                Message = failure.Message,
+                UpdatedAt = now,
+                Failure = failure
+            }
+            : new MemberRunStatusInfo(
+                normalized,
+                MemberRunLifecycleStatus.Failed,
+                RunnerStep.Failed,
+                failure.Message,
+                now,
+                Failure: failure);
+        return map;
     }
 }

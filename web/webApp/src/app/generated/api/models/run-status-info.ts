@@ -4,6 +4,7 @@
 import { FileRunStatusInfo } from '../models/file-run-status-info';
 import { MemberRunStatusInfo } from '../models/member-run-status-info';
 import { RunLifecycleStatus } from '../models/run-lifecycle-status';
+import { RunnerFailureInfo } from '../models/runner-failure-info';
 import { RunnerStep } from '../models/runner-step';
 import { RunOutputArtifactInfo } from '../models/run-output-artifact-info';
 import { RunWorkerStatusInfo } from '../models/run-worker-status-info';
@@ -12,6 +13,7 @@ import { SenderBatchStatusInfo } from '../models/sender-batch-status-info';
 export interface RunStatusInfo {
   correlationId: string;
   createdAt: string;
+  failure?: (null | RunnerFailureInfo);
   fileStatuses?: ({
 [key: string]: FileRunStatusInfo;
 } | null);

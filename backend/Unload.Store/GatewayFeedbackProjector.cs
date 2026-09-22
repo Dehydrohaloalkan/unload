@@ -31,7 +31,9 @@ internal static class GatewayFeedbackProjector
             Message: currentBatch?.Message ?? @event.Message,
             QueuedAt: currentBatch?.QueuedAt ?? @event.OccurredAt,
             StartedAt: currentBatch?.StartedAt,
-            FileCount: @event.BatchFileCount ?? currentBatch?.FileCount);
+            FileCount: @event.BatchFileCount ?? currentBatch?.FileCount,
+            Sequence: @event.Sequence > 0 ? @event.Sequence : currentBatch?.Sequence,
+            Failure: currentBatch?.Failure);
 
         return map;
     }
@@ -46,6 +48,9 @@ internal static class GatewayFeedbackProjector
             : new Dictionary<string, SenderBatchStatusInfo>(source, StringComparer.OrdinalIgnoreCase);
 
         map.TryGetValue(feedback.BatchId, out var currentBatch);
+        var failure = feedback.Failure is null
+            ? currentBatch?.Failure
+            : RunnerFailureMessages.Sanitize(feedback.Failure);
         if (IsTerminal(currentBatch?.Status))
         {
             return map;
@@ -79,13 +84,17 @@ internal static class GatewayFeedbackProjector
             SentFiles: sentFiles
                 .OrderBy(static file => file.FilePath, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
-            Message: feedback.Message ?? currentBatch?.Message,
+            Message: feedback.Kind == SenderFeedbackKind.BatchFailed
+                ? RunnerFailureMessages.ForStage("sender")
+                : feedback.Message ?? currentBatch?.Message,
             QueuedAt: currentBatch?.QueuedAt,
             StartedAt: currentBatch?.StartedAt ??
                 (feedback.Kind is SenderFeedbackKind.BatchStarted or SenderFeedbackKind.FileSent
                     ? feedback.OccurredAt
                     : null),
-            FileCount: currentBatch?.FileCount);
+            FileCount: currentBatch?.FileCount,
+            Sequence: currentBatch?.Sequence,
+            Failure: failure);
 
         return map;
     }

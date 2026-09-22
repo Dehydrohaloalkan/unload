@@ -187,7 +187,9 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal("database failed", state.Message);
         Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
         Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses["Member B"].Status);
-        Assert.All(state.WorkerStatuses!.Values, worker => Assert.Equal("idle", worker.State));
+        Assert.Equal("failed", state.WorkerStatuses![1].State);
+        Assert.Equal("script-a", state.WorkerStatuses[1].ScriptCode);
+        Assert.Equal("idle", state.WorkerStatuses[2].State);
         Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
         Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
     }
@@ -219,9 +221,48 @@ public class RunStateStoreRunnerEventTests
         Assert.Equal(RunLifecycleStatus.Failed, state.Status);
         Assert.Equal("worker crashed", state.Message);
         Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
-        Assert.Equal("idle", state.WorkerStatuses![1].State);
+        Assert.Equal("failed", state.WorkerStatuses![1].State);
+        Assert.Equal("script-a", state.WorkerStatuses[1].ScriptCode);
         Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
         Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
+    }
+
+    [Fact]
+    public void ExplicitFailure_PersistsRunLevelFailureAndKeepsWorkerContext()
+    {
+        using var fixture = new RunStateStoreFixture();
+        fixture.Start();
+        fixture.ApplyEvent(
+            RunnerStep.ScriptDiscovered,
+            memberName: "Member A",
+            scriptCode: "script-a");
+        fixture.ApplyEvent(
+            RunnerStep.QueryStarted,
+            memberName: "Member A",
+            scriptCode: "script-a",
+            workerId: 1);
+
+        var failure = new RunnerFailureInfo(
+            "background_worker",
+            "run",
+            "run-1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "RUN_BACKGROUND_WORKER_FAILED",
+            "worker crashed",
+            DateTimeOffset.UtcNow);
+        fixture.Store.SetFailed("run-1", failure.Message, failure);
+
+        var state = fixture.Store.Get("run-1");
+        Assert.NotNull(state);
+        Assert.Equal(failure, state!.Failure);
+        Assert.Equal(failure, state.MemberStatuses!["Member A"].Failure);
+        Assert.Equal("failed", state.WorkerStatuses![1].State);
+        Assert.Equal("Member A", state.WorkerStatuses[1].MemberName);
     }
 
     [Fact]

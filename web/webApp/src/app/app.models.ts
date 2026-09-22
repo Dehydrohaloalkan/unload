@@ -68,6 +68,7 @@ export const SenderBatchStatus = {
 
 export type SenderFileDispatchStateInfo = ApiModels.SenderFileDispatchStateInfo;
 export type SenderBatchStatusInfo = ApiModels.SenderBatchStatusInfo;
+export type RunnerFailureInfo = ApiModels.RunnerFailureInfo;
 export type RunStatusInfo = ApiModels.RunStatusInfo;
 
 export interface RunnerEvent {
@@ -84,6 +85,9 @@ export interface RunnerEvent {
   estimatedBytes: number | null;
   batchId: string | null;
   batchFileCount: number | null;
+  sequence?: number;
+  workOrder?: number | null;
+  failure?: RunnerFailureInfo | null;
 }
 
 export type MemberCatalogItem = ApiModels.MemberCatalogItem;

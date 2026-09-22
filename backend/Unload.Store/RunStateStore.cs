@@ -83,6 +83,7 @@ public class RunStateStore
         ArgumentNullException.ThrowIfNull(@event);
         ArgumentException.ThrowIfNullOrWhiteSpace(@event.CorrelationId);
 
+        @event = RunnerFailureMessages.Sanitize(@event);
         var now = DateTimeOffset.UtcNow;
         ApplyPersistedMutation(() => MutateRun(
             @event.CorrelationId,
@@ -108,7 +109,7 @@ public class RunStateStore
     /// </summary>
     /// <param name="correlationId">Идентификатор запуска.</param>
     /// <param name="message">Диагностическое сообщение об ошибке.</param>
-    public void SetFailed(string correlationId, string message)
+    public void SetFailed(string correlationId, string message, RunnerFailureInfo? failure = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
@@ -116,7 +117,7 @@ public class RunStateStore
         ApplyPersistedMutation(() => MutateRun(
             correlationId,
             addFactory: null,
-            updateFactory: current => _projector.UpdateToFailed(current, message, now)));
+            updateFactory: current => _projector.UpdateToFailed(current, message, now, failure)));
     }
 
     /// <summary>

@@ -85,7 +85,22 @@ public class MainUnloadHostedService(
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Run '{CorrelationId}' failed in background worker.", request.CorrelationId);
-                _runStateStore.SetFailed(request.CorrelationId, ex.Message);
+                _runStateStore.SetFailed(
+                    request.CorrelationId,
+                    RunnerFailureMessages.ForStage("background_worker"),
+                    new RunnerFailureInfo(
+                        "background_worker",
+                        "run",
+                        request.CorrelationId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "RUN_BACKGROUND_WORKER_FAILED",
+                        RunnerFailureMessages.ForStage("background_worker"),
+                        DateTimeOffset.UtcNow));
                 await PublishRunStateAsync(request.CorrelationId, stoppingToken);
             }
             finally

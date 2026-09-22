@@ -66,8 +66,8 @@ public class MainUnloadTask(
         {
             RunSelectionMode.MemberCodes => await StartByMemberCodesAsync(
                 normalizedCodes, request.PublishToGateway, cancellationToken),
-            RunSelectionMode.TargetCodes => StartByTargetCodes(
-                normalizedCodes, request.PublishToGateway),
+            RunSelectionMode.TargetCodes => await StartByTargetCodesAsync(
+                normalizedCodes, request.PublishToGateway, cancellationToken),
             _ => throw new TaskLaunchException(
                 TaskLaunchFailureKind.Validation,
                 "VALIDATION_ERROR",
@@ -123,9 +123,28 @@ public class MainUnloadTask(
             publishToGateway);
     }
 
-    private string StartByTargetCodes(IReadOnlyCollection<string> targetCodes, bool publishToGateway)
+    private async Task<string> StartByTargetCodesAsync(
+        IReadOnlyCollection<string> targetCodes,
+        bool publishToGateway,
+        CancellationToken cancellationToken)
     {
-        return StartRunCore(targetCodes, memberNames: null, publishToGateway);
+        var normalizedTargetCodes = NormalizeTargetCodes(targetCodes);
+        var catalog = await _catalogService.GetCatalogAsync(cancellationToken);
+        var targetRanks = normalizedTargetCodes
+            .Select((code, index) => (Code: code, Index: index))
+            .ToDictionary(static x => x.Code, static x => x.Index, StringComparer.OrdinalIgnoreCase);
+
+        var memberNames = catalog.Targets
+            .Where(target => targetRanks.ContainsKey(target.TargetCode))
+            .OrderBy(target => targetRanks[target.TargetCode])
+            .ThenBy(target => target.MemberName, StringComparer.OrdinalIgnoreCase)
+            .Select(static target => target.MemberName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return StartRunCore(normalizedTargetCodes, memberNames, publishToGateway);
     }
 
     private string StartRunCore(
