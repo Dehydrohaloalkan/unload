@@ -346,10 +346,10 @@ sequenceDiagram
 
 Почему используются события: движок не должен напрямую менять Angular-модели или вызывать SignalR. `MainUnloadHostedService` принимает события, а `RunStateStore` строит из них единую проекцию состояния.
 
-### 8.3.1. Backend contract для будущего вертикального Process UI
+### 8.3.1. Контракт вертикального Process UI
 
-Backend сохраняет данные, достаточные для вертикальной state machine; Angular уже имеет нормализованную
-projection foundation, а переход разметки на вертикальные зоны выполняется отдельным UI-срезом.
+Backend сохраняет данные для вертикальной state machine, а Angular отображает их нормализованной
+проекцией в физических зонах конвейера.
 `RunStatusInfo.MemberStatuses` создаётся сразу с
 case-insensitive dedupe и `QueuePosition`, поэтому target launch не теряет выбранных участников до
 первого resolver event. Script cards получают стабильный `WorkOrder`, а `RunnerEvent.Sequence`
@@ -364,8 +364,7 @@ sender catch sites создают scoped или run-level failure с досту�
 переводит конкретные member/script/file/batch cards и worker assignment в `Failed`; worker не
 сбрасывается в `idle`. Run-level preflight/background failure может завершить незавершённые
 карточки как failed, но не подменяет уже завершённую scoped карточку. Это backend data contract
-для будущего UI: карточка может замереть на точном этапе и показать причину; текущая Angular
-разметка в рамках этого изменения не заявляется изменённой.
+для UI: карточка остаётся на точном этапе сбоя и открывает безопасные подробности ошибки.
 
 ### 8.4. Когда `run` считается завершённым
 
@@ -582,10 +581,10 @@ Material отвечает за доступное поведение диало�
 | `gateway-history-projection.util.ts` | delivery status, принятые requeue paths, фактические `sentAt`, история партий и summary |
 | `history-selection.util.ts` | единые правила массового выбора file/member/script/bank/run/all и indeterminate state |
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
-| `process-projection.models.ts` | immutable `ProcessPipelineViewModel`: вход мемберов, resolver, очередь скриптов, четыре worker slots, группы файлов, sender/delivery и click-ready failures; legacy row adapter остаётся только для текущей разметки |
+| `process-projection.models.ts` | immutable `ProcessPipelineViewModel`: вход мемберов, resolver, очередь скриптов, четыре worker slots, группы файлов, sender/delivery и click-ready failures |
 | `process-projection.util.ts` | чистая clock-independent проекция `RunStatusInfo`; порядок задают `QueuePosition`/`WorkOrder`/`Sequence`, файлы агрегируются по member+script и выдаются bounded pages |
 | `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
-| `ProcessRunViewComponent` | третья вкладка main-run drawer: responsive member rows с четырьмя stage-секциями |
+| `ProcessRunViewComponent` | вертикальный responsive-конвейер main run, bounded раскрытие файлов и доступный failure dialog |
 
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.
 `WorkflowStore` сохраняет orchestration и координацию stores; чистые presentation-преобразования
@@ -599,13 +598,17 @@ Failed entity остаётся в физической зоне сбоя: resolv
 восьми CSS-token классов, полученный из имени без случайных или inline-цветов; состояние всегда также
 передаётся текстом и не кодируется одним цветом.
 
-Файлы группируются по member+script с counts, rows, bytes и status breakdown. Начальное окно деталей
-ограничено 20 карточками, следующие chunks выдаёт `getProcessFileGroupPage`, поэтому snapshot из сотни
-файлов не превращается по умолчанию в сотню DOM-карточек. Текущая четырёхколоночная разметка временно
-получает bounded compatibility rows через `buildProcessMemberRows`; связь с parent script сохраняется.
-Статическая projection computed зависит только от server snapshot. Отдельный секундный clock меняет
+Файлы группируются по member+script с counts, rows, bytes и status breakdown. Группа свёрнута по
+умолчанию; пользователь переключает страницы по 20 карточек, поэтому DOM остаётся жёстко ограниченным
+при любом количестве файлов. Page state включает correlation ID и stable group ID: snapshot того же
+run сохраняет и при необходимости clamp-ит страницу, новый run сбрасывает её полностью.
+Статическая pipeline projection computed зависит только от server snapshot. Отдельный секундный clock меняет
 только отображаемые активные durations и freshness, не пересобирая массивы и группировки; `DestroyRef`
 очищает timer.
+
+Run-level failure берётся из `ProcessPipelineViewModel.failures` отдельно от scoped failures и виден
+даже при пустых entity collections. Failure dialog удерживает клавиатурный focus внутри себя, закрывается
+по Escape и возвращает focus на вызвавшую карточку.
 
 ### 13.2. Bootstrap страницы
 

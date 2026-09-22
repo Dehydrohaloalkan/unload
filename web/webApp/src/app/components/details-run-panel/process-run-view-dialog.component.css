@@ -1,0 +1,161 @@
+.process-run-failure {
+  display: grid;
+  justify-items: start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #e3aaa5;
+  border-radius: 0.65rem;
+  background: #fff8f7;
+  color: var(--process-ink);
+  text-align: left;
+}
+
+.process-run-failure span,
+.process-run-failure small {
+  color: var(--process-muted);
+  font-size: 0.7rem;
+}
+
+.process-dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.process-dialog {
+  width: min(100%, 34rem);
+  max-height: min(85dvh, 42rem);
+  overflow: auto;
+  padding: 0.9rem;
+  border-radius: 0.85rem;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
+  color: var(--process-ink);
+}
+
+.process-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.process-dialog > header span {
+  color: var(--process-danger);
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.process-dialog h2 {
+  margin: 0.1rem 0 0;
+  font-size: 1rem;
+}
+
+.process-dialog > header button {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f4f8;
+  color: #28364a;
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+
+.process-dialog dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.8rem 0;
+}
+
+.process-dialog dl div {
+  min-width: 0;
+  padding: 0.45rem;
+  border-radius: 0.45rem;
+  background: #f5f7fa;
+}
+
+.process-dialog dt {
+  color: var(--process-muted);
+  font-size: 0.65rem;
+}
+
+.process-dialog dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.process-dialog__reason {
+  padding: 0.65rem;
+  border-left: 3px solid var(--process-danger);
+  border-radius: 0.4rem;
+  background: #fff5f4;
+}
+
+.process-dialog__reason h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.74rem;
+}
+
+.process-dialog__reason p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.process-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+
+.process-dialog__close {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #244d75;
+  border-radius: 0.5rem;
+  background: #244d75;
+  color: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .process-dialog dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .process-dialog-backdrop {
+    align-items: end;
+    padding: 0.5rem;
+  }
+
+  .process-dialog {
+    max-height: 90dvh;
+    border-radius: 0.85rem 0.85rem 0.4rem 0.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .process-dialog button {
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+}
