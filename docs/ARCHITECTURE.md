@@ -589,6 +589,11 @@ Material отвечает за доступное поведение диало�
 | `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
 | `ProcessRunViewComponent` | вертикальный responsive-конвейер main run, bounded раскрытие файлов и доступный failure dialog |
 
+Корень Process является inline-size CSS container. Сводка, worker grid, группы файлов и обычные карточки
+перестраиваются container queries по ширине drawer, а не viewport. Общие CSS-токены задают одинаковый
+border-box data-карточек (member, script, worker assignment, created group, sender, delivered);
+раскрываемые списки и пагинация находятся под базовой карточкой и не меняют её высоту.
+
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.
 `WorkflowStore` сохраняет orchestration и координацию stores; чистые presentation-преобразования
 находятся в util-файлах и проверяются без Angular DI. Бизнес-допуск всё равно принимает backend:

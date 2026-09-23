@@ -227,8 +227,10 @@ describe('ProcessRunViewComponent', () => {
     expect(host.querySelectorAll('.process-file-card')).toHaveLength(0);
     expect(host.querySelectorAll('.process-dispatch-file')).toHaveLength(0);
     const fileGroup = host.querySelector<HTMLElement>('[data-testid^="process-file-group-"]')!;
+    expect(fileGroup.querySelector('.process-file-group__card')).not.toBeNull();
     buttonWithText(fileGroup, 'Показать файлы').click();
     fixture.detectChanges();
+    expect(fileGroup.querySelector('.process-file-group__card .process-file-list')).toBeNull();
     expect(fileGroup.querySelectorAll('.process-file-card')).toHaveLength(20);
     expect(fileGroup.textContent).toContain('1–20 из 1000');
     buttonWithText(fileGroup, 'Следующие 20').click();
@@ -247,8 +249,16 @@ describe('ProcessRunViewComponent', () => {
     ).click();
     fixture.detectChanges();
     const delivered = host.querySelector<HTMLElement>('[data-testid="process-zone-delivered"]')!;
+    expect(
+      delivered
+        .querySelector('.process-delivery-group__summary')
+        ?.classList.contains('process-card'),
+    ).toBe(true);
     delivered.querySelector<HTMLButtonElement>('.process-delivery-group__summary')!.click();
     fixture.detectChanges();
+    expect(
+      delivered.querySelector('.process-delivery-group__summary .process-file-list'),
+    ).toBeNull();
     expect(delivered.querySelectorAll('.process-dispatch-file')).toHaveLength(20);
     expect(
       host.querySelectorAll('.process-file-card, .process-dispatch-file').length,

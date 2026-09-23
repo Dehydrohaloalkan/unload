@@ -83,8 +83,10 @@
                     [attr.aria-label]="memberAriaLabel(member)"
                     (click)="openFailure(failure, $event)"
                   >
-                    <strong>{{ member.name }}</strong
-                    ><span>{{ resolveMemberStatusLabel(member.status) }}</span
+                    <strong [title]="member.name">{{ member.name }}</strong
+                    ><span [title]="resolveMemberStatusLabel(member.status)">{{
+                      resolveMemberStatusLabel(member.status)
+                    }}</span
                     ><small>{{ 'process.card.errorDetails' | t }}</small>
                   </button>
                 } @else {
@@ -96,8 +98,10 @@
                       member.identity.className
                     "
                   >
-                    <strong>{{ member.name }}</strong
-                    ><span>{{ resolveMemberStatusLabel(member.status) }}</span>
+                    <strong [title]="member.name">{{ member.name }}</strong
+                    ><span [title]="resolveMemberStatusLabel(member.status)">{{
+                      resolveMemberStatusLabel(member.status)
+                    }}</span>
                     @if (member.updatedAt) {
                       <small>{{
                         'process.card.waitingSince' | t: { time: formatTimestamp(member.updatedAt) }
@@ -119,7 +123,9 @@
                 (click)="previous('members', pipeline().memberInput.length)"
               >
                 {{ 'process.files.previous' | t }}</button
-              ><span>{{ memberPages.first }}–{{ memberPages.last }} из {{ pipeline().memberInput.length }}</span
+              ><span
+                >{{ memberPages.first }}–{{ memberPages.last }} из
+                {{ pipeline().memberInput.length }}</span
               ><button
                 type="button"
                 [disabled]="!memberPages.hasNext"
@@ -153,14 +159,18 @@
                   "
                   (click)="openFailure(failure, $event)"
                 >
-                  <strong>{{ member.name }}</strong
-                  ><span>{{ resolveMemberStatusLabel(member.status) }}</span
+                  <strong [title]="member.name">{{ member.name }}</strong
+                  ><span [title]="resolveMemberStatusLabel(member.status)">{{
+                    resolveMemberStatusLabel(member.status)
+                  }}</span
                   ><small>{{ 'process.card.errorDetails' | t }}</small>
                 </button>
               } @else {
                 <article [class]="'process-card process-tone--active ' + member.identity.className">
-                  <strong>{{ member.name }}</strong
-                  ><span>{{ resolveMemberStatusLabel(member.status) }}</span>
+                  <strong [title]="member.name">{{ member.name }}</strong
+                  ><span [title]="resolveMemberStatusLabel(member.status)">{{
+                    resolveMemberStatusLabel(member.status)
+                  }}</span>
                   @if (member.updatedAt) {
                     <small>{{
                       'process.card.workingSince' | t: { time: formatTimestamp(member.updatedAt) }
@@ -181,7 +191,9 @@
                 (click)="previous('resolver', pipeline().resolver.length)"
               >
                 {{ 'process.files.previous' | t }}</button
-              ><span>{{ resolverPages.first }}–{{ resolverPages.last }} из {{ pipeline().resolver.length }}</span
+              ><span
+                >{{ resolverPages.first }}–{{ resolverPages.last }} из
+                {{ pipeline().resolver.length }}</span
               ><button
                 type="button"
                 [disabled]="!resolverPages.hasNext"
@@ -219,8 +231,10 @@
                     "
                     (click)="openFailure(failure, $event)"
                   >
-                    <strong>{{ script.scriptCode || script.id }}</strong
-                    ><span>{{ script.memberName }}</span
+                    <strong [title]="script.scriptCode || script.id">{{
+                      script.scriptCode || script.id
+                    }}</strong
+                    ><span [title]="script.memberName">{{ script.memberName }}</span
                     ><small>{{ 'process.card.errorDetails' | t }}</small>
                   </button>
                 } @else {
@@ -232,8 +246,10 @@
                       script.identity.className
                     "
                   >
-                    <strong>{{ script.scriptCode || script.id }}</strong
-                    ><span>{{ script.memberName }}</span>
+                    <strong [title]="script.scriptCode || script.id">{{
+                      script.scriptCode || script.id
+                    }}</strong
+                    ><span [title]="script.memberName">{{ script.memberName }}</span>
                     @if (script.discoveredAt) {
                       <small>{{
                         'process.card.waitingSince'
@@ -256,7 +272,9 @@
                 (click)="previous('scripts', pipeline().scriptQueue.length)"
               >
                 {{ 'process.files.previous' | t }}</button
-              ><span>{{ scriptPages.first }}–{{ scriptPages.last }} из {{ pipeline().scriptQueue.length }}</span
+              ><span
+                >{{ scriptPages.first }}–{{ scriptPages.last }} из
+                {{ pipeline().scriptQueue.length }}</span
               ><button
                 type="button"
                 [disabled]="!scriptPages.hasNext"
@@ -299,8 +317,10 @@
                 </header>
                 @if (worker.assignment; as script) {
                   <div [class]="'process-card process-tone--active ' + script.identity.className">
-                    <strong>{{ script.scriptCode || script.id }}</strong
-                    ><span>{{ script.memberName }}</span>
+                    <strong [title]="script.scriptCode || script.id">{{
+                      script.scriptCode || script.id
+                    }}</strong
+                    ><span [title]="script.memberName">{{ script.memberName }}</span>
                     @if (script.startedAt) {
                       <small>{{
                         'process.card.workingSince' | t: { time: formatTimestamp(script.startedAt) }
@@ -318,8 +338,10 @@
                       "
                       (click)="openFailure(problem, $event)"
                     >
-                      <strong>{{ script.scriptCode || script.id }}</strong
-                      ><span>{{ script.memberName }}</span
+                      <strong [title]="script.scriptCode || script.id">{{
+                        script.scriptCode || script.id
+                      }}</strong
+                      ><span [title]="script.memberName">{{ script.memberName }}</span
                       ><small>{{ 'process.card.errorDetails' | t }}</small>
                     </button>
                   }
@@ -336,7 +358,9 @@
                       (click)="previousWorkerFailures(worker)"
                     >
                       {{ 'process.files.previous' | t }}</button
-                    ><span>{{ failurePages.first }}–{{ failurePages.last }} из {{ worker.retainedFailures.length }}</span
+                    ><span
+                      >{{ failurePages.first }}–{{ failurePages.last }} из
+                      {{ worker.retainedFailures.length }}</span
                     ><button
                       type="button"
                       [disabled]="!failurePages.hasNext"
@@ -374,51 +398,56 @@
                 [class]="'process-file-group ' + group.identity.className"
                 [attr.data-testid]="'process-file-group-' + group.id"
               >
-                <header>
-                  <div>
-                    <strong>{{ group.scriptCode || group.scriptId }}</strong
-                    ><span>{{ group.memberName }}</span>
+                <div class="process-file-group__card">
+                  <header>
+                    <div>
+                      <strong [title]="group.scriptCode || group.scriptId">{{
+                        group.scriptCode || group.scriptId
+                      }}</strong
+                      ><span [title]="group.memberName">{{ group.memberName }}</span>
+                    </div>
+                    <span>{{
+                      'process.files.total' | t: { count: formatProcessCount(group.count) }
+                    }}</span>
+                  </header>
+                  <div class="process-file-stats">
+                    <span
+                      >{{ 'process.files.rows' | t }}:
+                      {{ formatProcessCount(group.totalRows) }}</span
+                    ><span
+                      >{{ 'process.files.size' | t }}:
+                      {{ formatProcessBytes(group.totalBytes) }}</span
+                    ><span
+                      >{{ 'process.files.ready' | t }}:
+                      {{ formatProcessCount(group.statusCounts.written) }}</span
+                    ><span
+                      >{{ 'process.files.errors' | t }}:
+                      {{ formatProcessCount(group.statusCounts.failed) }}</span
+                    >
                   </div>
-                  <span>{{
-                    'process.files.total' | t: { count: formatProcessCount(group.count) }
-                  }}</span>
-                </header>
-                <div class="process-file-stats">
-                  <span
-                    >{{ 'process.files.rows' | t }}: {{ formatProcessCount(group.totalRows) }}</span
-                  ><span
-                    >{{ 'process.files.size' | t }}:
-                    {{ formatProcessBytes(group.totalBytes) }}</span
-                  ><span
-                    >{{ 'process.files.ready' | t }}:
-                    {{ formatProcessCount(group.statusCounts.written) }}</span
-                  ><span
-                    >{{ 'process.files.errors' | t }}:
-                    {{ formatProcessCount(group.statusCounts.failed) }}</span
-                  >
-                </div>
-                <button
-                  type="button"
-                  class="process-link-button"
-                  [attr.aria-expanded]="expandedFileGroup() === group.id"
-                  (click)="toggleFileGroup(group)"
-                >
-                  {{
-                    (expandedFileGroup() === group.id
-                      ? 'process.files.collapse'
-                      : 'process.files.expand'
-                    ) | t: { count: formatProcessCount(group.count) }
-                  }}
-                </button>
-                @if (group.failure; as failure) {
                   <button
                     type="button"
-                    class="process-link-button process-link-button--danger"
-                    (click)="openFailure(failure, $event)"
+                    class="process-link-button"
+                    [attr.aria-expanded]="expandedFileGroup() === group.id"
+                    (click)="toggleFileGroup(group)"
                   >
-                    {{ 'process.card.errorDetails' | t }}
+                    {{
+                      (expandedFileGroup() === group.id
+                        ? 'process.files.collapse'
+                        : 'process.files.expand'
+                      ) | t: { count: formatProcessCount(group.count) }
+                    }}
                   </button>
-                }
+                  @if (group.failure; as failure) {
+                    <button
+                      type="button"
+                      class="process-link-button process-link-button--danger"
+                      (click)="openFailure(failure, $event)"
+                    >
+                      {{ 'process.card.errorDetails' | t }}
+                    </button>
+                  }
+                </div>
                 @if (expandedFileGroup() === group.id) {
                   @let groupPages = pageView(group.details, 'groupFiles');
                   <ul
@@ -457,8 +486,7 @@
                       (click)="previous('groupFiles', group.details.length)"
                     >
                       {{ 'process.files.previous' | t }}</button
-                    ><span
-                      >{{ groupPages.first }}–{{ groupPages.last }} из {{ group.count }}</span
+                    ><span>{{ groupPages.first }}–{{ groupPages.last }} из {{ group.count }}</span
                     ><button
                       type="button"
                       [disabled]="!groupPages.hasNext"
@@ -482,7 +510,9 @@
                 (click)="previous('groups', pipeline().fileGroups.length)"
               >
                 {{ 'process.files.previous' | t }}</button
-              ><span>{{ groupListPages.first }}–{{ groupListPages.last }} из {{ pipeline().fileGroups.length }}</span
+              ><span
+                >{{ groupListPages.first }}–{{ groupListPages.last }} из
+                {{ pipeline().fileGroups.length }}</span
               ><button
                 type="button"
                 [disabled]="!groupListPages.hasNext"
@@ -516,7 +546,9 @@
                   [attr.aria-expanded]="expandedSenderBatch() === batch.id"
                   (click)="toggleSenderBatch(batch)"
                 >
-                  <strong>{{ 'process.card.batch' | t: { id: batch.id } }}</strong
+                  <strong [title]="'process.card.batch' | t: { id: batch.id }">{{
+                    'process.card.batch' | t: { id: batch.id }
+                  }}</strong
                   ><span>{{ resolveSenderStatusLabel(batch.status) }}</span
                   ><small>{{ 'process.card.unsent' | t: { count: batch.unsentCount } }}</small>
                   @if (batch.startedAt || batch.queuedAt) {
@@ -563,7 +595,9 @@
                         (click)="previous('senderFiles', batch.senderFiles.length)"
                       >
                         {{ 'process.files.previous' | t }}</button
-                      ><span>{{ senderFilePages.first }}–{{ senderFilePages.last }} из {{ batch.senderFiles.length }}</span
+                      ><span
+                        >{{ senderFilePages.first }}–{{ senderFilePages.last }} из
+                        {{ batch.senderFiles.length }}</span
                       ><button
                         type="button"
                         [disabled]="!senderFilePages.hasNext"
@@ -588,7 +622,9 @@
                 (click)="previous('sender', senderBatches().length)"
               >
                 {{ 'process.files.previous' | t }}</button
-              ><span>{{ senderPages.first }}–{{ senderPages.last }} из {{ senderBatches().length }}</span
+              ><span
+                >{{ senderPages.first }}–{{ senderPages.last }} из
+                {{ senderBatches().length }}</span
               ><button
                 type="button"
                 [disabled]="!senderPages.hasNext"
@@ -631,11 +667,11 @@
                 <article [class]="'process-delivery-group ' + batch.identity.className">
                   <button
                     type="button"
-                    class="process-delivery-group__summary"
+                    class="process-card process-card--button process-tone--success process-delivery-group__summary"
                     [attr.aria-expanded]="expandedDeliveredBatch() === batch.id"
                     (click)="toggleDeliveredBatch(batch)"
                   >
-                    <strong>{{ batch.memberName }}</strong
+                    <strong [title]="batch.memberName">{{ batch.memberName }}</strong
                     ><span>{{ 'process.card.sent' | t: { count: batch.sentCount } }}</span
                     ><small>{{
                       'process.timeline.queued' | t: { time: formatTimestamp(batch.queuedAt) }
@@ -675,7 +711,9 @@
                           (click)="previous('deliveredFiles', batch.sentFiles.length)"
                         >
                           {{ 'process.files.previous' | t }}</button
-                        ><span>{{ deliveredFilePages.first }}–{{ deliveredFilePages.last }} из {{ batch.sentFiles.length }}</span
+                        ><span
+                          >{{ deliveredFilePages.first }}–{{ deliveredFilePages.last }} из
+                          {{ batch.sentFiles.length }}</span
                         ><button
                           type="button"
                           [disabled]="!deliveredFilePages.hasNext"
@@ -700,7 +738,9 @@
                   (click)="previous('delivered', pipeline().delivered.length)"
                 >
                   {{ 'process.files.previous' | t }}</button
-                ><span>{{ deliveredPages.first }}–{{ deliveredPages.last }} из {{ pipeline().delivered.length }}</span
+                ><span
+                  >{{ deliveredPages.first }}–{{ deliveredPages.last }} из
+                  {{ pipeline().delivered.length }}</span
                 ><button
                   type="button"
                   [disabled]="!deliveredPages.hasNext"

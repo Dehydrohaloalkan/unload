@@ -10,6 +10,9 @@
 }
 .process-run {
   min-width: 0;
+  container-type: inline-size;
+  --process-card-width: 16rem;
+  --process-card-height: 12rem;
   background: var(--surface);
   color: var(--ink);
 }
@@ -24,6 +27,11 @@
   margin: 0.15rem 0 0.8rem;
   color: var(--muted);
   font-size: 0.78rem;
+}
+.process-heading > div,
+.process-section-header > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .process-fullscreen,
 .process-link-button,
@@ -136,7 +144,7 @@
 }
 .process-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 12rem);
+  grid-template-columns: repeat(auto-fill, var(--process-card-width));
   align-items: start;
   justify-content: start;
   gap: 0.5rem;
@@ -145,14 +153,14 @@
   list-style: none;
 }
 .process-card,
-.process-batch {
+.process-file-group__card {
   box-sizing: border-box;
   display: grid;
   align-content: start;
   gap: 0.18rem;
-  width: 12rem;
+  width: min(100%, var(--process-card-width));
   min-width: 0;
-  min-height: 5.25rem;
+  height: var(--process-card-height);
   padding: 0.55rem 0.6rem 0.55rem 0.75rem;
   border: 1px solid #d2dae5;
   border-left: 3px solid var(--member-accent, #8ca0b8);
@@ -161,33 +169,14 @@
   color: var(--ink);
   text-align: left;
 }
-.process-batch {
-  height: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.process-batch > .process-card {
-  width: 12rem;
-}
+.process-batch,
 .process-delivery-group {
+  width: min(100%, var(--process-card-width));
   min-width: 0;
-  padding: 0.55rem 0.6rem;
-  border: 1px solid #b9d8c4;
-  border-left: 3px solid var(--member-accent, #8ca0b8);
-  border-radius: 0.5rem;
-  background: #f7fbf8;
 }
 .process-delivery-group__summary {
-  display: grid;
-  gap: 0.18rem;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
+  width: min(100%, var(--process-card-width));
   font: inherit;
-  text-align: left;
   cursor: pointer;
 }
 .process-delivery-group__summary:hover {
@@ -198,9 +187,17 @@
   outline-offset: 2px;
 }
 .process-card strong,
+.process-card small,
+.process-card span,
+.process-file-group__card strong,
+.process-file-group__card span,
 .process-file-row strong {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.process-card strong,
+.process-file-group__card strong,
+.process-file-row strong {
   font-size: 0.77rem;
   line-height: 1.35;
 }
@@ -215,6 +212,15 @@
   color: var(--muted);
   font-size: 0.65rem;
   font-variant-numeric: tabular-nums;
+}
+.process-card > strong,
+.process-card > span,
+.process-card > small,
+.process-file-group__card > header strong,
+.process-file-group__card > header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .process-card--button {
   appearance: none;
@@ -272,7 +278,7 @@
 }
 .process-worker-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(12rem, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
 }
 .process-worker {
@@ -301,27 +307,26 @@
 }
 .process-file-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fill, var(--process-card-width));
   gap: 0.5rem;
 }
 .process-file-group {
+  width: min(100%, var(--process-card-width));
   min-width: 0;
-  padding: 0.6rem;
-  border: 1px solid #d5dde7;
-  border-left: 3px solid var(--member-accent, #8ca0b8);
-  border-radius: 0.55rem;
-  background: #fff;
   contain: layout style;
 }
-.process-file-group > header {
+.process-file-group__card > header {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.72rem;
 }
-.process-file-group > header > div {
+.process-file-group__card > header > div {
   display: grid;
   min-width: 0;
+}
+.process-file-group__card > header > span {
+  flex: 0 0 auto;
 }
 .process-file-stats {
   display: flex;
@@ -330,6 +335,10 @@
   margin: 0.45rem 0;
   color: var(--muted);
   font-size: 0.68rem;
+}
+.process-file-stats > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .process-file-list {
   display: grid;
@@ -364,11 +373,16 @@
 }
 .process-pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.45rem;
   margin-top: 0.5rem;
   font-size: 0.7rem;
+}
+.process-pager > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .process-pager button {
   min-height: 2.25rem;
@@ -399,15 +413,17 @@
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   background: #fff;
 }
-@media (max-width: 900px) {
+@container (max-width: 66rem) {
+  .process-worker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 50rem) {
   .process-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .process-worker-grid {
-    grid-template-columns: repeat(2, minmax(12rem, 1fr));
-  }
 }
-@media (max-width: 560px) {
+@container (max-width: 34rem) {
   .process-summary,
   .process-worker-grid,
   .process-file-groups {
@@ -416,13 +432,12 @@
   .process-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .process-card,
-  .process-batch,
-  .process-batch > .process-card {
-    width: 100%;
-  }
   .process-heading {
     align-items: flex-start;
+  }
+  .process-heading,
+  .process-section-header {
+    flex-wrap: wrap;
   }
   .process-fullscreen {
     flex: 0 0 auto;

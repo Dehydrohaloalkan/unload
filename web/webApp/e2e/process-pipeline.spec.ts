@@ -25,9 +25,21 @@ test('keeps the process pipeline compact, bounded, accessible and fullscreen-cap
   await expect(page.getByTestId('process-worker-2')).toContainText('SCRIPT_RUNNING');
   await expect(pipeline).not.toContainText('→');
 
+  const cardSelectors = [
+    '[data-testid="process-zone-members"] .process-card',
+    '[data-testid="process-node-resolver"] .process-card',
+    '[data-testid="process-zone-scripts"] .process-card',
+    '[data-testid="process-worker-2"] .process-card',
+    '.process-file-group__card',
+    '[data-testid="process-node-sender"] .process-card',
+  ];
+  await checkCardSizes(page, cardSelectors);
+  await checkProcessBounds(page, 2);
+
   const fileGroup = page.locator('[data-testid^="process-file-group-"]').first();
   // The UI deliberately localizes large counts with a non-breaking space.
   await expect(fileGroup).toContainText(/Файлов:\s*1\s000/);
+  await expect(fileGroup.getByRole('button', { name: 'Показать причину ошибки' })).toBeVisible();
   await expect(fileGroup.locator('.process-file-card')).toHaveCount(0);
   await fileGroup.getByRole('button', { name: /Показать файлы/ }).click();
   await expect(fileGroup.locator('.process-file-card')).toHaveCount(20);
@@ -42,9 +54,12 @@ test('keeps the process pipeline compact, bounded, accessible and fullscreen-cap
 
   const delivered = page.getByTestId('process-zone-delivered');
   await delivered.getByRole('button', { name: 'Показать отправленные' }).click();
+  cardSelectors.push('[data-testid="process-zone-delivered"] .process-card');
+  await checkCardSizes(page, cardSelectors);
   await delivered.locator('.process-delivery-group__summary').first().click();
   await expect(delivered.locator('.process-dispatch-file')).toHaveCount(20);
   await expect(page.locator('.process-file-card, .process-dispatch-file')).toHaveCount(60);
+  await checkProcessBounds(page, 2);
 
   await fileGroup.getByRole('button', { name: 'Показать причину ошибки' }).click();
   const details = page.getByTestId('process-error-details');
@@ -68,18 +83,69 @@ test('keeps the process pipeline compact, bounded, accessible and fullscreen-cap
   await fullscreen.click();
   await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
 
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await checkProcessBounds(page, 2);
+  await checkCardSizes(page, cardSelectors);
+
   await page.setViewportSize({ width: 375, height: 900 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    ),
-  ).toBeLessThanOrEqual(1);
-  expect(
-    await page
-      .locator('.process-worker-grid')
-      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length),
-  ).toBe(1);
+  await checkProcessBounds(page, 1);
+  await checkCardSizes(page, cardSelectors);
 });
+
+async function checkCardSizes(page: import('@playwright/test').Page, selectors: string[]) {
+  const groups = await Promise.all(
+    selectors.map(async (selector) => {
+      const cards = page.locator(`${selector}:visible`);
+      await expect(cards.first(), `visible card for ${selector}`).toBeVisible();
+      expect(await cards.count(), `visible cards for ${selector}`).toBeGreaterThan(0);
+      const boxes = await cards.evaluateAll((elements) =>
+        elements.map((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        }),
+      );
+      return boxes.map((box) => ({ selector, ...box }));
+    }),
+  );
+  const boxes = groups.flat();
+  const reference = boxes.find((box) => box.selector === '.process-file-group__card')!;
+  for (const box of boxes) {
+    expect(Math.abs(box.width - reference.width), `width of ${box.selector}`).toBeLessThanOrEqual(
+      1,
+    );
+    expect(
+      Math.abs(box.height - reference.height),
+      `height of ${box.selector}`,
+    ).toBeLessThanOrEqual(1);
+  }
+  expect(reference.width).toBe(256);
+  expect(reference.height).toBe(192);
+}
+
+async function checkProcessBounds(page: import('@playwright/test').Page, workerColumns: number) {
+  const layout = await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>('[data-testid="process-root"]')!;
+    const workerGrid = root.querySelector<HTMLElement>('.process-worker-grid')!;
+    const cards = Array.from(
+      root.querySelectorAll<HTMLElement>('.process-card, .process-file-group__card'),
+    );
+    return {
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      rootOverflow: root.scrollWidth - root.clientWidth,
+      workerColumns: getComputedStyle(workerGrid).gridTemplateColumns.split(' ').length,
+      overflowingCards: cards
+        .filter(
+          (card) =>
+            card.scrollWidth > card.clientWidth + 1 || card.scrollHeight > card.clientHeight + 1,
+        )
+        .map((card) => card.outerHTML.slice(0, 160)),
+    };
+  });
+  expect(layout.documentOverflow).toBeLessThanOrEqual(1);
+  expect(layout.rootOverflow).toBeLessThanOrEqual(1);
+  expect(layout.workerColumns).toBe(workerColumns);
+  expect(layout.overflowingCards).toEqual([]);
+}
 
 function processSnapshot() {
   const timestamp = '2026-09-23T10:01:00Z';
@@ -92,7 +158,7 @@ function processSnapshot() {
         {
           id: `file-${number}`,
           parentScriptId: 'script-created',
-          memberName: 'Банк Файлы',
+          memberName: 'БанкФайлыОченьДлинноеНазваниеБезПробеловДляПроверкиКарточки',
           scriptCode: 'SCRIPT_CREATED',
           chunkNumber: number,
           sequence: 100 + number,
@@ -216,7 +282,7 @@ function processSnapshot() {
       },
       delivered: {
         batchId: 'batch-delivered',
-        memberName: 'Банк Готов',
+        memberName: 'БанкГотовОченьДлинноеНазваниеБезПробеловДляПроверкиКарточки',
         status: 2,
         sequence: 501,
         queuedAt: timestamp,
