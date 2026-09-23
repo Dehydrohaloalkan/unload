@@ -65,7 +65,6 @@ export interface ProcessFileCard {
   updatedAt: string | null;
   completedAt: string | null;
   workerId: number | null;
-  writeElapsedMs: number | null;
   failure: ProcessFailureDetail | null;
   identity: ProcessMemberIdentity;
 }
@@ -85,9 +84,6 @@ export interface ProcessScriptCard {
   startedAt: string | null;
   updatedAt: string | null;
   completedAt: string | null;
-  queueWaitMs: number | null;
-  stageElapsedMs: number | null;
-  files: readonly ProcessFileCard[];
   failure: ProcessFailureDetail | null;
   identity: ProcessMemberIdentity;
 }
@@ -103,9 +99,26 @@ export interface ProcessBatchCard {
   updatedAt: string | null;
   fileCount: number | null;
   sentCount: number;
-  queueWaitMs: number | null;
-  sendElapsedMs: number | null;
+  unsentCount: number;
+  /** True for snapshots written before plannedFiles became part of the contract. */
+  hasLegacyUnsentAmbiguity: boolean;
+  senderFiles: readonly ProcessDispatchFile[];
+  sentFiles: readonly ProcessDispatchFile[];
+  totalElapsedMs: number | null;
   failure: ProcessFailureDetail | null;
+  identity: ProcessMemberIdentity;
+}
+
+export interface ProcessDispatchFile {
+  id: string;
+  batchId: string;
+  memberName: string;
+  fileName: string;
+  path: string;
+  queuedAt: string | null;
+  sentAt: string | null;
+  estimatedBytes: number | null;
+  actualBytes: number | null;
   identity: ProcessMemberIdentity;
 }
 
@@ -126,10 +139,7 @@ export interface ProcessFileGroup {
   totalRows: number;
   totalBytes: number;
   statusCounts: ProcessFileStatusCounts;
-  /** Bounded initial detail window. Use getProcessFileGroupPage for subsequent chunks. */
-  initialDetails: readonly ProcessFileCard[];
   details: readonly ProcessFileCard[];
-  detailPageSize: number;
   failure: ProcessFailureDetail | null;
   identity: ProcessMemberIdentity;
 }
@@ -152,39 +162,10 @@ export interface ProcessPipelineViewModel {
   scriptQueue: readonly ProcessScriptCard[];
   workers: readonly ProcessWorkerSlot[];
   fileGroups: readonly ProcessFileGroup[];
+  /** One globally ordered list of batches that still require delivery confirmation. */
+  senderBatches: readonly ProcessBatchCard[];
   senderQueue: readonly ProcessBatchCard[];
   senderInProgress: readonly ProcessBatchCard[];
   delivered: readonly ProcessBatchCard[];
-  completedMembers: readonly ProcessMemberCard[];
-  completedScripts: readonly ProcessScriptCard[];
   failures: readonly ProcessFailureDetail[];
-}
-
-export interface ProcessActiveItemSummary {
-  count: number;
-  scriptCount: number;
-  fileCount: number;
-  batchCount: number;
-  oldestAt: string | null;
-  oldestElapsedMs: number | null;
-}
-
-/** Compatibility model for the existing four-column template until its vertical replacement lands. */
-export interface ProcessMemberRow {
-  key: string;
-  name: string;
-  status: MemberRunLifecycleStatus | null;
-  memberFailure: ProcessFailureDetail | null;
-  updatedAt: string | null;
-  scripts: ProcessScriptCard[];
-  orphanFiles: ProcessFileCard[];
-  files: ReadonlyArray<{ file: ProcessFileCard; parentScriptCode: string | null }>;
-  fileTotalCount: number;
-  fileStatusCounts: ProcessFileStatusCounts;
-  fileFailureCount: number;
-  fileFailure: ProcessFailureDetail | null;
-  batches: ProcessBatchCard[];
-  activeItemSummary: ProcessActiveItemSummary;
-  oldestActiveAt: string | null;
-  identity: ProcessMemberIdentity;
 }

@@ -1,6 +1,7 @@
 import {
   FileRunStage,
   FileRunStatusInfo,
+  MemberRunLifecycleStatus,
   MemberRunStatusInfo,
   RunLifecycleStatus,
   RunStatusInfo,
@@ -10,542 +11,387 @@ import {
   SenderBatchStatusInfo,
 } from '../../app.models';
 import {
-  PROCESS_FILE_DETAIL_PAGE_SIZE,
-  buildProcessMemberRows,
+  PROCESS_PAGE_SIZE,
+  PROCESS_WORKER_COUNT,
   buildProcessPipeline,
-  getProcessFileGroupPage,
   resolveProcessMemberIdentity,
 } from './process-projection.util';
 
-const NOW = new Date('2026-09-21T12:00:00.000Z');
+const QUEUED_AT = '2026-09-23T10:00:00Z';
+const SENT_AT = '2026-09-23T10:02:00Z';
 
-describe('process projection', () => {
-  it('projects cards into pipeline zones and always exposes exactly four worker slots', () => {
-    const waiting = scriptStatus(
-      'WAITING',
-      'Queue member',
-      'waiting',
-      ScriptRunStage.AwaitingWorker,
-    );
-    waiting.workOrder = 2;
-    const running = scriptStatus('RUNNING', 'Worker member', 'running', ScriptRunStage.Running);
-    running.workerId = 3;
-    const ready = batchStatus('Sender member', 'ready');
-    const sending = batchStatus('Sending member', 'sending');
-    sending.status = SenderBatchStatus.InProgress;
-    sending.startedAt = '2026-09-21T11:01:00Z';
-    const delivered = batchStatus('Delivered member', 'delivered');
-    delivered.status = SenderBatchStatus.Completed;
+describe('process pipeline projection', () => {
+  it('projects only active and failed work into the physical pipeline and exposes four workers', () => {
     const pipeline = buildProcessPipeline(
-      run({
+      snapshot({
         memberStatuses: {
-          input: {
-            ...memberStatus('Input member', '2026-09-21T11:00:00Z'),
-            status: 0,
-            queuePosition: 1,
-          },
-          resolver: memberStatus('Resolver member', '2026-09-21T11:00:00Z'),
-          completed: { ...memberStatus('Completed member', '2026-09-21T11:00:00Z'), status: 2 },
+          input: member('Input', MemberRunLifecycleStatus.Pending, 1),
+          resolver: member('Resolver', MemberRunLifecycleStatus.Running, 2),
+          completed: member('Completed ghost', MemberRunLifecycleStatus.Completed, 3),
         },
-        scriptStatuses: { waiting, running },
-        fileStatuses: { file: fileStatus('File member', 'running', 'file') },
-        senderBatches: { ready, sending, delivered },
+        scriptStatuses: {
+          queued: script('queued', 'Queued', ScriptRunStage.AwaitingWorker, null, 1),
+          running: script('running', 'Running', ScriptRunStage.Running, 3, 2),
+          completed: script('completed', 'Completed ghost', ScriptRunStage.Completed, 1, 3),
+        },
         workerStatuses: {
           three: {
             workerId: 3,
             state: 'Running',
-            memberName: 'Worker member',
+            memberName: 'Running',
             scriptCode: 'RUNNING',
-            updatedAt: '2026-09-21T11:00:00Z',
+            sequence: 4,
+            updatedAt: QUEUED_AT,
           },
         },
       }),
     );
 
-    expect(pipeline.memberInput.map((item) => item.name)).toEqual(['Input member']);
-    expect(pipeline.resolver.map((item) => item.name)).toEqual(['Resolver member']);
-    expect(pipeline.scriptQueue.map((item) => item.id)).toEqual(['waiting']);
-    expect(pipeline.workers).toHaveLength(4);
+    expect(pipeline.memberInput.map((item) => item.name)).toEqual(['Input']);
+    expect(pipeline.resolver.map((item) => item.name)).toEqual(['Resolver']);
+    expect(pipeline.scriptQueue.map((item) => item.id)).toEqual(['queued']);
+    expect(pipeline.workers).toHaveLength(PROCESS_WORKER_COUNT);
     expect(pipeline.workers[2].assignment?.id).toBe('running');
-    expect(pipeline.fileGroups).toHaveLength(1);
-    expect(pipeline.senderQueue.map((item) => item.id)).toEqual(['ready']);
-    expect(pipeline.senderInProgress.map((item) => item.id)).toEqual(['sending']);
-    expect(pipeline.delivered.map((item) => item.id)).toEqual(['delivered']);
-    expect(pipeline.completedMembers.map((item) => item.name)).toEqual(['Completed member']);
+    expect(pipeline.members.some((item) => item.name === 'Completed ghost')).toBe(true);
+    expect(pipeline.memberInput.some((item) => item.name === 'Completed ghost')).toBe(false);
+    expect(pipeline.scriptQueue.some((item) => item.id === 'completed')).toBe(false);
+    expect(pipeline.workers.some((worker) => worker.assignment?.id === 'completed')).toBe(false);
   });
 
-  it('uses queue/work/sequence order before mutable timestamps', () => {
-    const lateFirst = memberStatus('Member late timestamp', '2026-09-21T12:00:00Z');
-    lateFirst.status = 0;
-    lateFirst.queuePosition = 1;
-    lateFirst.sequence = 20;
-    const earlySecond = memberStatus('Member early timestamp', '2026-09-21T10:00:00Z');
-    earlySecond.status = 0;
-    earlySecond.queuePosition = 2;
-    earlySecond.sequence = 1;
-    const scriptSecond = scriptStatus(
-      'SECOND',
-      'Member early timestamp',
-      'second',
-      ScriptRunStage.AwaitingWorker,
-    );
-    scriptSecond.workOrder = 2;
-    scriptSecond.sequence = 1;
-    scriptSecond.updatedAt = '2026-09-21T10:00:00Z';
-    const scriptFirst = scriptStatus(
-      'FIRST',
-      'Member late timestamp',
-      'first',
-      ScriptRunStage.AwaitingWorker,
-    );
-    scriptFirst.workOrder = 1;
-    scriptFirst.sequence = 50;
-    scriptFirst.updatedAt = '2026-09-21T12:00:00Z';
-
-    const pipeline = buildProcessPipeline(
-      run({
-        memberStatuses: { lateFirst, earlySecond },
-        scriptStatuses: { scriptSecond, scriptFirst },
-      }),
-    );
-
-    expect(pipeline.memberInput.map((item) => item.queuePosition)).toEqual([1, 2]);
-    expect(pipeline.scriptQueue.map((item) => item.workOrder)).toEqual([1, 2]);
-  });
-
-  it('groups 100 files without putting all details into the default render window', () => {
+  it('moves 1000 canonical files through created, sender and delivered with no file in two zones', () => {
     const fileStatuses = Object.fromEntries(
-      Array.from({ length: 100 }, (_, index) => {
-        const file = fileStatus(
-          'Big member',
-          'script-1',
-          `file-${index + 1}`,
-          index + 1,
-          FileRunStage.QueuedForWrite,
-        );
-        file.rows = 10;
-        file.estimatedBytes = 20;
-        file.sequence = index + 1;
-        return [file.id, file];
+      Array.from({ length: 1_000 }, (_, index) => {
+        const number = index + 1;
+        return [`file-${number}`, file(`file-${number}`, `/safe/file-${number}.txt`, number)];
       }),
     );
-    const pipeline = buildProcessPipeline(run({ fileStatuses }));
-    const group = pipeline.fileGroups[0];
+    const plannedFiles = Array.from({ length: 1_000 }, (_, index) => {
+      const number = index + 1;
+      return {
+        fileName: `canonical-${number}.txt`,
+        filePath: `/safe/file-${number}.txt`,
+        queuedAt: QUEUED_AT,
+        sentAt: number <= 400 ? SENT_AT : null,
+        estimatedBytes: 100,
+        actualBytes: number <= 400 ? 90 : null,
+      };
+    });
+    const pipeline = buildProcessPipeline(
+      snapshot({
+        fileStatuses,
+        senderBatches: { batch: batch('batch-1', SenderBatchStatus.InProgress, plannedFiles) },
+      }),
+    );
 
-    expect(group.count).toBe(100);
-    expect(group.totalRows).toBe(1_000);
-    expect(group.totalBytes).toBe(2_000);
-    expect(group.statusCounts.queued).toBe(100);
-    expect(group.initialDetails).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
-    expect(getProcessFileGroupPage(group, 20)).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
-    expect(getProcessFileGroupPage(group, 95)).toHaveLength(5);
-    const rows = buildProcessMemberRows(run({ fileStatuses }), NOW);
-    expect(rows[0].files).toHaveLength(PROCESS_FILE_DETAIL_PAGE_SIZE);
-    expect(rows[0].activeItemSummary.fileCount).toBe(100);
+    expect(pipeline.fileGroups).toHaveLength(0);
+    expect(pipeline.senderInProgress[0].senderFiles).toHaveLength(600);
+    expect(pipeline.delivered[0].sentFiles).toHaveLength(400);
+    expect(pipeline.delivered[0].sentFiles[0].fileName).toBe('canonical-1.txt');
+    const created = new Set(
+      pipeline.fileGroups.flatMap((group) => group.details.map((item) => item.path)),
+    );
+    const sending = new Set(
+      pipeline.senderInProgress.flatMap((item) => item.senderFiles.map((entry) => entry.path)),
+    );
+    const delivered = new Set(
+      pipeline.delivered.flatMap((item) => item.sentFiles.map((entry) => entry.path)),
+    );
+    expect([...created].filter((path) => sending.has(path!) || delivered.has(path!))).toEqual([]);
+    expect([...sending].filter((path) => delivered.has(path))).toEqual([]);
   });
 
-  it('keeps resolver, script, file and sender failures in their physical zones with safe references', () => {
-    const resolver = memberStatus('Resolver', '2026-09-21T11:00:00Z');
-    resolver.status = 3;
-    resolver.failure = failure('member', 'resolver', 'resolver-failed');
-    const script = scriptStatus('SCRIPT', 'Script member', 'script', ScriptRunStage.Failed);
-    script.workerId = 2;
-    script.startedAt = '2026-09-21T11:00:00Z';
-    script.failure = failure('script', 'query', 'query-failed');
-    const file = fileStatus('File member', 'parent', 'file', 1, FileRunStage.Failed);
-    file.failure = failure('file', 'writer', 'write-failed');
-    const batch = batchStatus('Sender member', 'batch');
-    batch.status = SenderBatchStatus.Failed;
-    batch.startedAt = '2026-09-21T11:00:00Z';
-    batch.failure = failure('batch', 'sender', 'send-failed');
-
+  it('keeps failures at resolver, worker, created-file and sender stages', () => {
+    const failedMember = member('Resolver failed', MemberRunLifecycleStatus.Failed, 1);
+    failedMember.failure = failure('member', 'resolver', 'resolver-failed');
+    const failedScript = script('query-failed', 'Worker failed', ScriptRunStage.Failed, 2, 2);
+    failedScript.startedAt = QUEUED_AT;
+    failedScript.failure = failure('script', 'query', 'query-failed');
+    const failedFile = file('file-failed', '/safe/file-failed.txt', 3, FileRunStage.Failed);
+    failedFile.failure = failure('file', 'writer', 'disk-full');
+    const failedBatch = batch('batch-failed', SenderBatchStatus.Failed, [
+      planned('/safe/send-failed.txt', null),
+    ]);
+    failedBatch.startedAt = QUEUED_AT;
+    failedBatch.failure = failure('batch', 'sender', 'connection-lost');
     const pipeline = buildProcessPipeline(
-      run({
-        memberStatuses: { resolver },
-        scriptStatuses: { script },
-        fileStatuses: { file },
-        senderBatches: { batch },
+      snapshot({
+        memberStatuses: { failedMember },
+        scriptStatuses: { failedScript },
+        fileStatuses: { failedFile },
+        senderBatches: { failedBatch },
       }),
     );
 
     expect(pipeline.resolver[0].failure?.code).toBe('resolver-failed');
-    expect(pipeline.workers[1].retainedFailures[0].failure?.reference.type).toBe('script');
-    expect(pipeline.fileGroups[0].failure?.reference.id).toBe('file-id');
-    expect(pipeline.senderInProgress[0].failure?.stage).toBe('sender');
+    expect(pipeline.workers[1].retainedFailures[0].failure?.code).toBe('query-failed');
+    expect(pipeline.fileGroups[0].failure?.code).toBe('disk-full');
+    expect(pipeline.senderInProgress[0].failure?.code).toBe('connection-lost');
     expect(pipeline.failures.map((item) => item.code)).toEqual([
       'resolver-failed',
       'query-failed',
-      'write-failed',
-      'send-failed',
+      'disk-full',
+      'connection-lost',
     ]);
   });
 
-  it('uses deterministic palette tokens and never mutates the input snapshot', () => {
-    const snapshot = run({
+  it('keeps 1000 created files grouped with a bounded 20-file detail page', () => {
+    const fileStatuses = Object.fromEntries(
+      Array.from({ length: 1_000 }, (_, index) => {
+        const number = index + 1;
+        return [`file-${number}`, file(`file-${number}`, `/safe/file-${number}.txt`, number)];
+      }),
+    );
+    const group = buildProcessPipeline(snapshot({ fileStatuses })).fileGroups[0];
+
+    expect(group.count).toBe(1_000);
+    expect(group.details.slice(0, PROCESS_PAGE_SIZE)).toHaveLength(20);
+    expect(group.details.slice(980, 980 + PROCESS_PAGE_SIZE)).toHaveLength(20);
+    expect(group.details.slice(995, 995 + PROCESS_PAGE_SIZE)).toHaveLength(5);
+  });
+
+  it('uses confirmed sent files for legacy snapshots without inventing unsent file cards', () => {
+    const legacy = batch('legacy-batch', SenderBatchStatus.InProgress, null);
+    legacy.fileCount = 3;
+    legacy.sentFiles = [{ filePath: '/legacy/RY_RKH_2_RO', sentAt: SENT_AT }];
+    const pipeline = buildProcessPipeline(snapshot({ senderBatches: { legacy } }));
+
+    expect(pipeline.senderInProgress[0].senderFiles).toEqual([]);
+    expect(pipeline.senderInProgress[0].hasLegacyUnsentAmbiguity).toBe(true);
+    expect(pipeline.delivered[0].sentFiles.map((item) => item.fileName)).toEqual(['RY_RKH_2_RO']);
+    expect(pipeline.delivered[0].sentFiles).toHaveLength(1);
+  });
+
+  it('enriches a legacy sent path from its canonical file without making a second card', () => {
+    const legacy = batch('legacy-batch', SenderBatchStatus.Completed, null);
+    legacy.sentFiles = [{ filePath: '/legacy/RY_RKH_2_RO', sentAt: SENT_AT }];
+    const canonical = file('friendly', '/legacy/RY_RKH_2_RO', 1);
+    canonical.fileName = 'Мембер 1 (YFI.OF)';
+    canonical.memberName = 'Friendly member';
+    canonical.estimatedBytes = 512;
+    const pipeline = buildProcessPipeline(
+      snapshot({ fileStatuses: { canonical }, senderBatches: { legacy } }),
+    );
+
+    expect(pipeline.fileGroups).toHaveLength(0);
+    expect(pipeline.delivered[0].sentFiles[0]).toMatchObject({
+      fileName: 'Мембер 1 (YFI.OF)',
+      memberName: 'Friendly member',
+      estimatedBytes: 512,
+    });
+  });
+
+  it('keeps a mixed batch as one sender item and globally orders sender work by sequence', () => {
+    const ready = batch('ready-late', SenderBatchStatus.Ready, [planned('/ready.txt', null)]);
+    ready.sequence = 20;
+    const partial = batch('partial-first', SenderBatchStatus.Completed, [
+      planned('/partial/sent.txt', SENT_AT),
+      planned('/partial/waiting.txt', null),
+    ]);
+    partial.sequence = 10;
+    const skipped = batch('skipped', SenderBatchStatus.SkippedByRequest, null);
+    skipped.fileCount = 10;
+    const pipeline = buildProcessPipeline(
+      snapshot({ senderBatches: { ready, partial, skipped } }),
+    );
+
+    expect(pipeline.senderBatches.map((item) => item.id)).toEqual(['partial-first', 'ready-late']);
+    expect(pipeline.senderBatches[0]).toMatchObject({ unsentCount: 1, sentCount: 1 });
+    expect(pipeline.delivered[0].sentFiles.map((item) => item.path)).toEqual(['/partial/sent.txt']);
+    expect(pipeline.senderBatches[0].senderFiles.map((item) => item.path)).toEqual([
+      '/partial/waiting.txt',
+    ]);
+  });
+
+  it('uses stable explicit order, deterministic identities and never mutates a snapshot', () => {
+    const input = snapshot({
       memberStatuses: {
-        bank: { ...memberStatus('Bank A', '2026-09-21T11:00:00Z'), queuePosition: 1 },
+        second: member('Member 2', MemberRunLifecycleStatus.Pending, 2),
+        first: member('Member 1', MemberRunLifecycleStatus.Pending, 1),
       },
-      scriptStatuses: { script: scriptStatus('SCRIPT', 'Bank A') },
-      fileStatuses: { file: fileStatus('Bank A', 'script', 'file') },
+      scriptStatuses: {
+        second: script('second', 'Member 2', ScriptRunStage.AwaitingWorker, null, 2),
+        first: script('first', 'Member 1', ScriptRunStage.AwaitingWorker, null, 1),
+      },
     });
-    const before = structuredClone(snapshot);
-    const first = resolveProcessMemberIdentity('Bank A');
-    const sameCaseInsensitive = resolveProcessMemberIdentity(' bank a ');
+    const before = structuredClone(input);
+    const pipeline = buildProcessPipeline(input);
 
-    buildProcessPipeline(snapshot);
-
-    expect(first).toEqual(sameCaseInsensitive);
-    expect(first.index).toBeGreaterThanOrEqual(0);
-    expect(first.index).toBeLessThan(8);
-    expect(first.className).toMatch(/^process-member-accent--[0-7]$/);
-    expect(snapshot).toEqual(before);
+    expect(pipeline.memberInput.map((item) => item.queuePosition)).toEqual([1, 2]);
+    expect(pipeline.scriptQueue.map((item) => item.workOrder)).toEqual([1, 2]);
+    expect(resolveProcessMemberIdentity(' Member 1 ')).toEqual(
+      resolveProcessMemberIdentity('member 1'),
+    );
+    expect(input).toEqual(before);
   });
 
-  it('unions member names case-insensitively and keeps one stable row per member', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        memberStatuses: {
-          first: memberStatus('Bank A', '2026-09-21T11:00:00Z'),
-          second: memberStatus('bank a', '2026-09-21T11:01:00Z'),
-        },
-        scriptStatuses: { script: scriptStatus('SCRIPT-1', 'BANK A') },
-        fileStatuses: { file: fileStatus('Bank B', 'missing-script', 'file') },
-        senderBatches: { batch: batchStatus('bank c', 'batch-1') },
-      }),
-      NOW,
+  it('assigns a requeued path to only the latest dispatch owner', () => {
+    const first = batch('first', SenderBatchStatus.InProgress, [planned('/safe/same.txt', null)]);
+    first.sequence = 1;
+    const second = batch('second', SenderBatchStatus.Completed, [
+      planned('/safe/same.txt', SENT_AT),
+    ]);
+    second.sequence = 2;
+    const pipeline = buildProcessPipeline(snapshot({ senderBatches: { first, second } }));
+
+    expect(pipeline.senderInProgress).toEqual([]);
+    expect(pipeline.delivered.flatMap((item) => item.sentFiles).map((item) => item.path)).toEqual([
+      '/safe/same.txt',
+    ]);
+  });
+
+  it('keeps a newer pending requeue in sender even when an older batch already sent the path', () => {
+    const olderSent = batch('older-sent', SenderBatchStatus.Completed, [
+      planned('/safe/requeued.txt', SENT_AT),
+    ]);
+    olderSent.sequence = 1;
+    const newerPending = batch('newer-pending', SenderBatchStatus.Ready, [
+      planned('/safe/requeued.txt', null),
+    ]);
+    newerPending.sequence = 2;
+    const pipeline = buildProcessPipeline(snapshot({ senderBatches: { olderSent, newerPending } }));
+
+    expect(pipeline.senderBatches.map((item) => item.id)).toEqual(['newer-pending']);
+    expect(pipeline.senderBatches[0].senderFiles.map((item) => item.path)).toEqual([
+      '/safe/requeued.txt',
+    ]);
+    expect(pipeline.delivered).toEqual([]);
+  });
+
+  it('uses the newer batch timestamp when the requeued batch has no sequence', () => {
+    const olderSent = batch('older-sent', SenderBatchStatus.Completed, [
+      planned('/safe/legacy-requeue.txt', SENT_AT),
+    ]);
+    olderSent.sequence = 1;
+    const newerPending = {
+      ...batch('newer-pending', SenderBatchStatus.Ready, [
+        planned('/safe/legacy-requeue.txt', null),
+      ]),
+      sequence: null,
+      updatedAt: '2026-09-23T10:03:00Z',
+    };
+    const pipeline = buildProcessPipeline(
+      snapshot({ senderBatches: { olderSent, newerPending } }),
     );
 
-    expect(rows.map((row) => row.key)).toEqual(['bank a', 'bank b', 'bank c']);
-    expect(rows[0].name).toBe('bank a');
-    expect(rows[0].status).toBe(1);
-  });
-
-  it('attaches files to their script and exposes files without a parent as orphans', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: { script: scriptStatus('SCRIPT-1', 'Bank A') },
-        fileStatuses: {
-          child: fileStatus('Bank A', 'script-1', 'file-1'),
-          orphan: fileStatus('Bank A', 'missing-script', 'file-2'),
-        },
-      }),
-      NOW,
-    );
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0].scripts[0].files.map((file) => file.id)).toEqual(['file-1']);
-    expect(rows[0].orphanFiles.map((file) => file.id)).toEqual(['file-2']);
-  });
-
-  it('accepts empty and legacy-null maps without inventing cards', () => {
-    expect(buildProcessMemberRows(null, NOW)).toEqual([]);
-    expect(buildProcessMemberRows(undefined, NOW)).toEqual([]);
-    expect(
-      buildProcessMemberRows(
-        run({
-          memberStatuses: null,
-          scriptStatuses: null,
-          fileStatuses: null,
-          senderBatches: null,
-        }),
-        NOW,
-      ),
-    ).toEqual([]);
-  });
-
-  it('sorts rows, scripts, files and batches deterministically with numeric-friendly names', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: {
-          z: scriptStatus('SCRIPT 10', 'Member 1', 'script-z'),
-          a: scriptStatus('SCRIPT 2', 'Member 1', 'script-a'),
-        },
-        fileStatuses: {
-          f10: fileStatus('Member 1', 'script-a', 'file-10', 10),
-          f2: fileStatus('Member 1', 'script-a', 'file-2', 2),
-        },
-        senderBatches: {
-          late: batchStatus('Member 1', 'batch-2', '2026-09-21T11:30:00Z'),
-          early: batchStatus('Member 1', 'batch-1', '2026-09-21T11:00:00Z'),
-        },
-      }),
-      NOW,
-    );
-
-    expect(rows.map((row) => row.name)).toEqual(['Member 1']);
-    expect(rows[0].scripts.map((script) => script.scriptCode)).toEqual(['SCRIPT 2', 'SCRIPT 10']);
-    expect(rows[0].scripts[0].files.map((file) => file.chunk)).toEqual([2, 10]);
-    expect(rows[0].batches.map((batch) => batch.id)).toEqual(['batch-1', 'batch-2']);
-  });
-
-  it('computes active and terminal durations from the explicit now', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: {
-          waiting: scriptStatus(
-            'WAITING',
-            'Bank A',
-            'waiting',
-            ScriptRunStage.AwaitingWorker,
-            '2026-09-21T11:00:00Z',
-          ),
-          done: scriptStatus(
-            'DONE',
-            'Bank A',
-            'done',
-            ScriptRunStage.Completed,
-            '2026-09-21T10:00:00Z',
-            '2026-09-21T11:45:00Z',
-            '2026-09-21T11:45:00Z',
-            '2026-09-21T11:45:00Z',
-            '2026-09-21T10:30:00Z',
-          ),
-        },
-        fileStatuses: {
-          active: fileStatus(
-            'Bank A',
-            'waiting',
-            'active-file',
-            1,
-            FileRunStage.QueuedForWrite,
-            '2026-09-21T11:30:00Z',
-          ),
-        },
-      }),
-      NOW,
-    );
-
-    const waiting = rows[0].scripts.find((script) => script.id === 'waiting');
-    const done = rows[0].scripts.find((script) => script.id === 'done');
-    expect(waiting?.queueWaitMs).toBe(3_600_000);
-    expect(waiting?.stageElapsedMs).toBe(3_600_000);
-    expect(done?.queueWaitMs).toBe(1_800_000);
-    expect(done?.stageElapsedMs).toBe(4_500_000);
-    expect(rows[0].activeItemSummary.count).toBe(2);
-    expect(rows[0].oldestActiveAt).toBe('2026-09-21T11:00:00Z');
-  });
-
-  it('keeps queue wait for a terminal script that never started', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: {
-          failed: scriptStatus(
-            'FAILED',
-            'Bank A',
-            'failed',
-            ScriptRunStage.Failed,
-            '2026-09-21T10:00:00Z',
-            '2026-09-21T10:00:00Z',
-            '2026-09-21T11:30:00Z',
-          ),
-        },
-      }),
-      NOW,
-    );
-
-    expect(rows[0].scripts[0].queueWaitMs).toBe(5_400_000);
-  });
-
-  it('keeps queue wait for a terminal batch without a started timestamp', () => {
-    const failedBatch = batchStatus('Bank A', 'failed-batch', '2026-09-21T10:00:00Z');
-    failedBatch.status = SenderBatchStatus.Failed;
-    failedBatch.updatedAt = '2026-09-21T11:30:00Z';
-    const rows = buildProcessMemberRows(run({ senderBatches: { failed: failedBatch } }), NOW);
-
-    expect(rows[0].batches[0].queueWaitMs).toBe(5_400_000);
-  });
-
-  it('clamps out-of-order timestamps and returns null for invalid duration inputs', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: {
-          backwards: scriptStatus(
-            'BACKWARDS',
-            'Bank A',
-            'backwards',
-            ScriptRunStage.Completed,
-            'not-a-date',
-            '2026-09-21T11:30:00Z',
-            '2026-09-21T11:00:00Z',
-            '2026-09-21T10:00:00Z',
-          ),
-        },
-        fileStatuses: {
-          backwards: fileStatus(
-            'Bank A',
-            'backwards',
-            'file',
-            1,
-            FileRunStage.Written,
-            '2026-09-21T11:00:00Z',
-            '2026-09-21T10:00:00Z',
-          ),
-        },
-      }),
-      NOW,
-    );
-
-    expect(rows[0].scripts[0].queueWaitMs).toBeNull();
-    expect(rows[0].scripts[0].stageElapsedMs).toBe(0);
-    expect(rows[0].scripts[0].files[0].writeElapsedMs).toBe(0);
-  });
-
-  it('keeps multiple batches for one member and counts sent files safely', () => {
-    const rows = buildProcessMemberRows(
-      run({
-        senderBatches: {
-          first: batchStatus('Bank A', 'batch-1'),
-          second: batchStatus('Bank A', 'batch-2', '2026-09-21T11:00:00Z', 2),
-        },
-      }),
-      NOW,
-    );
-
-    expect(rows[0].batches).toHaveLength(2);
-    expect(rows[0].batches[1].sentCount).toBe(2);
-    expect(rows[0].activeItemSummary.batchCount).toBe(2);
-  });
-
-  it('does not treat unknown or null enum values as active and rejects whitespace numbers', () => {
-    const unknownBatch = batchStatus('Bank A', 'unknown-batch');
-    unknownBatch.status = 99;
-    const partialScript = scriptStatus('PARTIAL', 'Bank A', 'partial-script');
-    setLegacyField(partialScript, 'stage', null);
-    setLegacyField(partialScript, 'workerId', '   ');
-    setLegacyField(partialScript, 'records', '   ');
-    const partialFile = fileStatus('Bank A', 'partial-script', 'partial-file');
-    setLegacyField(partialFile, 'stage', null);
-    setLegacyField(partialFile, 'chunkNumber', '   ');
-    setLegacyField(partialFile, 'estimatedBytes', '   ');
-    const rows = buildProcessMemberRows(
-      run({
-        scriptStatuses: {
-          unknown: scriptStatus('UNKNOWN', 'Bank A', 'unknown-script', 99),
-          partial: partialScript,
-        },
-        fileStatuses: {
-          unknown: fileStatus('Bank A', 'unknown-script', 'unknown-file', 99, 99),
-          partial: partialFile,
-        },
-        senderBatches: { unknown: unknownBatch },
-      }),
-      NOW,
-    );
-
-    expect(rows[0].activeItemSummary).toMatchObject({
-      count: 0,
-      scriptCount: 0,
-      fileCount: 0,
-      batchCount: 0,
-    });
-    expect(rows[0].scripts.find((script) => script.id === 'partial-script')).toMatchObject({
-      workerId: null,
-      records: null,
-    });
-    expect(
-      rows[0].scripts
-        .find((script) => script.id === 'partial-script')
-        ?.files.find((file) => file.id === 'partial-file'),
-    ).toMatchObject({ chunk: null, bytes: null });
+    expect(pipeline.senderBatches.map((item) => item.id)).toEqual(['newer-pending']);
+    expect(pipeline.senderBatches[0].senderFiles.map((item) => item.path)).toEqual([
+      '/safe/legacy-requeue.txt',
+    ]);
+    expect(pipeline.delivered).toEqual([]);
   });
 });
 
-function run(overrides: Partial<RunStatusInfo>): RunStatusInfo {
+function snapshot(overrides: Partial<RunStatusInfo>): RunStatusInfo {
   return {
     correlationId: 'run-1',
     taskCode: 'run',
     status: RunLifecycleStatus.Running,
     targetCodes: [],
-    createdAt: '2026-09-21T10:00:00Z',
-    updatedAt: '2026-09-21T12:00:00Z',
+    createdAt: QUEUED_AT,
+    updatedAt: SENT_AT,
     ...overrides,
   };
 }
 
-function memberStatus(memberName: string, updatedAt: string): MemberRunStatusInfo {
-  return { memberName, status: 1, lastStep: null, message: null, updatedAt };
+function member(
+  name: string,
+  status: MemberRunLifecycleStatus,
+  queuePosition: number,
+): MemberRunStatusInfo {
+  return {
+    memberName: name,
+    status,
+    lastStep: null,
+    message: null,
+    queuePosition,
+    sequence: queuePosition,
+    updatedAt: QUEUED_AT,
+  };
 }
 
-function scriptStatus(
-  scriptCode: string,
+function script(
+  id: string,
   memberName: string,
-  id = scriptCode.toLowerCase(),
-  stage: ScriptRunStage = ScriptRunStage.Running,
-  discoveredAt = '2026-09-21T11:00:00Z',
-  stageEnteredAt = discoveredAt,
-  updatedAt = stageEnteredAt,
-  completedAt: string | null = null,
-  startedAt: string | null = stage === ScriptRunStage.Running || stage === ScriptRunStage.Completed
-    ? stageEnteredAt
-    : null,
+  stage: ScriptRunStage,
+  workerId: number | null,
+  workOrder: number,
 ): ScriptRunStatusInfo {
   return {
     id,
     memberName,
-    scriptCode,
+    scriptCode: id.toUpperCase(),
     stage,
-    discoveredAt,
-    stageEnteredAt,
-    updatedAt,
-    startedAt,
-    completedAt,
-    workerId: stage === ScriptRunStage.Running ? '2' : null,
-    records: '42',
+    workOrder,
+    sequence: workOrder,
+    discoveredAt: QUEUED_AT,
+    stageEnteredAt: QUEUED_AT,
+    startedAt: stage === ScriptRunStage.Running ? QUEUED_AT : null,
+    updatedAt: SENT_AT,
+    completedAt: stage === ScriptRunStage.Completed ? SENT_AT : null,
+    workerId,
+    records: 10,
   };
 }
 
-function fileStatus(
-  memberName: string,
-  parentScriptId: string,
+function file(
   id: string,
-  chunkNumber = 1,
+  filePath: string,
+  sequence: number,
   stage: FileRunStage = FileRunStage.Written,
-  queuedAt = '2026-09-21T11:00:00Z',
-  updatedAt = queuedAt,
 ): FileRunStatusInfo {
   return {
     id,
-    parentScriptId,
-    memberName,
-    scriptCode: parentScriptId,
-    chunkNumber,
+    parentScriptId: 'script-1',
+    memberName: 'Member 1',
+    scriptCode: 'SCRIPT_1',
+    chunkNumber: sequence,
+    sequence,
     stage,
-    createdAt: queuedAt,
-    queuedAt,
-    stageEnteredAt: queuedAt,
-    updatedAt,
-    completedAt: stage === FileRunStage.Written ? updatedAt : null,
-    workerId: '1',
-    rows: '10',
-    estimatedBytes: '20',
-    fileName: `${id}.txt`,
-    filePath: `/tmp/${id}.txt`,
+    createdAt: QUEUED_AT,
+    queuedAt: QUEUED_AT,
+    stageEnteredAt: QUEUED_AT,
+    updatedAt: SENT_AT,
+    completedAt: SENT_AT,
+    workerId: 1,
+    rows: 10,
+    estimatedBytes: 100,
+    fileName: `created-${sequence}.txt`,
+    filePath,
   };
 }
 
-function batchStatus(
-  memberName: string,
-  batchId: string,
-  queuedAt = '2026-09-21T11:00:00Z',
-  sentCount = 0,
+function batch(
+  id: string,
+  status: SenderBatchStatus,
+  plannedFiles: SenderBatchStatusInfo['plannedFiles'],
 ): SenderBatchStatusInfo {
+  const sentFiles =
+    plannedFiles
+      ?.filter((item) => item.sentAt)
+      .map((item) => ({ filePath: item.filePath, sentAt: item.sentAt! })) ?? [];
   return {
-    batchId,
-    memberName,
-    status: SenderBatchStatus.Ready,
-    updatedAt: queuedAt,
-    queuedAt,
-    startedAt: null,
-    fileCount: sentCount || 1,
-    sentFiles: Array.from({ length: sentCount }, (_, index) => ({
-      filePath: `/tmp/file-${index}.txt`,
-      sentAt: queuedAt,
-    })),
+    batchId: id,
+    memberName: 'Member 1',
+    status,
+    updatedAt: SENT_AT,
+    queuedAt: QUEUED_AT,
+    startedAt: status === SenderBatchStatus.Ready ? null : QUEUED_AT,
+    fileCount: plannedFiles?.length ?? null,
+    sequence: 1,
+    sentFiles,
+    plannedFiles,
   };
 }
 
-function setLegacyField(target: object, key: string, value: unknown): void {
-  Reflect.set(target, key, value);
+function planned(filePath: string, sentAt: string | null) {
+  return {
+    fileName: filePath.split('/').at(-1)!,
+    filePath,
+    queuedAt: QUEUED_AT,
+    sentAt,
+    estimatedBytes: 10,
+    actualBytes: sentAt ? 9 : null,
+  };
 }
 
 function failure(entityType: string, stage: string, code: string) {
@@ -554,8 +400,8 @@ function failure(entityType: string, stage: string, code: string) {
     entityId: `${entityType}-id`,
     stage,
     code,
-    message: `<unsafe>${code}</unsafe>`,
-    occurredAt: '2026-09-21T11:00:00Z',
+    message: `<unsafe> ${code}`,
+    occurredAt: SENT_AT,
     memberName: null,
     scriptCode: null,
     workerId: null,

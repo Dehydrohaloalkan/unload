@@ -61,6 +61,63 @@ public class SignalRContractTests
             propertyNames);
     }
 
+    [Theory]
+    [InlineData(RunnerStep.ChunkCreated)]
+    [InlineData(RunnerStep.FileWriteStarted)]
+    [InlineData(RunnerStep.FileWritten)]
+    public void High_frequency_file_events_are_not_published_as_individual_status_messages(RunnerStep step)
+    {
+        var @event = new RunnerEvent(DateTimeOffset.UtcNow, "run-1", step, "file lifecycle");
+
+        Assert.False(RunStatusHubContract.ShouldPublishStatusEvent(@event));
+    }
+
+    [Theory]
+    [InlineData(RunnerStep.ChunkCreated)]
+    [InlineData(RunnerStep.FileWriteStarted)]
+    [InlineData(RunnerStep.FileWritten)]
+    public void Failure_bearing_file_events_are_never_suppressed(RunnerStep step)
+    {
+        var @event = new RunnerEvent(
+            DateTimeOffset.UtcNow,
+            "run-1",
+            step,
+            "file lifecycle failed",
+            Failure: new RunnerFailureInfo(
+                "file_write",
+                "file",
+                "chunk-1",
+                null,
+                null,
+                null,
+                1,
+                "output/file.csv",
+                null,
+                "file_write_failed",
+                "Unable to write file.",
+                DateTimeOffset.UtcNow));
+
+        Assert.True(RunStatusHubContract.ShouldPublishStatusEvent(@event));
+    }
+
+    [Theory]
+    [InlineData(RunnerStep.RequestAccepted)]
+    [InlineData(RunnerStep.TargetsResolved)]
+    [InlineData(RunnerStep.ScriptDiscovered)]
+    [InlineData(RunnerStep.QueryStarted)]
+    [InlineData(RunnerStep.QueryCompleted)]
+    [InlineData(RunnerStep.ScriptCompleted)]
+    [InlineData(RunnerStep.GatewayBatchQueued)]
+    [InlineData(RunnerStep.PublishedToGateway)]
+    [InlineData(RunnerStep.Completed)]
+    [InlineData(RunnerStep.Failed)]
+    public void Meaningful_non_file_milestones_remain_status_messages(RunnerStep step)
+    {
+        var @event = new RunnerEvent(DateTimeOffset.UtcNow, "run-1", step, "milestone");
+
+        Assert.True(RunStatusHubContract.ShouldPublishStatusEvent(@event));
+    }
+
     private static void AssertPayloadType(string methodName, Type expectedType)
     {
         var method = typeof(RunStatusHubContract).GetMethod(methodName);

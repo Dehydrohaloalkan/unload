@@ -55,7 +55,10 @@ public class ExtraUnloadHostedService(
                 await foreach (var @event in _engine.RunAsync(request, runToken))
                 {
                     _runStateStore.ApplyEvent(@event);
-                    await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                    if (RunStatusHubContract.ShouldPublishStatusEvent(@event))
+                    {
+                        await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                    }
                     await PublishRunStateAsync(
                         @event.CorrelationId,
                         immediate: @event.Step == RunnerStep.Failed || @event.Failure is not null);

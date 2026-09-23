@@ -89,7 +89,7 @@ flowchart LR
 | `Unload.Core` | Содержит общие модели и интерфейсы: `RunRequest`, `RunnerEvent`, `ICatalogService`, `IDatabaseClient`, `IFileChunkWriter`, gateway-контракты | Не даёт инфраструктуре и движкам зависеть друг от друга напрямую |
 | `Unload.Catalog` / `JsonCatalogService` | Читает `configs/catalog.json`, связывает группы, мемберов, targets и SQL-файлы, отмечает большие скрипты | Все правила каталога и именования находятся в одном месте |
 | `Unload.DataBase` / `DatabaseClientFactory` | Создаёт независимый клиент БД для каждого worker и выполняет SQL | Изолирует конкретное подключение к БД от задач и движков |
-| `Unload.FileWriter` / `PipeSeparatedFileChunkWriter` | Записывает чанки, заголовки и строки с разделителем `|`; синхронизирует запись в один файл | Движок отвечает за процесс, writer — только за корректный формат и конкурентную запись |
+| `Unload.FileWriter` / `PipeSeparatedFileChunkWriter` | Записывает чанки, заголовки и строки с разделителем `\|`; синхронизирует запись в один файл | Движок отвечает за процесс, writer — только за корректный формат и конкурентную запись |
 | `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
 | `Unload.Store` / `RunStateStore` | Предоставляет публичные доменные операции и последовательно выполняет mutation вместе с persistence | Это серверный источник истины и небольшой фасад над правилами проекции |
 | `Unload.Store` / `RunStatePersistence` | Последовательно захватывает актуальный набор состояний и записывает snapshot через один writer | Конкурентные вызовы не могут сохранить устаревший snapshot после более нового |
@@ -585,7 +585,7 @@ Material отвечает за доступное поведение диало�
 | `history-selection.util.ts` | единые правила массового выбора file/member/script/bank/run/all и indeterminate state |
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
 | `process-projection.models.ts` | immutable `ProcessPipelineViewModel`: вход мемберов, resolver, очередь скриптов, четыре worker slots, группы файлов, sender/delivery и click-ready failures |
-| `process-projection.util.ts` | чистая clock-independent проекция `RunStatusInfo`; порядок задают `QueuePosition`/`WorkOrder`/`Sequence`, файлы агрегируются по member+script и выдаются bounded pages |
+| `process-projection.util.ts` | чистая clock-independent проекция `RunStatusInfo`; порядок задают `QueuePosition`/`WorkOrder`/`Sequence`, а authoritative `PlannedFiles` перемещает файл между created/sender/delivered без клонов |
 | `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
 | `ProcessRunViewComponent` | вертикальный responsive-конвейер main run, bounded раскрытие файлов и доступный failure dialog |
 
@@ -601,17 +601,29 @@ Failed entity остаётся в физической зоне сбоя: resolv
 восьми CSS-token классов, полученный из имени без случайных или inline-цветов; состояние всегда также
 передаётся текстом и не кодируется одним цветом.
 
-Файлы группируются по member+script с counts, rows, bytes и status breakdown. Группа свёрнута по
-умолчанию; пользователь переключает страницы по 20 карточек, поэтому DOM остаётся жёстко ограниченным
-при любом количестве файлов. Page state включает correlation ID и stable group ID: snapshot того же
-run сохраняет и при необходимости clamp-ит страницу, новый run сбрасывает её полностью.
-Статическая pipeline projection computed зависит только от server snapshot. Отдельный секундный clock меняет
-только отображаемые активные durations и freshness, не пересобирая массивы и группировки; `DestroyRef`
-очищает timer.
+Файлы группируются по member+script с counts, rows, bytes и status breakdown. Созданный файл исключается
+из этой зоны, как только его нормализованный путь появляется в authoritative `PlannedFiles`. Внутри
+batch несданные `PlannedFiles` образуют sender-зону, а записи с `SentAt` — delivered-зону; повторно
+поставленный путь принадлежит только одному, наиболее актуальному batch. Legacy snapshot без
+`PlannedFiles` не синтезирует неизвестные ожидающие файлы и показывает только подтверждённые `SentFiles`.
+
+Очереди member/resolver/script, группы файлов, sender batches и delivered-зона используют страницы по
+20 элементов; раскрытие файлов и список retained failures каждого worker также ограничены 20 строками.
+Группы, sender batches и delivered-зона свёрнуты по умолчанию, поэтому DOM остаётся ограниченным и для
+тысячи файлов или большого burst ошибок. При смене `correlationId` все раскрытия и страницы сбрасываются.
+Статическая pipeline projection computed зависит только от server snapshot; секундного UI timer нет.
+Активные карточки выводят timestamp «с ...», terminal batch — сохранённую итоговую временную цепочку.
+Компонент не использует blur, бесконечные анимации или сохранение скрытого tab DOM через
+`preserveContent`; длинные списки ограничены пагинацией, а тяжёлые секции изолированы CSS containment.
 
 Run-level failure берётся из `ProcessPipelineViewModel.failures` отдельно от scoped failures и виден
 даже при пустых entity collections. Failure dialog удерживает клавиатурный focus внутри себя, закрывается
-по Escape и возвращает focus на вызвавшую карточку.
+по Escape и возвращает focus на вызвавшую карточку. Контекст dialog условно включает member, script,
+worker, file path и chunk number из failure reference.
+
+Полноэкранный режим применяется к корневому элементу процесса через native Fullscreen API, а не к
+всему приложению. Кнопка имеет `aria-pressed`, состояние синхронизируется по `fullscreenchange`, а
+после выхода фокус возвращается на управляющую кнопку.
 
 ### 13.2. Bootstrap страницы
 
@@ -648,8 +660,10 @@ REST polling и обязательный refresh после reconnect. При ш
 send полный snapshot и рабочая запись удаляются из publisher. Чтобы запоздалый progress или повторный
 terminal не воскресили завершённый запуск, остаётся только correlation ID в FIFO tombstone-кэше максимум
 на 1024 запуска; при переполнении детерминированно вытесняется самый старый ID. Это ограничение касается только live SignalR-трафика:
-`RunStateStore`, REST-ответы и cadence persistence не throttling-уются. Лёгкое событие `status`
-(`RunnerEvent`) продолжает передаваться для каждого события main/extra движка.
+`RunStateStore`, REST-ответы и cadence persistence не throttling-уются. Высокочастотные milestones
+файлов (`ChunkCreated`, `FileWriteStarted`, `FileWritten`) доходят до UI через объединённый
+`run_status`; отдельный лёгкий `status` (`RunnerEvent`) сохраняет остальные редкие milestones,
+диагностику и ошибки.
 
 Если SignalR недоступен во время активной задачи, `RunStore` и `ExtraStore` включают HTTP polling статуса. После reconnect stores обновляют snapshot, чтобы добрать пропущенные события. Таким образом SignalR ускоряет отображение, но не является единственным способом восстановить состояние.
 

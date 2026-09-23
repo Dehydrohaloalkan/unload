@@ -12,8 +12,8 @@ import {
   SenderBatchStatusInfo,
 } from '../../app.models';
 import {
-  ProcessActiveItemSummary,
   ProcessBatchCard,
+  ProcessDispatchFile,
   ProcessEntityReference,
   ProcessEntityType,
   ProcessFailureDetail,
@@ -22,14 +22,13 @@ import {
   ProcessFileStatusCounts,
   ProcessMemberCard,
   ProcessMemberIdentity,
-  ProcessMemberRow,
   ProcessPipelineViewModel,
   ProcessScriptCard,
   ProcessWorkerSlot,
 } from './process-projection.models';
 
 export const PROCESS_WORKER_COUNT = 4;
-export const PROCESS_FILE_DETAIL_PAGE_SIZE = 20;
+export const PROCESS_PAGE_SIZE = 20;
 const MEMBER_IDENTITY_COUNT = 8;
 
 const EMPTY_PIPELINE: ProcessPipelineViewModel = Object.freeze({
@@ -41,11 +40,10 @@ const EMPTY_PIPELINE: ProcessPipelineViewModel = Object.freeze({
   scriptQueue: Object.freeze([]),
   workers: Object.freeze([]),
   fileGroups: Object.freeze([]),
+  senderBatches: Object.freeze([]),
   senderQueue: Object.freeze([]),
   senderInProgress: Object.freeze([]),
   delivered: Object.freeze([]),
-  completedMembers: Object.freeze([]),
-  completedScripts: Object.freeze([]),
   failures: Object.freeze([]),
 });
 
@@ -76,21 +74,26 @@ export function buildProcessPipeline(
   ).map(([mapKey, status]) => toFileCard(status, mapKey, identityFor));
   const batches = deduplicateStatuses(run.senderBatches, (status, mapKey) =>
     (cleanString(status.batchId) || mapKey).toLowerCase(),
-  ).map(([mapKey, status]) => toBatchCard(status, mapKey, identityFor));
+  ).map(([mapKey, status]) => toBatchCard(status, mapKey, identityFor, run.createdAt, files));
 
-  const filesByScript = groupBy(files, (file) => file.parentScriptId.toLowerCase());
-  const scriptsWithFiles = scripts.map((script) =>
-    Object.freeze({
-      ...script,
-      files: Object.freeze(sortFiles([...(filesByScript.get(script.id.toLowerCase()) ?? [])])),
-    }),
-  );
   const downstreamMembers = new Set(
-    [...scriptsWithFiles, ...files, ...batches].map((item) => memberKey(item.memberName)),
+    [...scripts, ...files, ...batches].map((item) => memberKey(item.memberName)),
   );
   const orderedMembers = sortMembers(members);
-  const orderedScripts = sortScripts(scriptsWithFiles);
-  const orderedBatches = sortBatches(batches);
+  const orderedScripts = sortScripts(scripts);
+  const orderedBatches = assignDispatchOwnership(sortBatches(batches));
+  const dispatchedPaths = new Set(
+    orderedBatches
+      .flatMap((batch) => [...batch.senderFiles, ...batch.sentFiles])
+      .map((file) => file.id),
+  );
+  const createdFiles = files.filter(
+    (file) =>
+      file.stage === FileRunStage.Failed ||
+      file.stage === FileRunStage.Cancelled ||
+      !file.path ||
+      !dispatchedPaths.has(filePathKey(file.path)),
+  );
   const workers = buildWorkerSlots(run.workerStatuses, orderedScripts);
   const failures = collectFailures(
     run,
@@ -117,27 +120,21 @@ export function buildProcessPipeline(
     ),
     scriptQueue: Object.freeze(orderedScripts.filter((script) => script.zone === 'script-queue')),
     workers: Object.freeze(workers),
-    fileGroups: Object.freeze(buildFileGroups(files)),
-    senderQueue: Object.freeze(orderedBatches.filter((batch) => batch.zone === 'sender-queue')),
-    senderInProgress: Object.freeze(
-      orderedBatches.filter((batch) => batch.zone === 'sender-in-progress'),
+    fileGroups: Object.freeze(buildFileGroups(createdFiles)),
+    senderBatches: Object.freeze(orderedBatches.filter(needsDeliveryConfirmation)),
+    senderQueue: Object.freeze(
+      orderedBatches.filter(
+        (batch) => batch.zone === 'sender-queue' && needsDeliveryConfirmation(batch),
+      ),
     ),
-    delivered: Object.freeze(orderedBatches.filter((batch) => batch.zone === 'delivered')),
-    completedMembers: Object.freeze(orderedMembers.filter((member) => member.zone === 'completed')),
-    completedScripts: Object.freeze(orderedScripts.filter((script) => script.zone === 'completed')),
+    senderInProgress: Object.freeze(
+      orderedBatches.filter(
+        (batch) => batch.zone === 'sender-in-progress' && needsDeliveryConfirmation(batch),
+      ),
+    ),
+    delivered: Object.freeze(orderedBatches.filter((batch) => batch.sentFiles.length > 0)),
     failures: Object.freeze(failures),
   });
-}
-
-/** Returns a bounded immutable detail chunk; callers increment offset only when a group is expanded. */
-export function getProcessFileGroupPage(
-  group: ProcessFileGroup,
-  offset = 0,
-  pageSize = group.detailPageSize,
-): readonly ProcessFileCard[] {
-  const safeOffset = Math.max(0, Math.trunc(offset));
-  const safeSize = Math.max(1, Math.min(100, Math.trunc(pageSize)));
-  return Object.freeze(group.details.slice(safeOffset, safeOffset + safeSize));
 }
 
 /** Stable palette selection. The class is deliberately a token, not an inline/random color. */
@@ -153,113 +150,6 @@ export function resolveProcessMemberIdentity(memberName: string): ProcessMemberI
     token: `member-${index}`,
     className: `process-member-accent--${index}`,
   });
-}
-
-/** Compatibility adapter for the current member-row template. */
-export function buildProcessMemberRows(
-  run: RunStatusInfo | null | undefined,
-  now: Date,
-): ProcessMemberRow[] {
-  if (!run) return [];
-  const pipeline = buildProcessPipeline(run);
-  const memberStatusByKey = new Map(pipeline.members.map((member) => [member.key, member]));
-  const uniqueScripts = uniqueBy(pipeline.scripts, (script) => script.id.toLowerCase()).map(
-    (script) => withLiveScriptDurations(script, now),
-  );
-  const groupsByMember = groupBy(pipeline.fileGroups, (group) => memberKey(group.memberName));
-  const scriptsByMember = groupBy(uniqueScripts, (script) => memberKey(script.memberName));
-  const batches = [
-    ...pipeline.senderQueue,
-    ...pipeline.senderInProgress,
-    ...pipeline.delivered,
-  ].map((batch) => withLiveBatchDurations(batch, now));
-  const batchesByMember = groupBy(batches, (batch) => memberKey(batch.memberName));
-  const names = collectMemberNames(run);
-
-  return names
-    .map((name) => {
-      const key = memberKey(name);
-      const status = memberStatusByKey.get(key);
-      const rowScripts = scriptsByMember.get(key) ?? [];
-      const fileGroups = groupsByMember.get(key) ?? [];
-      const visibleFiles = fileGroups.flatMap((group) => group.initialDetails);
-      const fileStatusCounts = fileGroups.reduce<ProcessFileStatusCounts>(
-        (total, group) => ({
-          queued: total.queued + group.statusCounts.queued,
-          written: total.written + group.statusCounts.written,
-          failed: total.failed + group.statusCounts.failed,
-          cancelled: total.cancelled + group.statusCounts.cancelled,
-          unknown: total.unknown + group.statusCounts.unknown,
-        }),
-        { queued: 0, written: 0, failed: 0, cancelled: 0, unknown: 0 },
-      );
-      let structuredFileFailureCount = 0;
-      let fileFailure: ProcessFailureDetail | null = null;
-      for (const group of fileGroups) {
-        for (const file of group.details) {
-          if (!file.failure) continue;
-          structuredFileFailureCount++;
-          fileFailure ??= file.failure;
-        }
-      }
-      const scriptCodes = new Map(
-        rowScripts.map((script) => [script.id.toLowerCase(), script.scriptCode]),
-      );
-      const rowFiles = visibleFiles.map((file) => ({
-        file: withLiveFileDuration(file, now),
-        parentScriptCode:
-          scriptCodes.get(file.parentScriptId.toLowerCase()) ?? file.scriptCode ?? null,
-      }));
-      const attachedIds = new Set(rowFiles.map(({ file }) => file.id.toLowerCase()));
-      const hydratedScripts = rowScripts.map((script) => ({
-        ...script,
-        files: Object.freeze(
-          rowFiles
-            .filter(({ file }) => file.parentScriptId.toLowerCase() === script.id.toLowerCase())
-            .map(({ file }) => file),
-        ),
-      }));
-      const orphanFiles = rowFiles
-        .filter(({ file }) => !scriptCodes.has(file.parentScriptId.toLowerCase()))
-        .map(({ file }) => file);
-      const rowBatches = batchesByMember.get(key) ?? [];
-      const activeItemSummary = buildActiveSummary(hydratedScripts, fileGroups, rowBatches, now);
-      return {
-        key,
-        name,
-        status: status?.status ?? null,
-        memberFailure: status?.failure ?? null,
-        updatedAt: latestTimestamp([
-          status?.updatedAt,
-          ...hydratedScripts.map((script) => script.updatedAt),
-          ...rowFiles.map(({ file }) => file.updatedAt),
-          ...rowBatches.map((batch) => batch.updatedAt),
-        ]),
-        scripts: hydratedScripts,
-        orphanFiles,
-        files: rowFiles.filter(({ file }) => attachedIds.has(file.id.toLowerCase())),
-        fileTotalCount: fileGroups.reduce((total, group) => total + group.count, 0),
-        fileStatusCounts,
-        fileFailureCount: Math.max(fileStatusCounts.failed, structuredFileFailureCount),
-        fileFailure,
-        batches: rowBatches,
-        activeItemSummary,
-        oldestActiveAt: activeItemSummary.oldestAt,
-        identity: status?.identity ?? resolveProcessMemberIdentity(name),
-      } satisfies ProcessMemberRow;
-    })
-    .sort((left, right) => {
-      const leftMember = memberStatusByKey.get(left.key);
-      const rightMember = memberStatusByKey.get(right.key);
-      return compareOrder(
-        leftMember?.queuePosition ?? null,
-        leftMember?.sequence ?? null,
-        left.name,
-        rightMember?.queuePosition ?? null,
-        rightMember?.sequence ?? null,
-        right.name,
-      );
-    });
 }
 
 function collectMemberNames(run: RunStatusInfo): string[] {
@@ -349,7 +239,6 @@ function toScriptCard(
   const startedAt = cleanTimestamp(source.startedAt);
   const completedAt = cleanTimestamp(source.completedAt);
   const updatedAt = cleanTimestamp(source.updatedAt);
-  const terminal = isTerminalScriptStage(stage);
   const workerId = toNumber(source.workerId);
   const zone =
     stage === ScriptRunStage.AwaitingWorker ||
@@ -374,15 +263,6 @@ function toScriptCard(
     startedAt,
     updatedAt,
     completedAt,
-    queueWaitMs: duration(
-      cleanTimestamp(source.discoveredAt),
-      startedAt ?? (terminal ? (completedAt ?? updatedAt) : null),
-    ),
-    stageElapsedMs: duration(
-      startedAt ?? cleanTimestamp(source.stageEnteredAt),
-      terminal ? (completedAt ?? updatedAt) : null,
-    ),
-    files: Object.freeze([]),
     failure: toFailure(source.failure, reference('script', id, memberName, scriptCode, workerId)),
     identity: identityFor(memberName),
   });
@@ -396,9 +276,6 @@ function toFileCard(
   const id = cleanString(source.id) || cleanString(mapKey);
   const memberName = cleanString(source.memberName);
   const stage = normalizeEnum(source.stage);
-  const queuedAt = cleanTimestamp(source.queuedAt);
-  const completedAt = cleanTimestamp(source.completedAt);
-  const updatedAt = cleanTimestamp(source.updatedAt);
   return Object.freeze({
     id,
     memberName,
@@ -411,15 +288,11 @@ function toFileCard(
     path: cleanString(source.filePath) || null,
     rows: toNumber(source.rows),
     bytes: toNumber(source.estimatedBytes),
-    queuedAt,
+    queuedAt: cleanTimestamp(source.queuedAt),
     stageEnteredAt: cleanTimestamp(source.stageEnteredAt),
-    updatedAt,
-    completedAt,
+    updatedAt: cleanTimestamp(source.updatedAt),
+    completedAt: cleanTimestamp(source.completedAt),
     workerId: toNumber(source.workerId),
-    writeElapsedMs: duration(
-      queuedAt,
-      isTerminalFileStage(stage) ? (completedAt ?? updatedAt) : null,
-    ),
     failure: toFailure(
       source.failure,
       reference('file', id, memberName, cleanString(source.scriptCode), toNumber(source.workerId)),
@@ -432,6 +305,8 @@ function toBatchCard(
   source: SenderBatchStatusInfo,
   mapKey: string,
   identityFor: (name: string) => ProcessMemberIdentity,
+  runCreatedAt: string,
+  canonicalFiles: readonly ProcessFileCard[],
 ): ProcessBatchCard {
   const id = cleanString(source.batchId) || cleanString(mapKey);
   const memberName = cleanString(source.memberName);
@@ -439,7 +314,55 @@ function toBatchCard(
   const queuedAt = cleanTimestamp(source.queuedAt);
   const startedAt = cleanTimestamp(source.startedAt);
   const updatedAt = cleanTimestamp(source.updatedAt);
-  const terminal = isTerminalBatchStatus(status);
+  const identity = identityFor(memberName);
+  const canonicalByPath = new Map(
+    canonicalFiles
+      .filter((file) => !!file.path)
+      .map((file) => [filePathKey(file.path!), file]),
+  );
+  const sentByPath = new Map(
+    (source.sentFiles ?? []).map((file) => [
+      filePathKey(file.filePath),
+      cleanTimestamp(file.sentAt),
+    ]),
+  );
+  const planned = source.plannedFiles ?? null;
+  const dispatchFiles: ProcessDispatchFile[] = planned
+    ? uniqueBy(planned, (file) => filePathKey(file.filePath)).map((file) => {
+        const path = cleanString(file.filePath);
+        const sentAt = cleanTimestamp(file.sentAt) ?? sentByPath.get(filePathKey(path)) ?? null;
+        return Object.freeze({
+          id: filePathKey(path),
+          batchId: id,
+          memberName,
+          fileName: cleanString(file.fileName) || basename(path),
+          path,
+          queuedAt: cleanTimestamp(file.queuedAt),
+          sentAt,
+          estimatedBytes: toNumber(file.estimatedBytes),
+          actualBytes: toNumber(file.actualBytes),
+          identity,
+        });
+      })
+    : uniqueBy(source.sentFiles ?? [], (file) => filePathKey(file.filePath)).map((file) => {
+        const path = cleanString(file.filePath);
+        const canonical = canonicalByPath.get(filePathKey(path));
+        return Object.freeze({
+          id: filePathKey(path),
+          batchId: id,
+          memberName: canonical?.memberName || memberName,
+          fileName: canonical?.fileName || basename(path),
+          path,
+          queuedAt,
+          sentAt: cleanTimestamp(file.sentAt),
+          estimatedBytes: canonical?.bytes ?? null,
+          actualBytes: null,
+          identity: canonical?.identity ?? identity,
+        });
+      });
+  const senderFiles = Object.freeze(dispatchFiles.filter((file) => !file.sentAt));
+  const sentFiles = Object.freeze(dispatchFiles.filter((file) => !!file.sentAt));
+  const declaredCount = toNumber(source.fileCount);
   const zone =
     status === SenderBatchStatus.Completed || status === SenderBatchStatus.SkippedByRequest
       ? 'delivered'
@@ -456,13 +379,69 @@ function toBatchCard(
     queuedAt,
     startedAt,
     updatedAt,
-    fileCount: toNumber(source.fileCount),
-    sentCount: Array.isArray(source.sentFiles) ? source.sentFiles.length : 0,
-    queueWaitMs: duration(queuedAt, startedAt ?? (terminal ? updatedAt : null)),
-    sendElapsedMs: duration(startedAt, terminal ? updatedAt : null),
+    fileCount: declaredCount,
+    sentCount: sentFiles.length,
+    unsentCount: senderFiles.length,
+    hasLegacyUnsentAmbiguity:
+      planned === null && declaredCount !== null && declaredCount > sentFiles.length,
+    senderFiles,
+    sentFiles,
+    totalElapsedMs: duration(cleanTimestamp(runCreatedAt), sentFiles.length ? updatedAt : null),
     failure: toFailure(source.failure, reference('batch', id, memberName, null, null, id)),
-    identity: identityFor(memberName),
+    identity,
   });
+}
+
+/** A path can be requeued, but it must be represented by only one batch in the UI. */
+function assignDispatchOwnership(batches: ProcessBatchCard[]): ProcessBatchCard[] {
+  const owner = new Map<
+    string,
+    { batchId: string; sequence: number | null; updatedAt: string | null }
+  >();
+  for (const batch of batches) {
+    for (const file of [...batch.senderFiles, ...batch.sentFiles]) {
+      const candidate = {
+        batchId: batch.id,
+        sequence: batch.sequence,
+        updatedAt: batch.updatedAt,
+      };
+      const current = owner.get(file.id);
+      if (!current || compareDispatchOwner(current, candidate) < 0) owner.set(file.id, candidate);
+    }
+  }
+  return batches.map((batch) => {
+    const senderFiles = Object.freeze(
+      batch.senderFiles.filter((file) => owner.get(file.id)?.batchId === batch.id),
+    );
+    const sentFiles = Object.freeze(
+      batch.sentFiles.filter((file) => owner.get(file.id)?.batchId === batch.id),
+    );
+    return Object.freeze({
+      ...batch,
+      senderFiles,
+      sentFiles,
+      unsentCount: senderFiles.length,
+      sentCount: sentFiles.length,
+    });
+  });
+}
+
+function compareDispatchOwner(
+  left: { sequence: number | null; updatedAt: string | null; batchId: string },
+  right: { sequence: number | null; updatedAt: string | null; batchId: string },
+): number {
+  if (left.sequence !== null && right.sequence !== null && left.sequence !== right.sequence) {
+    return left.sequence - right.sequence;
+  }
+  return (
+    (toEpoch(left.updatedAt) ?? 0) - (toEpoch(right.updatedAt) ?? 0) ||
+    compareText(left.batchId, right.batchId)
+  );
+}
+
+function needsDeliveryConfirmation(batch: ProcessBatchCard): boolean {
+  if (batch.status === SenderBatchStatus.SkippedByRequest && !batch.senderFiles.length) return false;
+  return batch.senderFiles.length > 0 || batch.hasLegacyUnsentAmbiguity || batch.failure !== null;
 }
 
 function buildWorkerSlots(
@@ -534,9 +513,7 @@ function buildFileGroups(files: ProcessFileCard[]): ProcessFileGroup[] {
         totalRows: details.reduce((sum, file) => sum + (file.rows ?? 0), 0),
         totalBytes: details.reduce((sum, file) => sum + (file.bytes ?? 0), 0),
         statusCounts: Object.freeze(statusCounts),
-        initialDetails: Object.freeze(details.slice(0, PROCESS_FILE_DETAIL_PAGE_SIZE)),
         details,
-        detailPageSize: PROCESS_FILE_DETAIL_PAGE_SIZE,
         failure: details.find((file) => file.failure)?.failure ?? null,
         identity: first.identity,
       });
@@ -616,70 +593,6 @@ function normalizeEntityType(value: unknown): ProcessEntityType | null {
   return ['member', 'script', 'file', 'worker', 'batch', 'run'].includes(normalized)
     ? (normalized as ProcessEntityType)
     : null;
-}
-
-function withLiveScriptDurations(script: ProcessScriptCard, now: Date): ProcessScriptCard {
-  if (isTerminalScriptStage(script.stage)) return script;
-  return {
-    ...script,
-    queueWaitMs: duration(script.discoveredAt, script.startedAt ?? now),
-    stageElapsedMs: duration(script.startedAt ?? script.stageEnteredAt, now),
-  };
-}
-
-function withLiveFileDuration(file: ProcessFileCard, now: Date): ProcessFileCard {
-  return isTerminalFileStage(file.stage)
-    ? file
-    : { ...file, writeElapsedMs: duration(file.queuedAt, now) };
-}
-
-function withLiveBatchDurations(batch: ProcessBatchCard, now: Date): ProcessBatchCard {
-  if (isTerminalBatchStatus(batch.status)) return batch;
-  return {
-    ...batch,
-    queueWaitMs: duration(batch.queuedAt, batch.startedAt ?? now),
-    sendElapsedMs: duration(batch.startedAt, now),
-  };
-}
-
-function buildActiveSummary(
-  scripts: ProcessScriptCard[],
-  fileGroups: ProcessFileGroup[],
-  batches: ProcessBatchCard[],
-  now: Date,
-): ProcessActiveItemSummary {
-  const activeScripts = scripts.filter(
-    (script) =>
-      script.stage === ScriptRunStage.AwaitingWorker || script.stage === ScriptRunStage.Running,
-  );
-  let activeFileCount = 0;
-  const activeFileTimestamps: Array<string | null> = [];
-  for (const group of fileGroups) {
-    for (const file of group.details) {
-      if (file.stage !== FileRunStage.QueuedForWrite) continue;
-      activeFileCount++;
-      activeFileTimestamps.push(file.stageEnteredAt);
-    }
-  }
-  const activeBatches = batches.filter(
-    (batch) =>
-      batch.status === SenderBatchStatus.Ready || batch.status === SenderBatchStatus.InProgress,
-  );
-  const timestamps = [
-    ...activeScripts.map((item) => item.stageEnteredAt),
-    ...activeFileTimestamps,
-    ...activeBatches.map((item) => item.startedAt ?? item.queuedAt),
-  ].filter((value): value is string => !!value && toEpoch(value) !== null);
-  const oldestAt =
-    timestamps.sort((left, right) => (toEpoch(left) ?? 0) - (toEpoch(right) ?? 0))[0] ?? null;
-  return {
-    count: activeScripts.length + activeFileCount + activeBatches.length,
-    scriptCount: activeScripts.length,
-    fileCount: activeFileCount,
-    batchCount: activeBatches.length,
-    oldestAt,
-    oldestElapsedMs: duration(oldestAt, now),
-  };
 }
 
 function sortMembers(items: ProcessMemberCard[]): ProcessMemberCard[] {
@@ -773,15 +686,6 @@ function minSequence(items: readonly ProcessFileCard[]): number | null {
   return values.length ? Math.min(...values) : null;
 }
 
-function latestTimestamp(values: Array<string | null | undefined>): string | null {
-  return (
-    values
-      .map(cleanTimestamp)
-      .filter((value): value is string => !!value)
-      .sort((left, right) => (toEpoch(right) ?? 0) - (toEpoch(left) ?? 0))[0] ?? null
-  );
-}
-
 function compareText(left: string, right: string): number {
   return (
     left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) ||
@@ -791,6 +695,18 @@ function compareText(left: string, right: string): number {
 
 function memberKey(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function filePathKey(value: string): string {
+  return cleanString(value)
+    .replaceAll('\\', '/')
+    .replace(/\/{2,}/g, '/')
+    .toLowerCase();
+}
+
+function basename(value: string): string {
+  const normalized = cleanString(value).replaceAll('\\', '/');
+  return normalized.split('/').filter(Boolean).at(-1) ?? normalized;
 }
 
 function cleanString(value: unknown): string {
@@ -823,28 +739,4 @@ function toNumber(value: number | string | null | undefined): number | null {
 
 function normalizeEnum(value: number | string | null | undefined): number | null {
   return toNumber(value);
-}
-
-function isTerminalScriptStage(stage: ScriptRunStage | null): boolean {
-  return (
-    stage === ScriptRunStage.Completed ||
-    stage === ScriptRunStage.Failed ||
-    stage === ScriptRunStage.Cancelled
-  );
-}
-
-function isTerminalFileStage(stage: FileRunStage | null): boolean {
-  return (
-    stage === FileRunStage.Written ||
-    stage === FileRunStage.Failed ||
-    stage === FileRunStage.Cancelled
-  );
-}
-
-function isTerminalBatchStatus(status: SenderBatchStatus | null): boolean {
-  return (
-    status === SenderBatchStatus.Completed ||
-    status === SenderBatchStatus.Failed ||
-    status === SenderBatchStatus.SkippedByRequest
-  );
 }

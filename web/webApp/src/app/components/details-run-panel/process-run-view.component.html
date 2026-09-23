@@ -1,52 +1,56 @@
-<section class="details-section process-run" aria-labelledby="process-run-title">
+<section
+  class="details-section process-run"
+  data-testid="process-root"
+  aria-labelledby="process-run-title"
+>
   <header class="process-heading">
     <div>
       <h2 id="process-run-title" class="details-section__title">{{ 'process.title' | t }}</h2>
       <p>{{ 'process.subtitle' | t }}</p>
     </div>
+    <button
+      type="button"
+      class="process-fullscreen"
+      data-testid="process-fullscreen"
+      [disabled]="!fullscreenSupported"
+      [attr.aria-pressed]="isFullscreen()"
+      (click)="toggleFullscreen($event)"
+    >
+      {{ (isFullscreen() ? 'process.fullscreen.exit' : 'process.fullscreen.enter') | t }}
+    </button>
   </header>
 
   @if (run(); as activeRun) {
     <div class="process-summary" aria-live="polite">
-      <div class="process-summary__item">
-        <span>{{ 'process.summary.status' | t }}</span>
-        <strong>{{ resolveRunStatusLabel(activeRun.status) }}</strong>
+      <div>
+        <span>{{ 'process.summary.status' | t }}</span
+        ><strong>{{ resolveRunStatusLabel(activeRun.status) }}</strong>
       </div>
-      <div class="process-summary__item">
-        <span>{{ 'process.summary.memberRows' | t }}</span>
-        <strong>{{ formatProcessCount(pipeline().members.length) }}</strong>
+      <div>
+        <span>{{ 'process.summary.memberRows' | t }}</span
+        ><strong>{{ formatProcessCount(pipeline().members.length) }}</strong>
       </div>
-      <div class="process-summary__item">
-        <span>{{ 'process.summary.activeCards' | t }}</span>
-        <strong>{{ formatProcessCount(activeCardCount()) }}</strong>
+      <div>
+        <span>{{ 'process.summary.activeCards' | t }}</span
+        ><strong>{{ formatProcessCount(activeCardCount()) }}</strong>
       </div>
-      @if (activeRun.updatedAt) {
-        <div class="process-summary__item">
-          <span>{{ 'process.summary.updated' | t }}</span>
-          <strong>{{ formatTimestamp(activeRun.updatedAt) }}</strong>
-          @let age = snapshotAgeMs();
-          @if (age !== null) {
-            <small>{{
-              'process.summary.updatedAgo' | t: { duration: formatProcessDuration(age) }
-            }}</small>
-          }
-        </div>
-      }
+      <div>
+        <span>{{ 'process.summary.updated' | t }}</span
+        ><strong>{{ formatTimestamp(activeRun.updatedAt) }}</strong>
+      </div>
     </div>
-
     @if (runFailure(); as failure) {
       <button
         type="button"
-        class="process-run-failure process-card--button process-tone--danger"
+        class="process-card process-card--button process-tone--danger"
         data-testid="process-run-failure"
         (click)="openFailure(failure, $event)"
       >
-        <strong>{{ 'process.runFailure.title' | t }}</strong>
-        <span>{{ failure.stage }} · {{ failure.code }}</span>
-        <small>{{ 'process.card.errorDetails' | t }}</small>
+        <strong>{{ 'process.runFailure.title' | t }}</strong
+        ><span>{{ failure.stage }} · {{ failure.code }}</span
+        ><small>{{ 'process.card.errorDetails' | t }}</small>
       </button>
     }
-
     @if (!hasProcessCards() && !runFailure()) {
       <p class="details-empty">{{ 'process.emptyNoCards' | t }}</p>
     }
@@ -55,75 +59,20 @@
         <section
           class="process-zone"
           data-testid="process-zone-members"
-          aria-labelledby="process-zone-members-title"
+          aria-labelledby="members-title"
         >
-          <header class="process-zone__header">
+          <header class="process-section-header">
             <div>
-              <span class="process-zone__step">01</span>
-              <h3 id="process-zone-members-title">{{ 'process.zone.members' | t }}</h3>
+              <span class="process-kind">{{ 'process.kind.area' | t }}</span>
+              <h3 id="members-title">{{ 'process.zone.members' | t }}</h3>
             </div>
-            <span class="process-zone__count">{{
+            <span class="process-count">{{
               formatProcessCount(pipeline().memberInput.length)
             }}</span>
           </header>
-          @if (pipeline().memberInput.length === 0) {
-            <p class="process-zone__empty">{{ 'process.zone.empty.members' | t }}</p>
-          } @else {
-            <ul class="process-card-grid">
-              @for (member of pipeline().memberInput; track member.key) {
-                <li>
-                  @if (member.failure; as failure) {
-                    <button
-                      type="button"
-                      [class]="
-                        'process-card process-card--button process-tone--danger ' +
-                        member.identity.className
-                      "
-                      [attr.aria-label]="memberAriaLabel(member)"
-                      (click)="openFailure(failure, $event)"
-                    >
-                      <strong>{{ member.name }}</strong
-                      ><span>{{ resolveMemberStatusLabel(member.status) }}</span
-                      ><small>{{ 'process.card.errorDetails' | t }}</small>
-                    </button>
-                  } @else {
-                    <article
-                      [class]="
-                        'process-card process-tone--' +
-                        memberTone(member.status) +
-                        ' ' +
-                        member.identity.className
-                      "
-                    >
-                      <strong>{{ member.name }}</strong
-                      ><span>{{ resolveMemberStatusLabel(member.status) }}</span>
-                    </article>
-                  }
-                </li>
-              }
-            </ul>
-          }
-        </section>
-
-        <div class="process-connector" aria-hidden="true"><span></span></div>
-
-        <section
-          class="process-node"
-          data-testid="process-node-resolver"
-          aria-labelledby="process-node-resolver-title"
-        >
-          <header>
-            <span class="process-node__icon" aria-hidden="true"></span>
-            <div>
-              <p>{{ 'process.node.handler' | t }}</p>
-              <h3 id="process-node-resolver-title">{{ 'process.node.resolver' | t }}</h3>
-            </div>
-          </header>
-          <div class="process-node__body">
-            @if (pipeline().resolver.length === 0) {
-              <span class="process-node__idle">{{ 'process.node.waiting' | t }}</span>
-            } @else {
-              @for (member of pipeline().resolver; track member.key) {
+          <ul class="process-card-grid">
+            @for (member of visibleMemberInput(); track member.key) {
+              <li>
                 @if (member.failure; as failure) {
                   <button
                     type="button"
@@ -149,101 +98,193 @@
                   >
                     <strong>{{ member.name }}</strong
                     ><span>{{ resolveMemberStatusLabel(member.status) }}</span>
+                    @if (member.updatedAt) {
+                      <small>{{
+                        'process.card.waitingSince' | t: { time: formatTimestamp(member.updatedAt) }
+                      }}</small>
+                    }
                   </article>
                 }
-              }
+              </li>
+            } @empty {
+              <li class="process-empty">{{ 'process.zone.empty.members' | t }}</li>
             }
-          </div>
+          </ul>
+          @if (pipeline().memberInput.length > 20) {
+            @let memberPages = pageView(pipeline().memberInput, 'members');
+            <nav class="process-pager" aria-label="Пагинация мемберов">
+              <button
+                type="button"
+                [disabled]="!memberPages.hasPrevious"
+                (click)="previous('members', pipeline().memberInput.length)"
+              >
+                {{ 'process.files.previous' | t }}</button
+              ><span>{{ memberPages.first }}–{{ memberPages.last }} из {{ pipeline().memberInput.length }}</span
+              ><button
+                type="button"
+                [disabled]="!memberPages.hasNext"
+                (click)="next('members', pipeline().memberInput.length)"
+              >
+                {{ 'process.files.next' | t }}
+              </button>
+            </nav>
+          }
         </section>
 
-        <div class="process-connector" aria-hidden="true"><span></span></div>
+        <section
+          class="process-handler"
+          data-testid="process-node-resolver"
+          aria-labelledby="resolver-title"
+        >
+          <header class="process-section-header">
+            <div>
+              <span class="process-kind">{{ 'process.node.handler' | t }}</span>
+              <h3 id="resolver-title">{{ 'process.node.resolver' | t }}</h3>
+            </div>
+          </header>
+          <div class="process-card-grid">
+            @for (member of visibleResolver(); track member.key) {
+              @if (member.failure; as failure) {
+                <button
+                  type="button"
+                  [class]="
+                    'process-card process-card--button process-tone--danger ' +
+                    member.identity.className
+                  "
+                  (click)="openFailure(failure, $event)"
+                >
+                  <strong>{{ member.name }}</strong
+                  ><span>{{ resolveMemberStatusLabel(member.status) }}</span
+                  ><small>{{ 'process.card.errorDetails' | t }}</small>
+                </button>
+              } @else {
+                <article [class]="'process-card process-tone--active ' + member.identity.className">
+                  <strong>{{ member.name }}</strong
+                  ><span>{{ resolveMemberStatusLabel(member.status) }}</span>
+                  @if (member.updatedAt) {
+                    <small>{{
+                      'process.card.workingSince' | t: { time: formatTimestamp(member.updatedAt) }
+                    }}</small>
+                  }
+                </article>
+              }
+            } @empty {
+              <span class="process-empty">{{ 'process.node.waiting' | t }}</span>
+            }
+          </div>
+          @if (pipeline().resolver.length > 20) {
+            @let resolverPages = pageView(pipeline().resolver, 'resolver');
+            <nav class="process-pager" aria-label="Пагинация ошибок поиска скриптов">
+              <button
+                type="button"
+                [disabled]="!resolverPages.hasPrevious"
+                (click)="previous('resolver', pipeline().resolver.length)"
+              >
+                {{ 'process.files.previous' | t }}</button
+              ><span>{{ resolverPages.first }}–{{ resolverPages.last }} из {{ pipeline().resolver.length }}</span
+              ><button
+                type="button"
+                [disabled]="!resolverPages.hasNext"
+                (click)="next('resolver', pipeline().resolver.length)"
+              >
+                {{ 'process.files.next' | t }}
+              </button>
+            </nav>
+          }
+        </section>
 
         <section
           class="process-zone"
           data-testid="process-zone-scripts"
-          aria-labelledby="process-zone-scripts-title"
+          aria-labelledby="scripts-title"
         >
-          <header class="process-zone__header">
+          <header class="process-section-header">
             <div>
-              <span class="process-zone__step">02</span>
-              <h3 id="process-zone-scripts-title">{{ 'process.zone.scripts' | t }}</h3>
+              <span class="process-kind">{{ 'process.kind.area' | t }}</span>
+              <h3 id="scripts-title">{{ 'process.zone.scripts' | t }}</h3>
             </div>
-            <span class="process-zone__count">{{
+            <span class="process-count">{{
               formatProcessCount(pipeline().scriptQueue.length)
             }}</span>
           </header>
-          @if (pipeline().scriptQueue.length === 0) {
-            <p class="process-zone__empty">{{ 'process.zone.empty.scripts' | t }}</p>
-          } @else {
-            <ul class="process-card-grid">
-              @for (script of pipeline().scriptQueue; track script.id) {
-                <li>
-                  @if (script.failure; as failure) {
-                    <button
-                      type="button"
-                      [class]="
-                        'process-card process-card--button process-tone--danger ' +
-                        script.identity.className
-                      "
-                      [attr.aria-label]="scriptAriaLabel(script)"
-                      (click)="openFailure(failure, $event)"
-                    >
-                      <strong>{{ script.scriptCode || script.id }}</strong
-                      ><span>{{ script.memberName }}</span
-                      ><small>{{ 'process.card.errorDetails' | t }}</small>
-                    </button>
-                  } @else {
-                    <article
-                      [class]="
-                        'process-card process-tone--' +
-                        scriptTone(script.stage) +
-                        ' ' +
-                        script.identity.className
-                      "
-                    >
-                      <strong>{{ script.scriptCode || script.id }}</strong
-                      ><span>{{ script.memberName }}</span>
-                      @let queueWait = scriptQueueWait(script);
-                      @if (queueWait !== null) {
-                        <small>{{
-                          'process.card.queueWait'
-                            | t: { duration: formatProcessDuration(queueWait) }
-                        }}</small>
-                      }
-                    </article>
-                  }
-                </li>
-              }
-            </ul>
+          <ul class="process-card-grid">
+            @for (script of visibleScriptQueue(); track script.id) {
+              <li>
+                @if (script.failure; as failure) {
+                  <button
+                    type="button"
+                    [class]="
+                      'process-card process-card--button process-tone--danger ' +
+                      script.identity.className
+                    "
+                    (click)="openFailure(failure, $event)"
+                  >
+                    <strong>{{ script.scriptCode || script.id }}</strong
+                    ><span>{{ script.memberName }}</span
+                    ><small>{{ 'process.card.errorDetails' | t }}</small>
+                  </button>
+                } @else {
+                  <article
+                    [class]="
+                      'process-card process-tone--' +
+                      scriptTone(script.stage) +
+                      ' ' +
+                      script.identity.className
+                    "
+                  >
+                    <strong>{{ script.scriptCode || script.id }}</strong
+                    ><span>{{ script.memberName }}</span>
+                    @if (script.discoveredAt) {
+                      <small>{{
+                        'process.card.waitingSince'
+                          | t: { time: formatTimestamp(script.discoveredAt) }
+                      }}</small>
+                    }
+                  </article>
+                }
+              </li>
+            } @empty {
+              <li class="process-empty">{{ 'process.zone.empty.scripts' | t }}</li>
+            }
+          </ul>
+          @if (pipeline().scriptQueue.length > 20) {
+            @let scriptPages = pageView(pipeline().scriptQueue, 'scripts');
+            <nav class="process-pager" aria-label="Пагинация скриптов">
+              <button
+                type="button"
+                [disabled]="!scriptPages.hasPrevious"
+                (click)="previous('scripts', pipeline().scriptQueue.length)"
+              >
+                {{ 'process.files.previous' | t }}</button
+              ><span>{{ scriptPages.first }}–{{ scriptPages.last }} из {{ pipeline().scriptQueue.length }}</span
+              ><button
+                type="button"
+                [disabled]="!scriptPages.hasNext"
+                (click)="next('scripts', pipeline().scriptQueue.length)"
+              >
+                {{ 'process.files.next' | t }}
+              </button>
+            </nav>
           }
         </section>
 
-        <div class="process-connector" aria-hidden="true"><span></span></div>
-
         <section
-          class="process-workers"
+          class="process-zone"
           data-testid="process-zone-workers"
-          aria-labelledby="process-zone-workers-title"
+          aria-labelledby="workers-title"
         >
-          <header class="process-zone__header">
+          <header class="process-section-header">
             <div>
-              <span class="process-zone__step">03</span>
-              <h3 id="process-zone-workers-title">{{ 'process.zone.workers' | t }}</h3>
+              <span class="process-kind">{{ 'process.kind.area' | t }}</span>
+              <h3 id="workers-title">{{ 'process.zone.workers' | t }}</h3>
             </div>
-            <span class="process-zone__hint">{{ 'process.zone.workersHint' | t }}</span>
+            <span class="process-hint">{{ 'process.zone.workersHint' | t }}</span>
           </header>
           <div class="process-worker-grid">
             @for (worker of pipeline().workers; track worker.workerId) {
               @let failure = workerFailure(worker);
               <article
-                [class]="
-                  'process-worker ' +
-                  (failure
-                    ? 'process-tone--danger'
-                    : worker.assignment
-                      ? 'process-tone--active'
-                      : '')
-                "
+                class="process-worker"
                 [attr.data-testid]="'process-worker-' + worker.workerId"
               >
                 <header>
@@ -257,26 +298,25 @@
                   }}</span>
                 </header>
                 @if (worker.assignment; as script) {
-                  @let execution = scriptExecution(script);
-                  <div [class]="'process-worker__assignment ' + script.identity.className">
-                    <strong>{{ script.scriptCode || script.id }}</strong>
-                    <span>{{ script.memberName }}</span>
-                    @if (execution !== null) {
+                  <div [class]="'process-card process-tone--active ' + script.identity.className">
+                    <strong>{{ script.scriptCode || script.id }}</strong
+                    ><span>{{ script.memberName }}</span>
+                    @if (script.startedAt) {
                       <small>{{
-                        'process.card.execution' | t: { duration: formatProcessDuration(execution) }
+                        'process.card.workingSince' | t: { time: formatTimestamp(script.startedAt) }
                       }}</small>
                     }
                   </div>
                 }
-                @for (script of worker.retainedFailures; track script.id) {
-                  @if (script.failure; as scriptFailure) {
+                @for (script of workerFailurePageView(worker).items; track script.id) {
+                  @if (script.failure; as problem) {
                     <button
                       type="button"
                       [class]="
-                        'process-worker__assignment process-card--button process-tone--danger ' +
+                        'process-card process-card--button process-tone--danger ' +
                         script.identity.className
                       "
-                      (click)="openFailure(scriptFailure, $event)"
+                      (click)="openFailure(problem, $event)"
                     >
                       <strong>{{ script.scriptCode || script.id }}</strong
                       ><span>{{ script.memberName }}</span
@@ -284,375 +324,392 @@
                     </button>
                   }
                 }
-                @if (!worker.assignment && worker.retainedFailures.length === 0) {
-                  <p>{{ 'process.worker.awaiting' | t }}</p>
-                }
-                @if (worker.failure; as workerOwnFailure) {
-                  <button
-                    type="button"
-                    class="process-link-button"
-                    (click)="openFailure(workerOwnFailure, $event)"
+                @if (worker.retainedFailures.length > 20) {
+                  @let failurePages = workerFailurePageView(worker);
+                  <nav
+                    class="process-pager"
+                    [attr.aria-label]="'Пагинация ошибок worker #' + worker.workerId"
                   >
-                    {{ 'process.card.errorDetails' | t }}
-                  </button>
+                    <button
+                      type="button"
+                      [disabled]="!failurePages.hasPrevious"
+                      (click)="previousWorkerFailures(worker)"
+                    >
+                      {{ 'process.files.previous' | t }}</button
+                    ><span>{{ failurePages.first }}–{{ failurePages.last }} из {{ worker.retainedFailures.length }}</span
+                    ><button
+                      type="button"
+                      [disabled]="!failurePages.hasNext"
+                      (click)="nextWorkerFailures(worker)"
+                    >
+                      {{ 'process.files.next' | t }}
+                    </button>
+                  </nav>
+                }
+                @if (!worker.assignment && !worker.retainedFailures.length) {
+                  <p>{{ 'process.worker.awaiting' | t }}</p>
                 }
               </article>
             }
           </div>
         </section>
 
-        <div class="process-connector" aria-hidden="true"><span></span></div>
-
         <section
           class="process-zone"
           data-testid="process-zone-files"
-          aria-labelledby="process-zone-files-title"
+          aria-labelledby="files-title"
         >
-          <header class="process-zone__header">
+          <header class="process-section-header">
             <div>
-              <span class="process-zone__step">04</span>
-              <h3 id="process-zone-files-title">{{ 'process.zone.files' | t }}</h3>
+              <span class="process-kind">{{ 'process.kind.area' | t }}</span>
+              <h3 id="files-title">{{ 'process.zone.files' | t }}</h3>
             </div>
-            <span class="process-zone__count">{{
+            <span class="process-count">{{
               formatProcessCount(pipeline().fileGroups.length)
             }}</span>
           </header>
-          @if (fileGroupViews().length === 0) {
-            <p class="process-zone__empty">{{ 'process.zone.empty.files' | t }}</p>
-          } @else {
-            <div class="process-file-groups">
-              @for (view of fileGroupViews(); track view.group.id) {
-                @let group = view.group;
-                <article
-                  [class]="
-                    'process-file-group ' +
-                    (group.failure ? 'process-tone--danger ' : '') +
-                    group.identity.className
-                  "
-                  [attr.data-testid]="'process-file-group-' + group.id"
-                >
-                  <header class="process-file-group__header">
-                    <div>
-                      <strong>{{ group.scriptCode || group.scriptId }}</strong
-                      ><span>{{ group.memberName }}</span>
-                    </div>
-                    <span>{{
-                      'process.files.total' | t: { count: formatProcessCount(group.count) }
-                    }}</span>
-                  </header>
-                  <dl class="process-file-stats">
-                    <div>
-                      <dt>{{ 'process.files.rows' | t }}</dt>
-                      <dd>{{ formatProcessCount(group.totalRows) }}</dd>
-                    </div>
-                    <div>
-                      <dt>{{ 'process.files.size' | t }}</dt>
-                      <dd>{{ formatProcessBytes(group.totalBytes) }}</dd>
-                    </div>
-                    <div>
-                      <dt>{{ 'process.files.ready' | t }}</dt>
-                      <dd>{{ formatProcessCount(group.statusCounts.written) }}</dd>
-                    </div>
-                    <div>
-                      <dt>{{ 'process.files.errors' | t }}</dt>
-                      <dd>{{ formatProcessCount(group.statusCounts.failed) }}</dd>
-                    </div>
-                  </dl>
-                  <div class="process-file-group__actions">
-                    @if (group.failure; as failure) {
-                      <button
-                        type="button"
-                        class="process-link-button process-link-button--danger"
-                        (click)="openFailure(failure, $event)"
-                      >
-                        {{ 'process.card.errorDetails' | t }}
-                      </button>
-                    }
-                    @if (!view.isExpanded) {
-                      <button
-                        type="button"
-                        class="process-link-button"
-                        (click)="openFileGroup(group)"
-                      >
-                        {{
-                          'process.files.expand'
-                            | t: { count: formatProcessCount(group.initialDetails.length) }
-                        }}
-                      </button>
-                    }
+          <div class="process-file-groups">
+            @for (group of visibleFileGroups(); track group.id) {
+              <article
+                [class]="'process-file-group ' + group.identity.className"
+                [attr.data-testid]="'process-file-group-' + group.id"
+              >
+                <header>
+                  <div>
+                    <strong>{{ group.scriptCode || group.scriptId }}</strong
+                    ><span>{{ group.memberName }}</span>
                   </div>
-                  @if (view.isExpanded) {
-                    <ul
-                      class="process-file-list"
-                      [attr.data-testid]="'process-file-details-' + group.id"
+                  <span>{{
+                    'process.files.total' | t: { count: formatProcessCount(group.count) }
+                  }}</span>
+                </header>
+                <div class="process-file-stats">
+                  <span
+                    >{{ 'process.files.rows' | t }}: {{ formatProcessCount(group.totalRows) }}</span
+                  ><span
+                    >{{ 'process.files.size' | t }}:
+                    {{ formatProcessBytes(group.totalBytes) }}</span
+                  ><span
+                    >{{ 'process.files.ready' | t }}:
+                    {{ formatProcessCount(group.statusCounts.written) }}</span
+                  ><span
+                    >{{ 'process.files.errors' | t }}:
+                    {{ formatProcessCount(group.statusCounts.failed) }}</span
+                  >
+                </div>
+                <button
+                  type="button"
+                  class="process-link-button"
+                  [attr.aria-expanded]="expandedFileGroup() === group.id"
+                  (click)="toggleFileGroup(group)"
+                >
+                  {{
+                    (expandedFileGroup() === group.id
+                      ? 'process.files.collapse'
+                      : 'process.files.expand'
+                    ) | t: { count: formatProcessCount(group.count) }
+                  }}
+                </button>
+                @if (group.failure; as failure) {
+                  <button
+                    type="button"
+                    class="process-link-button process-link-button--danger"
+                    (click)="openFailure(failure, $event)"
+                  >
+                    {{ 'process.card.errorDetails' | t }}
+                  </button>
+                }
+                @if (expandedFileGroup() === group.id) {
+                  @let groupPages = pageView(group.details, 'groupFiles');
+                  <ul
+                    class="process-file-list"
+                    [attr.data-testid]="'process-file-details-' + group.id"
+                  >
+                    @for (file of visibleGroupFiles(group); track file.id) {
+                      <li>
+                        @if (file.failure; as problem) {
+                          <button
+                            type="button"
+                            class="process-file-row process-file-card process-card--button process-tone--danger"
+                            (click)="openFailure(problem, $event)"
+                          >
+                            <strong>{{ fileName(file) }}</strong
+                            ><span>{{ resolveFileStageLabel(file.stage) }}</span>
+                          </button>
+                        } @else {
+                          <div
+                            [class]="
+                              'process-file-row process-file-card process-tone--' +
+                              fileTone(file.stage)
+                            "
+                          >
+                            <strong>{{ fileName(file) }}</strong
+                            ><span>{{ resolveFileStageLabel(file.stage) }}</span>
+                          </div>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  <nav class="process-pager" aria-label="Пагинация файлов">
+                    <button
+                      type="button"
+                      [disabled]="!groupPages.hasPrevious"
+                      (click)="previous('groupFiles', group.details.length)"
                     >
-                      @for (file of view.visibleDetails; track file.id) {
-                        <li>
-                          @if (file.failure; as failure) {
-                            <button
-                              type="button"
-                              class="process-file-card process-card--button process-tone--danger"
-                              (click)="openFailure(failure, $event)"
-                            >
-                              <strong>{{ fileName(file) }}</strong
-                              ><span>{{ resolveFileStageLabel(file.stage) }}</span>
-                            </button>
-                          } @else {
-                            <div
-                              [class]="'process-file-card process-tone--' + fileTone(file.stage)"
-                            >
-                              <strong>{{ fileName(file) }}</strong
-                              ><span>{{ resolveFileStageLabel(file.stage) }}</span>
-                            </div>
-                          }
-                        </li>
-                      }
-                    </ul>
-                    <div class="process-file-group__footer">
-                      <span>{{
-                        'process.files.shown'
-                          | t
-                            : {
-                                first: formatProcessCount(view.firstVisible),
-                                last: formatProcessCount(view.lastVisible),
-                                total: formatProcessCount(group.count),
-                              }
-                      }}</span>
-                      <div>
-                        @if (view.hasPrevious) {
-                          <button
-                            type="button"
-                            class="process-link-button"
-                            (click)="showPreviousFilePage(group)"
-                          >
-                            {{ 'process.files.previous' | t }}
-                          </button>
-                        }
-                        @if (view.hasNext) {
-                          <button
-                            type="button"
-                            class="process-link-button"
-                            (click)="showNextFilePage(group)"
-                          >
-                            {{ 'process.files.next' | t }}
-                          </button>
-                        }
-                        <button
-                          type="button"
-                          class="process-link-button"
-                          (click)="collapseFileGroup(group)"
-                        >
-                          {{ 'process.files.collapse' | t }}
-                        </button>
-                      </div>
-                    </div>
-                  }
-                </article>
-              }
-            </div>
+                      {{ 'process.files.previous' | t }}</button
+                    ><span
+                      >{{ groupPages.first }}–{{ groupPages.last }} из {{ group.count }}</span
+                    ><button
+                      type="button"
+                      [disabled]="!groupPages.hasNext"
+                      (click)="next('groupFiles', group.count)"
+                    >
+                      {{ 'process.files.next' | t }}
+                    </button>
+                  </nav>
+                }
+              </article>
+            } @empty {
+              <p class="process-empty">{{ 'process.zone.empty.files' | t }}</p>
+            }
+          </div>
+          @if (pipeline().fileGroups.length > 20) {
+            @let groupListPages = pageView(pipeline().fileGroups, 'groups');
+            <nav class="process-pager">
+              <button
+                type="button"
+                [disabled]="!groupListPages.hasPrevious"
+                (click)="previous('groups', pipeline().fileGroups.length)"
+              >
+                {{ 'process.files.previous' | t }}</button
+              ><span>{{ groupListPages.first }}–{{ groupListPages.last }} из {{ pipeline().fileGroups.length }}</span
+              ><button
+                type="button"
+                [disabled]="!groupListPages.hasNext"
+                (click)="next('groups', pipeline().fileGroups.length)"
+              >
+                {{ 'process.files.next' | t }}
+              </button>
+            </nav>
           }
         </section>
 
-        <div class="process-connector" aria-hidden="true"><span></span></div>
-
         <section
-          class="process-node process-node--sender"
+          class="process-handler process-handler--sender"
           data-testid="process-node-sender"
-          aria-labelledby="process-node-sender-title"
+          aria-labelledby="sender-title"
         >
-          <header>
-            <span class="process-node__icon" aria-hidden="true"></span>
+          <header class="process-section-header">
             <div>
-              <p>{{ 'process.node.handler' | t }}</p>
-              <h3 id="process-node-sender-title">{{ 'process.node.sender' | t }}</h3>
+              <span class="process-kind">{{ 'process.node.handler' | t }}</span>
+              <h3 id="sender-title">{{ 'process.node.sender' | t }}</h3>
             </div>
+            <span class="process-count">{{ senderBatches().length }}</span>
           </header>
-          <div class="process-node__body">
-            @if (pipeline().senderQueue.length === 0 && pipeline().senderInProgress.length === 0) {
-              <span class="process-node__idle">{{ 'process.node.waiting' | t }}</span>
-            }
-            @for (batch of pipeline().senderQueue; track batch.id) {
-              @if (batch.failure; as failure) {
+          <div class="process-card-grid">
+            @for (batch of visibleSenderBatches(); track batch.id) {
+              <article [class]="'process-batch ' + batch.identity.className">
                 <button
                   type="button"
-                  [class]="
-                    'process-card process-card--button process-tone--danger ' +
-                    batch.identity.className
-                  "
-                  [attr.aria-label]="batchAriaLabel(batch)"
-                  (click)="openFailure(failure, $event)"
+                  class="process-card process-card--button"
+                  [class.process-tone--danger]="!!batch.failure"
+                  [attr.aria-expanded]="expandedSenderBatch() === batch.id"
+                  (click)="toggleSenderBatch(batch)"
                 >
                   <strong>{{ 'process.card.batch' | t: { id: batch.id } }}</strong
                   ><span>{{ resolveSenderStatusLabel(batch.status) }}</span
-                  ><small>{{ 'process.card.errorDetails' | t }}</small>
-                </button>
-              } @else {
-                <article
-                  [class]="
-                    'process-card process-tone--' +
-                    batchTone(batch.status) +
-                    ' ' +
-                    batch.identity.className
-                  "
-                >
-                  <strong>{{ 'process.card.batch' | t: { id: batch.id } }}</strong
-                  ><span>{{ resolveSenderStatusLabel(batch.status) }}</span>
-                </article>
-              }
-            }
-            @for (batch of pipeline().senderInProgress; track batch.id) {
-              @if (batch.failure; as failure) {
-                <button
-                  type="button"
-                  [class]="
-                    'process-card process-card--button process-tone--danger ' +
-                    batch.identity.className
-                  "
-                  [attr.aria-label]="batchAriaLabel(batch)"
-                  (click)="openFailure(failure, $event)"
-                >
-                  <strong>{{ 'process.card.batch' | t: { id: batch.id } }}</strong
-                  ><span>{{ resolveSenderStatusLabel(batch.status) }}</span
-                  ><small>{{ 'process.card.errorDetails' | t }}</small>
-                </button>
-              } @else {
-                @let sending = batchSendElapsed(batch);
-                <article [class]="'process-card process-tone--active ' + batch.identity.className">
-                  <strong>{{ 'process.card.batch' | t: { id: batch.id } }}</strong>
-                  <span>{{ resolveSenderStatusLabel(batch.status) }}</span>
-                  @if (sending !== null) {
+                  ><small>{{ 'process.card.unsent' | t: { count: batch.unsentCount } }}</small>
+                  @if (batch.startedAt || batch.queuedAt) {
                     <small>{{
-                      'process.card.sending' | t: { duration: formatProcessDuration(sending) }
+                      'process.card.sendingSince'
+                        | t: { time: formatTimestamp(batch.startedAt || batch.queuedAt) }
                     }}</small>
                   }
-                </article>
-              }
+                </button>
+                @if (batch.failure; as failure) {
+                  <button
+                    type="button"
+                    class="process-link-button process-link-button--danger"
+                    (click)="openFailure(failure, $event)"
+                  >
+                    {{ 'process.card.errorDetails' | t }}
+                  </button>
+                }
+                @if (batch.hasLegacyUnsentAmbiguity) {
+                  <p class="process-legacy-note">
+                    {{
+                      'process.sender.legacyAmbiguous'
+                        | t: { count: batch.fileCount || 0, sent: batch.sentCount }
+                    }}
+                  </p>
+                }
+                @if (expandedSenderBatch() === batch.id) {
+                  @let senderFilePages = pageView(batch.senderFiles, 'senderFiles');
+                  <ul class="process-file-list" data-testid="process-sender-files">
+                    @for (file of visibleSenderFiles(batch); track file.id) {
+                      <li>
+                        <div class="process-file-row process-dispatch-file">
+                          <strong>{{ fileName(file) }}</strong
+                          ><span>{{ formatTimestamp(file.queuedAt) }}</span>
+                        </div>
+                      </li>
+                    }
+                  </ul>
+                  @if (batch.senderFiles.length > 20) {
+                    <nav class="process-pager">
+                      <button
+                        type="button"
+                        [disabled]="!senderFilePages.hasPrevious"
+                        (click)="previous('senderFiles', batch.senderFiles.length)"
+                      >
+                        {{ 'process.files.previous' | t }}</button
+                      ><span>{{ senderFilePages.first }}–{{ senderFilePages.last }} из {{ batch.senderFiles.length }}</span
+                      ><button
+                        type="button"
+                        [disabled]="!senderFilePages.hasNext"
+                        (click)="next('senderFiles', batch.senderFiles.length)"
+                      >
+                        {{ 'process.files.next' | t }}
+                      </button>
+                    </nav>
+                  }
+                }
+              </article>
+            } @empty {
+              <span class="process-empty">{{ 'process.node.waiting' | t }}</span>
             }
           </div>
+          @if (senderBatches().length > 20) {
+            @let senderPages = pageView(senderBatches(), 'sender');
+            <nav class="process-pager" aria-label="Пагинация партий отправки">
+              <button
+                type="button"
+                [disabled]="!senderPages.hasPrevious"
+                (click)="previous('sender', senderBatches().length)"
+              >
+                {{ 'process.files.previous' | t }}</button
+              ><span>{{ senderPages.first }}–{{ senderPages.last }} из {{ senderBatches().length }}</span
+              ><button
+                type="button"
+                [disabled]="!senderPages.hasNext"
+                (click)="next('sender', senderBatches().length)"
+              >
+                {{ 'process.files.next' | t }}
+              </button>
+            </nav>
+          }
         </section>
 
-        <div class="process-connector" aria-hidden="true"><span></span></div>
-
         <section
-          class="process-zone process-zone--completed"
+          class="process-zone process-zone--delivered"
           data-testid="process-zone-delivered"
-          aria-labelledby="process-zone-delivered-title"
+          aria-labelledby="delivered-title"
         >
-          <header class="process-zone__header">
+          <header class="process-section-header">
             <div>
-              <span class="process-zone__step">05</span>
-              <h3 id="process-zone-delivered-title">{{ 'process.zone.delivered' | t }}</h3>
+              <span class="process-kind">{{ 'process.kind.area' | t }}</span>
+              <h3 id="delivered-title">{{ 'process.zone.delivered' | t }}</h3>
+              <small>{{
+                'process.delivered.summary'
+                  | t: { batches: pipeline().delivered.length, files: deliveredFileCount() }
+              }}</small>
             </div>
-            <span class="process-zone__count">{{
-              formatProcessCount(
-                pipeline().delivered.length +
-                  pipeline().completedMembers.length +
-                  pipeline().completedScripts.length
-              )
-            }}</span>
+            <button
+              type="button"
+              class="process-link-button"
+              [attr.aria-expanded]="deliveredExpanded()"
+              (click)="toggleDelivered()"
+            >
+              {{
+                (deliveredExpanded() ? 'process.files.collapse' : 'process.delivered.expand') | t
+              }}
+            </button>
           </header>
-          @if (
-            pipeline().delivered.length === 0 &&
-            pipeline().completedMembers.length === 0 &&
-            pipeline().completedScripts.length === 0
-          ) {
-            <p class="process-zone__empty">{{ 'process.zone.empty.delivered' | t }}</p>
-          } @else {
-            <ul class="process-card-grid">
-              @for (member of pipeline().completedMembers; track member.key) {
-                <li>
-                  @if (member.failure; as failure) {
-                    <button
-                      type="button"
-                      [class]="
-                        'process-card process-card--button process-tone--danger ' +
-                        member.identity.className
-                      "
-                      (click)="openFailure(failure, $event)"
-                    >
-                      <strong>{{ member.name }}</strong>
-                      <span>{{ resolveMemberStatusLabel(member.status) }}</span>
-                      <small>{{ 'process.card.errorDetails' | t }}</small>
-                    </button>
-                  } @else {
-                    <article
-                      [class]="
-                        'process-card process-tone--' +
-                        memberTone(member.status) +
-                        ' ' +
-                        member.identity.className
-                      "
-                    >
-                      <strong>{{ member.name }}</strong>
-                      <span>{{ resolveMemberStatusLabel(member.status) }}</span>
-                    </article>
-                  }
-                </li>
-              }
-              @for (script of pipeline().completedScripts; track script.id) {
-                <li>
-                  @if (script.failure; as failure) {
-                    <button
-                      type="button"
-                      [class]="
-                        'process-card process-card--button process-tone--danger ' +
-                        script.identity.className
-                      "
-                      (click)="openFailure(failure, $event)"
-                    >
-                      <strong>{{ script.scriptCode || script.id }}</strong>
-                      <span>{{ script.memberName }}</span>
-                      <small>{{ 'process.card.errorDetails' | t }}</small>
-                    </button>
-                  } @else {
-                    <article
-                      [class]="
-                        'process-card process-tone--' +
-                        scriptTone(script.stage) +
-                        ' ' +
-                        script.identity.className
-                      "
-                    >
-                      <strong>{{ script.scriptCode || script.id }}</strong>
-                      <span>{{ script.memberName }}</span>
-                    </article>
-                  }
-                </li>
-              }
-              @for (batch of pipeline().delivered; track batch.id) {
-                <li>
-                  @if (batch.failure; as failure) {
-                    <button
-                      type="button"
-                      [class]="
-                        'process-card process-card--button process-tone--danger ' +
-                        batch.identity.className
-                      "
-                      (click)="openFailure(failure, $event)"
-                    >
-                      <strong>{{ batch.memberName }}</strong
-                      ><span>{{ resolveSenderStatusLabel(batch.status) }}</span
-                      ><small>{{ 'process.card.errorDetails' | t }}</small>
-                    </button>
-                  } @else {
-                    <article
-                      [class]="
-                        'process-card process-tone--' +
-                        batchTone(batch.status) +
-                        ' ' +
-                        batch.identity.className
-                      "
-                    >
-                      <strong>{{ batch.memberName }}</strong
-                      ><span>{{ resolveSenderStatusLabel(batch.status) }}</span
-                      ><small>{{
-                        'process.card.sent' | t: { count: formatProcessCount(batch.sentCount) }
+          @if (deliveredExpanded()) {
+            <div class="process-card-grid">
+              @for (batch of visibleDelivered(); track batch.id) {
+                <article [class]="'process-delivery-group ' + batch.identity.className">
+                  <button
+                    type="button"
+                    class="process-delivery-group__summary"
+                    [attr.aria-expanded]="expandedDeliveredBatch() === batch.id"
+                    (click)="toggleDeliveredBatch(batch)"
+                  >
+                    <strong>{{ batch.memberName }}</strong
+                    ><span>{{ 'process.card.sent' | t: { count: batch.sentCount } }}</span
+                    ><small>{{
+                      'process.timeline.queued' | t: { time: formatTimestamp(batch.queuedAt) }
+                    }}</small
+                    ><small>{{
+                      'process.timeline.started' | t: { time: formatTimestamp(batch.startedAt) }
+                    }}</small
+                    ><small>{{
+                      'process.timeline.finished' | t: { time: formatTimestamp(batch.updatedAt) }
+                    }}</small>
+                    @if (batch.totalElapsedMs !== null) {
+                      <small>{{
+                        'process.timeline.total'
+                          | t: { duration: formatProcessDuration(batch.totalElapsedMs) }
                       }}</small>
-                    </article>
+                    }
+                  </button>
+                  @if (expandedDeliveredBatch() === batch.id) {
+                    @let deliveredFilePages = pageView(batch.sentFiles, 'deliveredFiles');
+                    <ul class="process-file-list" data-testid="process-delivered-files">
+                      @for (file of visibleDeliveredFiles(batch); track file.id) {
+                        <li>
+                          <div class="process-file-row process-dispatch-file process-tone--success">
+                            <strong>{{ fileName(file) }}</strong
+                            ><span>{{
+                              'process.timeline.sentAt' | t: { time: formatTimestamp(file.sentAt) }
+                            }}</span>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                    @if (batch.sentFiles.length > 20) {
+                      <nav class="process-pager">
+                        <button
+                          type="button"
+                          [disabled]="!deliveredFilePages.hasPrevious"
+                          (click)="previous('deliveredFiles', batch.sentFiles.length)"
+                        >
+                          {{ 'process.files.previous' | t }}</button
+                        ><span>{{ deliveredFilePages.first }}–{{ deliveredFilePages.last }} из {{ batch.sentFiles.length }}</span
+                        ><button
+                          type="button"
+                          [disabled]="!deliveredFilePages.hasNext"
+                          (click)="next('deliveredFiles', batch.sentFiles.length)"
+                        >
+                          {{ 'process.files.next' | t }}
+                        </button>
+                      </nav>
+                    }
                   }
-                </li>
+                </article>
+              } @empty {
+                <p class="process-empty">{{ 'process.zone.empty.delivered' | t }}</p>
               }
-            </ul>
+            </div>
+            @if (pipeline().delivered.length > 20) {
+              @let deliveredPages = pageView(pipeline().delivered, 'delivered');
+              <nav class="process-pager">
+                <button
+                  type="button"
+                  [disabled]="!deliveredPages.hasPrevious"
+                  (click)="previous('delivered', pipeline().delivered.length)"
+                >
+                  {{ 'process.files.previous' | t }}</button
+                ><span>{{ deliveredPages.first }}–{{ deliveredPages.last }} из {{ pipeline().delivered.length }}</span
+                ><button
+                  type="button"
+                  [disabled]="!deliveredPages.hasNext"
+                  (click)="next('delivered', pipeline().delivered.length)"
+                >
+                  {{ 'process.files.next' | t }}
+                </button>
+              </nav>
+            }
           }
         </section>
       </div>
@@ -714,7 +771,7 @@
         @if (failure.reference.workerId !== null) {
           <div>
             <dt>{{ 'process.error.worker' | t }}</dt>
-            <dd>#{{ failure.reference.workerId }}</dd>
+            <dd>{{ failure.reference.workerId }}</dd>
           </div>
         }
         @if (failure.filePath) {
@@ -726,7 +783,7 @@
         @if (failure.chunkNumber !== null) {
           <div>
             <dt>{{ 'process.error.chunk' | t }}</dt>
-            <dd>#{{ failure.chunkNumber }}</dd>
+            <dd>{{ failure.chunkNumber }}</dd>
           </div>
         }
         @if (failure.occurredAt) {
@@ -741,9 +798,7 @@
         <p id="process-error-reason">{{ failure.message }}</p>
       </div>
       <footer>
-        <button type="button" class="process-dialog__close" (click)="closeFailure()">
-          {{ 'process.error.close' | t }}
-        </button>
+        <button type="button" (click)="closeFailure()">{{ 'process.error.close' | t }}</button>
       </footer>
     </section>
   </div>

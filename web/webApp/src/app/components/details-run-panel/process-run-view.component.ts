@@ -2,24 +2,22 @@ import { isPlatformBrowser } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   ElementRef,
   HostListener,
+  Injector,
   PLATFORM_ID,
+  afterNextRender,
   computed,
   effect,
   inject,
   signal,
 } from '@angular/core';
 import { WorkflowStore } from '../../app.store';
-import {
-  MemberRunLifecycleStatus,
-  ScriptRunStage,
-  SenderBatchStatus,
-} from '../../app.models';
+import { MemberRunLifecycleStatus, ScriptRunStage, SenderBatchStatus } from '../../app.models';
 import { TPipe } from '../../i18n/i18n';
 import {
   ProcessBatchCard,
+  ProcessDispatchFile,
   ProcessFailureDetail,
   ProcessFileCard,
   ProcessFileGroup,
@@ -27,15 +25,11 @@ import {
   ProcessScriptCard,
   ProcessWorkerSlot,
 } from '../../state/utils/process-projection.models';
-import {
-  PROCESS_FILE_DETAIL_PAGE_SIZE,
-  buildProcessPipeline,
-} from '../../state/utils/process-projection.util';
+import { PROCESS_PAGE_SIZE, buildProcessPipeline } from '../../state/utils/process-projection.util';
 import {
   formatProcessBytes,
   formatProcessCount,
   formatProcessDuration,
-  getElapsedSince,
 } from '../../state/utils/process-display.util';
 import {
   resolveFileStageLabel,
@@ -45,27 +39,30 @@ import {
   resolveSenderStatusLabel,
 } from '../../state/utils/labels.util';
 import {
-  resolveBatchTone,
   resolveFileTone,
   resolveMemberTone,
   resolveScriptTone,
 } from '../../state/utils/process-tone.util';
 import { formatTimestamp } from '../../state/utils/time.util';
 
-interface ProcessFileGroupView {
-  group: ProcessFileGroup;
-  visibleDetails: readonly ProcessFileCard[];
-  visibleCount: number;
-  firstVisible: number;
-  lastVisible: number;
-  isExpanded: boolean;
+type PageTarget =
+  | 'members'
+  | 'resolver'
+  | 'scripts'
+  | 'groups'
+  | 'groupFiles'
+  | 'sender'
+  | 'senderFiles'
+  | 'delivered'
+  | 'deliveredFiles';
+
+interface ProcessPage<T> {
+  items: readonly T[];
+  page: number;
+  first: number;
+  last: number;
   hasPrevious: boolean;
   hasNext: boolean;
-}
-
-interface ProcessFilePageState {
-  correlationId: string;
-  pages: Readonly<Record<string, number>>;
 }
 
 @Component({
@@ -82,81 +79,124 @@ interface ProcessFilePageState {
 })
 export class ProcessRunViewComponent {
   readonly store = inject(WorkflowStore);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly platformId = inject(PLATFORM_ID);
-  private readonly isBrowser = isPlatformBrowser(this.platformId);
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private focusReturnTarget: HTMLElement | null = null;
+  private fullscreenReturnTarget: HTMLElement | null = null;
 
-  readonly now = signal(new Date());
   readonly run = this.store.activeRun;
-  /** Snapshot-only projection: the one-second display clock is intentionally not a dependency. */
   readonly pipeline = computed(() => buildProcessPipeline(this.run()));
-  readonly filePageState = signal<ProcessFilePageState>({ correlationId: '', pages: {} });
   readonly selectedFailure = signal<ProcessFailureDetail | null>(null);
+  readonly memberPage = signal(0);
+  readonly resolverPage = signal(0);
+  readonly scriptPage = signal(0);
+  readonly workerFailurePages = signal<number[]>([0, 0, 0, 0]);
+  readonly expandedFileGroup = signal<string | null>(null);
+  readonly fileDetailPage = signal(0);
+  readonly fileGroupPage = signal(0);
+  readonly senderPage = signal(0);
+  readonly expandedSenderBatch = signal<string | null>(null);
+  readonly senderFilePage = signal(0);
+  readonly deliveredExpanded = signal(false);
+  readonly deliveredPage = signal(0);
+  readonly expandedDeliveredBatch = signal<string | null>(null);
+  readonly deliveredFilePage = signal(0);
+  readonly isFullscreen = signal(false);
+  readonly fullscreenSupported =
+    this.isBrowser && typeof document.documentElement.requestFullscreen === 'function';
+
   readonly runFailure = computed(
-    () => this.pipeline().failures.find((failure) => failure.reference.type === 'run') ?? null,
+    () => this.pipeline().failures.find((item) => item.reference.type === 'run') ?? null,
   );
   readonly hasProcessCards = computed(() => {
-    const pipeline = this.pipeline();
+    const value = this.pipeline();
     return (
-      pipeline.members.length +
-        pipeline.scripts.length +
-        pipeline.fileGroups.length +
-        pipeline.senderQueue.length +
-        pipeline.senderInProgress.length +
-        pipeline.delivered.length >
+      value.members.length +
+        value.scripts.length +
+        value.fileGroups.length +
+        value.senderBatches.length +
+        value.delivered.length >
       0
     );
   });
   readonly activeCardCount = computed(() => {
-    const pipeline = this.pipeline();
-    const activeWorkers = pipeline.workers.reduce(
-      (count, worker) =>
-        count + (worker.assignment?.stage === ScriptRunStage.Running ? 1 : 0),
-      0,
-    );
-    const queuedFiles = pipeline.fileGroups.reduce(
-      (count, group) => count + group.statusCounts.queued,
-      0,
-    );
+    const value = this.pipeline();
     return (
-      pipeline.memberInput.filter((member) => member.status === MemberRunLifecycleStatus.Pending)
-        .length +
-      pipeline.resolver.filter((member) => member.status === MemberRunLifecycleStatus.Running).length +
-      pipeline.scriptQueue.filter((script) => script.stage === ScriptRunStage.AwaitingWorker).length +
-      activeWorkers +
-      queuedFiles +
-      pipeline.senderQueue.filter((batch) => batch.status === SenderBatchStatus.Ready).length +
-      pipeline.senderInProgress.filter((batch) => batch.status === SenderBatchStatus.InProgress)
-        .length
+      value.memberInput.filter((item) => item.status === MemberRunLifecycleStatus.Pending).length +
+      value.resolver.filter((item) => item.status === MemberRunLifecycleStatus.Running).length +
+      value.scriptQueue.filter((item) => item.stage === ScriptRunStage.AwaitingWorker).length +
+      value.workers.filter((item) => item.assignment?.stage === ScriptRunStage.Running).length +
+      value.fileGroups.reduce((sum, item) => sum + item.statusCounts.queued, 0) +
+      value.senderBatches.filter(
+        (batch) =>
+          batch.status === SenderBatchStatus.Ready || batch.status === SenderBatchStatus.InProgress,
+      ).length
     );
   });
-  readonly fileGroupViews = computed<readonly ProcessFileGroupView[]>(() => {
-    const pipeline = this.pipeline();
-    const state = this.filePageState();
-    const pages = state.correlationId === pipeline.correlationId ? state.pages : {};
-    return pipeline.fileGroups.map((group) => {
-      const requestedPage = pages[group.id];
-      const maxPage = Math.max(0, Math.ceil(group.count / group.detailPageSize) - 1);
-      const page = requestedPage === undefined ? null : Math.min(maxPage, requestedPage);
-      const offset = page === null ? 0 : page * group.detailPageSize;
-      const visibleDetails =
-        page === null ? Object.freeze([]) : group.details.slice(offset, offset + group.detailPageSize);
-      return {
-        group,
-        visibleDetails,
-        visibleCount: visibleDetails.length,
-        firstVisible: visibleDetails.length ? offset + 1 : 0,
-        lastVisible: offset + visibleDetails.length,
-        isExpanded: page !== null,
-        hasPrevious: page !== null && page > 0,
-        hasNext: page !== null && page < maxPage,
-      };
+  readonly visibleMemberInput = computed(
+    () => page(this.pipeline().memberInput, this.memberPage()).items,
+  );
+  readonly visibleResolver = computed(
+    () => page(this.pipeline().resolver, this.resolverPage()).items,
+  );
+  readonly visibleScriptQueue = computed(
+    () => page(this.pipeline().scriptQueue, this.scriptPage()).items,
+  );
+  readonly visibleFileGroups = computed(
+    () => page(this.pipeline().fileGroups, this.fileGroupPage()).items,
+  );
+  readonly senderBatches = computed(() => this.pipeline().senderBatches);
+  readonly visibleSenderBatches = computed(
+    () => page(this.senderBatches(), this.senderPage()).items,
+  );
+  readonly visibleDelivered = computed(
+    () => page(this.pipeline().delivered, this.deliveredPage()).items,
+  );
+  readonly deliveredFileCount = computed(() =>
+    this.pipeline().delivered.reduce((sum, batch) => sum + batch.sentFiles.length, 0),
+  );
+
+  constructor() {
+    let correlationId = '';
+    effect(() => {
+      const nextCorrelationId = this.pipeline().correlationId;
+      if (nextCorrelationId === correlationId) return;
+      correlationId = nextCorrelationId;
+      this.collapsePagedContent();
     });
-  });
-  readonly snapshotAgeMs = computed(() => getElapsedSince(this.run()?.updatedAt, this.now()));
+    effect(() => {
+      const value = this.pipeline();
+      this.clampPageState(this.memberPage, value.memberInput.length);
+      this.clampPageState(this.resolverPage, value.resolver.length);
+      this.clampPageState(this.scriptPage, value.scriptQueue.length);
+      this.clampPageState(this.fileGroupPage, value.fileGroups.length);
+      this.clampPageState(
+        this.fileDetailPage,
+        value.fileGroups.find((group) => group.id === this.expandedFileGroup())?.details.length ??
+          0,
+      );
+      this.clampPageState(this.senderPage, value.senderBatches.length);
+      this.clampPageState(
+        this.senderFilePage,
+        value.senderBatches.find((batch) => batch.id === this.expandedSenderBatch())?.senderFiles
+          .length ?? 0,
+      );
+      this.clampPageState(this.deliveredPage, value.delivered.length);
+      this.clampPageState(
+        this.deliveredFilePage,
+        value.delivered.find((batch) => batch.id === this.expandedDeliveredBatch())?.sentFiles
+          .length ?? 0,
+      );
+      const workerPages = this.workerFailurePages();
+      const nextWorkerPages = value.workers.map((worker) =>
+        clampPage(worker.retainedFailures.length, workerPages[worker.workerId - 1] ?? 0),
+      );
+      if (nextWorkerPages.some((page, index) => page !== workerPages[index])) {
+        this.workerFailurePages.set(nextWorkerPages);
+      }
+    });
+  }
 
   resolveRunStatusLabel = resolveRunStatusLabel;
   resolveMemberStatusLabel = resolveMemberStatusLabel;
@@ -170,208 +210,220 @@ export class ProcessRunViewComponent {
   memberTone = resolveMemberTone;
   scriptTone = resolveScriptTone;
   fileTone = resolveFileTone;
-  batchTone = resolveBatchTone;
 
-  constructor() {
-    effect(() => {
-      const runBusy = this.store.isRunBusy();
-      const shouldTick = runBusy || this.activeCardCount() > 0;
-      shouldTick ? this.startClock() : this.stopClock();
-    });
-    effect(() => {
-      const pipeline = this.pipeline();
-      const current = this.filePageState();
-      if (current.correlationId !== pipeline.correlationId) {
-        this.filePageState.set({ correlationId: pipeline.correlationId, pages: {} });
-        return;
-      }
-      const pages: Record<string, number> = {};
-      for (const group of pipeline.fileGroups) {
-        const requested = current.pages[group.id];
-        if (requested === undefined) continue;
-        const maxPage = Math.max(0, Math.ceil(group.count / group.detailPageSize) - 1);
-        pages[group.id] = Math.min(maxPage, Math.max(0, requested));
-      }
-      if (!samePages(current.pages, pages)) {
-        this.filePageState.set({ correlationId: pipeline.correlationId, pages });
-      }
-    });
-    this.destroyRef.onDestroy(() => this.stopClock());
+  visibleGroupFiles(group: ProcessFileGroup): readonly ProcessFileCard[] {
+    return this.expandedFileGroup() === group.id
+      ? page(group.details, this.fileDetailPage()).items
+      : [];
   }
-
-  openFileGroup(group: ProcessFileGroup): void {
-    this.setFilePage(group, 0);
+  visibleSenderFiles(batch: ProcessBatchCard): readonly ProcessDispatchFile[] {
+    return this.expandedSenderBatch() === batch.id
+      ? page(batch.senderFiles, this.senderFilePage()).items
+      : [];
   }
-
-  showNextFilePage(group: ProcessFileGroup): void {
-    this.setFilePage(group, this.currentFilePage(group) + 1);
+  visibleDeliveredFiles(batch: ProcessBatchCard): readonly ProcessDispatchFile[] {
+    return this.expandedDeliveredBatch() === batch.id
+      ? page(batch.sentFiles, this.deliveredFilePage()).items
+      : [];
   }
-
-  showPreviousFilePage(group: ProcessFileGroup): void {
-    this.setFilePage(group, Math.max(0, this.currentFilePage(group) - 1));
+  toggleFileGroup(group: ProcessFileGroup): void {
+    this.expandedFileGroup.set(this.expandedFileGroup() === group.id ? null : group.id);
+    this.fileDetailPage.set(0);
   }
-
-  collapseFileGroup(group: ProcessFileGroup): void {
-    this.filePageState.update((current) => {
-      if (current.correlationId !== this.pipeline().correlationId) return current;
-      const { [group.id]: _removed, ...pages } = current.pages;
-      return { ...current, pages };
-    });
+  toggleSenderBatch(batch: ProcessBatchCard): void {
+    this.expandedSenderBatch.set(this.expandedSenderBatch() === batch.id ? null : batch.id);
+    this.senderFilePage.set(0);
+  }
+  toggleDelivered(): void {
+    this.deliveredExpanded.update((value) => !value);
+    this.expandedDeliveredBatch.set(null);
+    this.deliveredFilePage.set(0);
+  }
+  toggleDeliveredBatch(batch: ProcessBatchCard): void {
+    this.expandedDeliveredBatch.set(this.expandedDeliveredBatch() === batch.id ? null : batch.id);
+    this.deliveredFilePage.set(0);
+  }
+  next(target: PageTarget, total: number): void {
+    const state = this.pageSignal(target);
+    const current = clampPage(total, state());
+    state.set(current < maxPage(total) ? current + 1 : current);
+  }
+  previous(target: PageTarget, total: number): void {
+    const state = this.pageSignal(target);
+    const current = clampPage(total, state());
+    state.set(current > 0 ? current - 1 : current);
+  }
+  pageView<T>(items: readonly T[], target: PageTarget): ProcessPage<T> {
+    return page(items, this.pageSignal(target)());
+  }
+  workerFailurePageView(worker: ProcessWorkerSlot): ProcessPage<ProcessScriptCard> {
+    const index = worker.workerId - 1;
+    return page(worker.retainedFailures, this.workerFailurePages()[index] ?? 0);
+  }
+  nextWorkerFailures(worker: ProcessWorkerSlot): void {
+    this.changeWorkerFailurePage(worker, 1);
+  }
+  previousWorkerFailures(worker: ProcessWorkerSlot): void {
+    this.changeWorkerFailurePage(worker, -1);
   }
 
   openFailure(failure: ProcessFailureDetail, event?: Event): void {
     this.focusReturnTarget = (event?.currentTarget as HTMLElement | null) ?? null;
     this.selectedFailure.set(failure);
-    if (this.isBrowser) {
-      setTimeout(() =>
-        this.elementRef.nativeElement
-          .querySelector<HTMLElement>('[data-testid="process-error-close"]')
-          ?.focus(),
-        0,
-      );
-    }
+    afterNextRender(
+      {
+        write: () =>
+          this.host.nativeElement
+            .querySelector<HTMLElement>('[data-testid="process-error-close"]')
+            ?.focus(),
+      },
+      { injector: this.injector },
+    );
   }
-
   closeFailure(): void {
     if (!this.selectedFailure()) return;
     this.selectedFailure.set(null);
-    if (this.isBrowser) {
-      const target = this.focusReturnTarget;
-      this.focusReturnTarget = null;
-      setTimeout(() => target?.focus(), 0);
+    const target = this.focusReturnTarget;
+    this.focusReturnTarget = null;
+    queueMicrotask(() => target?.focus());
+  }
+  async toggleFullscreen(event: Event): Promise<void> {
+    if (!this.fullscreenSupported) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    this.fullscreenReturnTarget = event.currentTarget as HTMLElement;
+    try {
+      await this.processRoot()?.requestFullscreen();
+    } catch {
+      this.fullscreenReturnTarget = null;
     }
   }
-
+  @HostListener('document:fullscreenchange')
+  onFullscreenChange(): void {
+    const active = document.fullscreenElement === this.processRoot();
+    this.isFullscreen.set(active);
+    if (!active && this.fullscreenReturnTarget) {
+      const target = this.fullscreenReturnTarget;
+      this.fullscreenReturnTarget = null;
+      queueMicrotask(() => target.focus());
+    }
+  }
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.closeFailure();
   }
-
   @HostListener('document:keydown', ['$event'])
-  trapDialogFocus(event: Event): void {
-    if (!this.selectedFailure()) return;
-    const keyboardEvent = event as KeyboardEvent;
-    if (keyboardEvent.key !== 'Tab') return;
-    const dialog = this.elementRef.nativeElement.querySelector<HTMLElement>('[role="dialog"]');
+  trapDialogFocus(event: KeyboardEvent): void {
+    if (!this.selectedFailure() || event.key !== 'Tab') return;
+    const dialog = this.host.nativeElement.querySelector<HTMLElement>('[role="dialog"]');
     if (!dialog) return;
     const focusable = Array.from(
       dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
       ),
-    ).filter((element) => !element.hasAttribute('hidden'));
+    );
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    const active = this.elementRef.nativeElement.ownerDocument.activeElement;
-    if (keyboardEvent.shiftKey && (active === first || !dialog.contains(active))) {
-      keyboardEvent.preventDefault();
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
       last.focus();
-    } else if (!keyboardEvent.shiftKey && (active === last || !dialog.contains(active))) {
-      keyboardEvent.preventDefault();
+    } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+      event.preventDefault();
       first.focus();
     }
   }
 
-  fileName(file: ProcessFileCard): string {
+  fileName(file: ProcessFileCard | ProcessDispatchFile): string {
     return file.fileName || file.path || file.id;
   }
-
-  scriptQueueWait(script: ProcessScriptCard): number | null {
-    return script.startedAt || isTerminalScript(script.stage)
-      ? script.queueWaitMs
-      : getElapsedSince(script.discoveredAt, this.now());
+  memberAriaLabel(item: ProcessMemberCard): string {
+    return `${item.name}. ${resolveMemberStatusLabel(item.status)}`;
+  }
+  workerFailure(item: ProcessWorkerSlot): ProcessFailureDetail | null {
+    return item.failure ?? item.retainedFailures.find((script) => script.failure)?.failure ?? null;
   }
 
-  scriptExecution(script: ProcessScriptCard): number | null {
-    return isTerminalScript(script.stage)
-      ? script.stageElapsedMs
-      : getElapsedSince(script.startedAt ?? script.stageEnteredAt, this.now());
+  private processRoot(): HTMLElement | null {
+    return this.host.nativeElement.querySelector('[data-testid="process-root"]');
+  }
+  private changeWorkerFailurePage(worker: ProcessWorkerSlot, direction: -1 | 1): void {
+    const index = worker.workerId - 1;
+    const currentPages = this.workerFailurePages();
+    const current = clampPage(worker.retainedFailures.length, currentPages[index] ?? 0);
+    const next = clampPage(worker.retainedFailures.length, current + direction);
+    if (current === next) return;
+    const pages = [...currentPages];
+    pages[index] = next;
+    this.workerFailurePages.set(pages);
+  }
+  private clampPageState(state: ReturnType<typeof signal<number>>, total: number): void {
+    const current = state();
+    const next = clampPage(total, current);
+    if (current !== next) state.set(next);
+  }
+  private pageSignal(target: PageTarget) {
+    switch (target) {
+      case 'groups':
+        return this.fileGroupPage;
+      case 'members':
+        return this.memberPage;
+      case 'resolver':
+        return this.resolverPage;
+      case 'scripts':
+        return this.scriptPage;
+      case 'groupFiles':
+        return this.fileDetailPage;
+      case 'sender':
+        return this.senderPage;
+      case 'senderFiles':
+        return this.senderFilePage;
+      case 'delivered':
+        return this.deliveredPage;
+      case 'deliveredFiles':
+        return this.deliveredFilePage;
+    }
   }
 
-  batchQueueWait(batch: ProcessBatchCard): number | null {
-    return batch.startedAt || isTerminalBatch(batch.status)
-      ? batch.queueWaitMs
-      : getElapsedSince(batch.queuedAt, this.now());
-  }
-
-  batchSendElapsed(batch: ProcessBatchCard): number | null {
-    return isTerminalBatch(batch.status)
-      ? batch.sendElapsedMs
-      : getElapsedSince(batch.startedAt, this.now());
-  }
-
-  memberAriaLabel(member: ProcessMemberCard): string {
-    return `${member.name}. ${resolveMemberStatusLabel(member.status)}`;
-  }
-
-  scriptAriaLabel(script: ProcessScriptCard): string {
-    return `${script.scriptCode || script.id}. ${resolveScriptStageLabel(script.stage)}`;
-  }
-
-  batchAriaLabel(batch: ProcessBatchCard): string {
-    return `${batch.id}. ${resolveSenderStatusLabel(batch.status)}`;
-  }
-
-  workerFailure(worker: ProcessWorkerSlot): ProcessFailureDetail | null {
-    return (
-      worker.failure ?? worker.retainedFailures.find((script) => script.failure)?.failure ?? null
-    );
-  }
-
-  private currentFilePage(group: ProcessFileGroup): number {
-    const state = this.filePageState();
-    if (state.correlationId !== this.pipeline().correlationId) return 0;
-    const maxPage = Math.max(0, Math.ceil(group.count / group.detailPageSize) - 1);
-    return Math.min(maxPage, Math.max(0, state.pages[group.id] ?? 0));
-  }
-
-  private setFilePage(group: ProcessFileGroup, page: number): void {
-    const correlationId = this.pipeline().correlationId;
-    const maxPage = Math.max(0, Math.ceil(group.count / PROCESS_FILE_DETAIL_PAGE_SIZE) - 1);
-    this.filePageState.update((current) => ({
-      correlationId,
-      pages: {
-        ...(current.correlationId === correlationId ? current.pages : {}),
-        [group.id]: Math.min(maxPage, Math.max(0, page)),
-      },
-    }));
-  }
-
-  private startClock(): void {
-    if (!this.isBrowser || this.intervalId !== null) return;
-    this.intervalId = setInterval(() => this.now.set(new Date()), 1_000);
-  }
-
-  private stopClock(): void {
-    if (this.intervalId === null) return;
-    clearInterval(this.intervalId);
-    this.intervalId = null;
+  private collapsePagedContent(): void {
+    this.expandedFileGroup.set(null);
+    this.memberPage.set(0);
+    this.resolverPage.set(0);
+    this.scriptPage.set(0);
+    this.workerFailurePages.set([0, 0, 0, 0]);
+    this.fileDetailPage.set(0);
+    this.fileGroupPage.set(0);
+    this.expandedSenderBatch.set(null);
+    this.senderFilePage.set(0);
+    this.senderPage.set(0);
+    this.deliveredExpanded.set(false);
+    this.expandedDeliveredBatch.set(null);
+    this.deliveredFilePage.set(0);
+    this.deliveredPage.set(0);
   }
 }
 
-function isTerminalScript(stage: number | null): boolean {
-  return (
-    stage === ScriptRunStage.Completed ||
-    stage === ScriptRunStage.Failed ||
-    stage === ScriptRunStage.Cancelled
-  );
+function page<T>(items: readonly T[], index: number): ProcessPage<T> {
+  const lastPage = maxPage(items.length);
+  const safe = clampPage(items.length, index);
+  const first = items.length ? safe * PROCESS_PAGE_SIZE + 1 : 0;
+  return {
+    items: items.slice(safe * PROCESS_PAGE_SIZE, safe * PROCESS_PAGE_SIZE + PROCESS_PAGE_SIZE),
+    page: safe,
+    first,
+    last: Math.min(items.length, (safe + 1) * PROCESS_PAGE_SIZE),
+    hasPrevious: safe > 0,
+    hasNext: safe < lastPage,
+  };
 }
 
-function isTerminalBatch(status: number | null): boolean {
-  return (
-    status === SenderBatchStatus.Completed ||
-    status === SenderBatchStatus.Failed ||
-    status === SenderBatchStatus.SkippedByRequest
-  );
+function maxPage(total: number): number {
+  return Math.max(0, Math.ceil(total / PROCESS_PAGE_SIZE) - 1);
 }
 
-function samePages(
-  left: Readonly<Record<string, number>>,
-  right: Readonly<Record<string, number>>,
-): boolean {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  return (
-    leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key])
-  );
+function clampPage(total: number, index: number): number {
+  return Math.max(0, Math.min(maxPage(total), index));
 }

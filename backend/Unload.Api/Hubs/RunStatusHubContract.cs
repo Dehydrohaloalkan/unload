@@ -18,6 +18,18 @@ public static class RunStatusHubContract
     public const string PresetStateEvent = "preset_state";
     public const string PresetReplayedEvent = "preset_replayed";
 
+    /// <summary>
+    /// Determines whether a runner event needs its own lightweight SignalR update.
+    /// File lifecycle events are already reflected in the coalesced run_status
+    /// snapshot, so publishing each one would overload clients for large runs.
+    /// Diagnostics are never suppressed.
+    /// </summary>
+    public static bool ShouldPublishStatusEvent(RunnerEvent payload) =>
+        payload.Failure is not null || payload.Step is not (
+            RunnerStep.ChunkCreated or
+            RunnerStep.FileWriteStarted or
+            RunnerStep.FileWritten);
+
     public static Task SendStatusAsync(
         this IClientProxy client,
         RunnerEvent payload,

@@ -1,5 +1,5 @@
-import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import {
   FileRunStage,
   MemberRunLifecycleStatus,
@@ -8,407 +8,546 @@ import {
   ScriptRunStage,
   SenderBatchStatus,
 } from '../../app.models';
-import { RU } from '../../i18n/ru';
 import { WorkflowStore } from '../../app.store';
+import { RU } from '../../i18n/ru';
 import { ProcessRunViewComponent } from './process-run-view.component';
+
+const AT = '2026-09-23T10:00:00Z';
+const DONE_AT = '2026-09-23T10:02:00Z';
 
 describe('ProcessRunViewComponent', () => {
   const activeRun = signal<RunStatusInfo | null>(null);
-  const isRunBusy = signal(false);
 
   beforeEach(async () => {
     activeRun.set(null);
-    isRunBusy.set(false);
     await TestBed.configureTestingModule({
       imports: [ProcessRunViewComponent],
-      providers: [{ provide: WorkflowStore, useValue: { activeRun, isRunBusy } }],
+      providers: [{ provide: WorkflowStore, useValue: { activeRun, isRunBusy: signal(false) } }],
     }).compileComponents();
   });
 
-  it('renders a helpful empty state before a run snapshot arrives', () => {
+  it('renders empty states and one vertical pipeline with visibly distinct zones and handlers', () => {
     const fixture = TestBed.createComponent(ProcessRunViewComponent);
     fixture.detectChanges();
-
     expect(fixture.nativeElement.textContent).toContain(RU['process.emptyNoRun']);
-  });
 
-  it('renders the process empty state when analysis has not created cards yet', () => {
-    activeRun.set({
-      correlationId: 'run-1',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Running,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:00:00Z',
-      memberStatuses: {},
-      scriptStatuses: {},
-      fileStatuses: {},
-      senderBatches: {},
-    });
-    const fixture = TestBed.createComponent(ProcessRunViewComponent);
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).toContain(RU['process.emptyNoCards']);
-    expect(fixture.nativeElement.querySelector('[aria-live="polite"]')).not.toBeNull();
-  });
-
-  it('renders one vertical pipeline with all zones and exactly four workers', () => {
-    activeRun.set({
-      correlationId: 'run-2',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Running,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:02:00Z',
-      memberStatuses: {
-        bank: {
-          memberName: 'Bank A',
-          status: MemberRunLifecycleStatus.Running,
-          lastStep: null,
-          message: null,
-          updatedAt: '2026-09-21T10:02:00Z',
+    activeRun.set(
+      baseSnapshot({
+        memberStatuses: {
+          input: {
+            memberName: 'Input',
+            status: MemberRunLifecycleStatus.Pending,
+            lastStep: null,
+            message: null,
+            queuePosition: 1,
+            sequence: 1,
+            updatedAt: AT,
+          },
+          resolver: {
+            memberName: 'Resolver',
+            status: MemberRunLifecycleStatus.Running,
+            lastStep: null,
+            message: null,
+            queuePosition: 2,
+            sequence: 2,
+            updatedAt: AT,
+          },
         },
-      },
-      scriptStatuses: {
-        script: {
-          id: 'script-1',
-          memberName: 'Bank A',
-          scriptCode: 'SCRIPT_1',
-          stage: ScriptRunStage.Running,
-          discoveredAt: '2026-09-21T10:00:00Z',
-          stageEnteredAt: '2026-09-21T10:01:00Z',
-          startedAt: '2026-09-21T10:01:00Z',
-          updatedAt: '2026-09-21T10:02:00Z',
-          completedAt: null,
-          workerId: 2,
-          records: 42,
+        scriptStatuses: {
+          queued: script('queued', ScriptRunStage.AwaitingWorker, null),
+          running: script('running', ScriptRunStage.Running, 2),
         },
-      },
-      fileStatuses: {
-        file: {
-          id: 'file-1',
-          parentScriptId: 'script-1',
-          memberName: 'Bank A',
-          scriptCode: 'SCRIPT_1',
-          chunkNumber: 1,
-          stage: FileRunStage.Failed,
-          createdAt: '2026-09-21T10:01:10Z',
-          queuedAt: '2026-09-21T10:01:10Z',
-          stageEnteredAt: '2026-09-21T10:01:10Z',
-          updatedAt: '2026-09-21T10:02:00Z',
-          completedAt: '2026-09-21T10:02:00Z',
-          workerId: 2,
-          rows: 42,
-          estimatedBytes: 100,
-          fileName: 'data-file.txt',
-          filePath: '/tmp/data-file.txt',
-        },
-      },
-      senderBatches: {
-        batch: {
-          batchId: 'batch-1',
-          memberName: 'Bank A',
-          status: SenderBatchStatus.Completed,
-          updatedAt: '2026-09-21T10:02:00Z',
-          queuedAt: '2026-09-21T10:01:30Z',
-          startedAt: '2026-09-21T10:01:40Z',
-          fileCount: 1,
-          sentFiles: [{ filePath: '/tmp/data-file.txt', sentAt: '2026-09-21T10:02:00Z' }],
-        },
-      },
-    });
-    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+      }),
+    );
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
+
     expect(host.querySelector('[data-testid="process-pipeline"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-zone-members"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-node-resolver"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-zone-scripts"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-zone-files"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-node-sender"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="process-zone-delivered"]')).not.toBeNull();
+    expect(host.querySelectorAll('.process-zone')).toHaveLength(5);
+    expect(host.querySelectorAll('.process-handler')).toHaveLength(2);
     expect(host.querySelectorAll('[data-testid^="process-worker-"]')).toHaveLength(4);
     expect(host.querySelector('[data-testid="process-worker-2"]')?.textContent).toContain(
-      'SCRIPT_1',
+      'RUNNING',
     );
-    expect(host.querySelectorAll('[data-testid^="process-file-group-"]')).toHaveLength(1);
+    expect(host.textContent).not.toContain('→');
   });
 
-  it('does not rebuild the static process projection when only the duration clock ticks', () => {
-    activeRun.set({
-      correlationId: 'run-clock',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Running,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:00:00Z',
-      scriptStatuses: {
-        script: {
-          id: 'script',
-          memberName: 'Bank A',
-          scriptCode: 'SCRIPT',
-          stage: ScriptRunStage.Running,
-          discoveredAt: '2026-09-21T10:00:00Z',
-          stageEnteredAt: '2026-09-21T10:00:00Z',
-          startedAt: '2026-09-21T10:00:00Z',
-          updatedAt: '2026-09-21T10:00:00Z',
-          workerId: 1,
+  it('keeps a completed batch with unsent files visible without counting it as active', () => {
+    activeRun.set(
+      baseSnapshot({
+        senderBatches: {
+          completed: batch('completed', SenderBatchStatus.Completed, [
+            planned('/completed/pending.txt', null),
+          ]),
         },
-      },
-    });
+      }),
+    );
     const fixture = TestBed.createComponent(ProcessRunViewComponent);
     fixture.detectChanges();
-    const firstPipeline = fixture.componentInstance.pipeline();
 
-    fixture.componentInstance.now.set(new Date('2026-09-21T10:01:00Z'));
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.pipeline()).toBe(firstPipeline);
-    expect(fixture.nativeElement.textContent).toContain('00:01:00');
+    expect(fixture.componentInstance.hasProcessCards()).toBe(true);
+    expect(fixture.componentInstance.activeCardCount()).toBe(0);
+    expect(fixture.nativeElement.textContent).not.toContain(RU['process.emptyNoCards']);
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="process-node-sender"]')?.textContent,
+    ).toContain('completed');
   });
 
-  it('keeps a resolver failure on the resolver node and opens safe details with keyboard close', () => {
-    activeRun.set({
-      correlationId: 'run-member-failure',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Failed,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:01:00Z',
-      memberStatuses: {
-        bank: {
-          memberName: 'Bank failed in resolver',
-          status: MemberRunLifecycleStatus.Failed,
-          lastStep: null,
-          message: '<img src=x onerror=alert(1)> safe resolver failure',
-          updatedAt: '2026-09-21T10:01:00Z',
-          failure: failure(
-            'member',
-            'resolver',
-            'resolver-code',
-            '<img src=x onerror=alert(1)> safe resolver failure',
-          ),
+  it('does not count failed sender batches as active cards', () => {
+    activeRun.set(
+      baseSnapshot({
+        senderBatches: {
+          failed: batch('failed', SenderBatchStatus.Failed, [planned('/failed/pending.txt', null)]),
         },
-      },
-    });
+      }),
+    );
     const fixture = TestBed.createComponent(ProcessRunViewComponent);
     fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
 
-    const resolver = host.querySelector<HTMLElement>('[data-testid="process-node-resolver"]');
-    const failureButton = resolver?.querySelector<HTMLButtonElement>('button');
-    expect(failureButton).not.toBeNull();
-    failureButton?.click();
-    fixture.detectChanges();
-
-    const dialog = host.querySelector<HTMLElement>('[data-testid="process-error-details"]');
-    expect(dialog?.getAttribute('data-testid')).toBe('process-error-details');
-    expect(dialog?.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(dialog?.textContent).toContain('resolver-code');
-    expect(dialog?.textContent).toContain('<img src=x onerror=alert(1)> safe resolver failure');
-    expect(dialog?.querySelector('img')).toBeNull();
-
-    const dialogButtons = dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [];
-    dialogButtons[0]?.focus();
-    fixture.componentInstance.trapDialogFocus(
-      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true }),
-    );
-    expect(document.activeElement).toBe(dialogButtons[dialogButtons.length - 1]);
-    fixture.componentInstance.trapDialogFocus(
-      new KeyboardEvent('keydown', { key: 'Tab', cancelable: true }),
-    );
-    expect(document.activeElement).toBe(dialogButtons[0]);
-
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    fixture.detectChanges();
-    expect(host.querySelector('[data-testid="process-error-details"]')).toBeNull();
+    expect(fixture.componentInstance.hasProcessCards()).toBe(true);
+    expect(fixture.componentInstance.activeCardCount()).toBe(0);
   });
 
-  it('keeps file DOM at 20 while paging, clamps same-run snapshots and resets for a new run', () => {
-    const fileStatuses = Object.fromEntries(
+  it('bounds resolver and worker failure cards while keeping paged reasons reachable', async () => {
+    const memberStatuses = Object.fromEntries(
       Array.from({ length: 100 }, (_, index) => {
-        const failed = index === 99;
-        const id = `file-${index + 1}`;
+        const number = index + 1;
         return [
-          id,
+          `resolver-${number}`,
           {
-            id,
-            parentScriptId: 'script-1',
-            memberName: 'Bank with many files',
-            scriptCode: 'SCRIPT_1',
-            chunkNumber: index + 1,
-            stage: failed ? FileRunStage.Failed : FileRunStage.Written,
-            createdAt: '2026-09-21T10:00:00Z',
-            queuedAt: '2026-09-21T10:00:00Z',
-            stageEnteredAt: '2026-09-21T10:00:00Z',
-            updatedAt: '2026-09-21T10:01:00Z',
-            completedAt: '2026-09-21T10:01:00Z',
-            fileName: `${id}.txt`,
-            failure: failed
-              ? failure('file', 'writer', 'disk-full', 'safe hidden file failure')
-              : null,
+            memberName: `Resolver ${number}`,
+            status: MemberRunLifecycleStatus.Failed,
+            lastStep: null,
+            message: null,
+            queuePosition: number,
+            sequence: number,
+            updatedAt: DONE_AT,
+            failure: failure(
+              'member',
+              'resolver',
+              `resolver-${number}`,
+              `Resolver reason ${number}`,
+            ),
           },
         ];
       }),
     );
-    activeRun.set({
-      correlationId: 'run-file-failure',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Failed,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:01:00Z',
-      fileStatuses,
-    });
+    const scriptStatuses = Object.fromEntries(
+      Array.from({ length: 100 }, (_, index) => {
+        const number = index + 1;
+        const failed = {
+          ...script(`worker-${number}`, ScriptRunStage.Failed, 1),
+          failure: failure('script', 'query', `worker-${number}`, `Worker reason ${number}`),
+        };
+        failed.workOrder = number;
+        failed.sequence = number;
+        failed.startedAt = AT;
+        return [failed.id, failed];
+      }),
+    );
+    activeRun.set(baseSnapshot({ memberStatuses, scriptStatuses }));
     const fixture = TestBed.createComponent(ProcessRunViewComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
-    const group = host.querySelector<HTMLElement>('[data-testid^="process-file-group-"]');
-    expect(group).not.toBeNull();
-    expect(group?.querySelectorAll('.process-file-card')).toHaveLength(0);
-    expect(group?.textContent).toContain('Файлов: 100');
-    const expand = Array.from(group?.querySelectorAll('button') ?? []).find((button) =>
-      button.textContent?.includes('Показать файлы'),
-    );
-    expand?.click();
-    fixture.detectChanges();
-    expect(group?.querySelectorAll('.process-file-card')).toHaveLength(20);
+    const resolver = host.querySelector<HTMLElement>('[data-testid="process-node-resolver"]')!;
+    const worker = host.querySelector<HTMLElement>('[data-testid="process-worker-1"]')!;
 
-    const next = Array.from(group?.querySelectorAll('button') ?? []).find((button) =>
-      button.textContent?.includes('Следующие 20'),
-    );
-    next?.click();
+    expect(resolver.querySelectorAll('.process-card--button')).toHaveLength(20);
+    expect(worker.querySelectorAll('.process-card--button')).toHaveLength(20);
+    buttonWithText(resolver, 'Следующие 20').click();
     fixture.detectChanges();
-    expect(group?.querySelectorAll('.process-file-card')).toHaveLength(20);
-    expect(group?.textContent).toContain('21–40 из 100');
-    expect(group?.textContent).toContain('file-21.txt');
-
-    activeRun.update((run) => (run ? { ...run, updatedAt: '2026-09-21T10:02:00Z' } : run));
+    expect(resolver.textContent).toContain('21–40 из 100');
+    expect(resolver.textContent).toContain('Resolver 21');
+    buttonWithText(resolver, 'Показать причину ошибки').click();
     fixture.detectChanges();
-    expect(host.querySelectorAll('.process-file-card')).toHaveLength(20);
-    expect(group?.textContent).toContain('21–40 из 100');
-
-    activeRun.update((run) =>
-      run
-        ? {
-            ...run,
-            updatedAt: '2026-09-21T10:03:00Z',
-            fileStatuses: Object.fromEntries(Object.entries(fileStatuses).slice(0, 5)),
-          }
-        : run,
-    );
-    fixture.detectChanges();
-    expect(host.querySelectorAll('.process-file-card')).toHaveLength(5);
-    expect(host.textContent).toContain('1–5 из 5');
-    expect(fixture.componentInstance.filePageState().pages).toEqual({
-      'bank with many files\u0000script-1': 0,
-    });
-
-    activeRun.update((run) => (run ? { ...run, correlationId: 'different-run' } : run));
-    fixture.detectChanges();
-    expect(host.querySelectorAll('.process-file-card')).toHaveLength(0);
-  });
-
-  it('shows a run-level failure without entity cards and opens its details', () => {
-    activeRun.set({
-      correlationId: 'run-level-only',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Failed,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:01:00Z',
-      failure: failure('run', 'preflight', 'run-preflight', 'safe run failure'),
-      memberStatuses: {},
-      scriptStatuses: {},
-      fileStatuses: {},
-      senderBatches: {},
-    });
-    const fixture = TestBed.createComponent(ProcessRunViewComponent);
-    fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
-
-    const runFailure = host.querySelector<HTMLButtonElement>('[data-testid="process-run-failure"]');
-    expect(runFailure).not.toBeNull();
-    expect(host.textContent).not.toContain(RU['process.emptyNoCards']);
-    runFailure?.click();
-    fixture.detectChanges();
+    await fixture.whenStable();
     expect(host.querySelector('[data-testid="process-error-details"]')?.textContent).toContain(
-      'run-preflight',
+      'resolver-21',
+    );
+    fixture.componentInstance.closeFailure();
+    fixture.detectChanges();
+
+    buttonWithText(worker, 'Следующие 20').click();
+    fixture.detectChanges();
+    expect(worker.textContent).toContain('21–40 из 100');
+    buttonWithText(worker, 'Показать причину ошибки').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(host.querySelector('[data-testid="process-error-details"]')?.textContent).toContain(
+      'worker-21',
     );
   });
 
-  it('counts only active enum states and uses neutral tones for cancelled or skipped cards', () => {
-    activeRun.set({
-      correlationId: 'terminal-zones',
-      taskCode: 'run',
-      status: RunLifecycleStatus.Failed,
-      targetCodes: [],
-      createdAt: '2026-09-21T10:00:00Z',
-      updatedAt: '2026-09-21T10:01:00Z',
-      memberStatuses: {
-        cancelled: {
-          memberName: 'Cancelled member',
-          status: MemberRunLifecycleStatus.Cancelled,
+  it('keeps created, sender and delivered lists collapsed and limits each expanded list to 20 of 1000 files', () => {
+    const fileStatuses = Object.fromEntries(
+      Array.from({ length: 1_000 }, (_, index) => {
+        const number = index + 1;
+        return [
+          `created-${number}`,
+          {
+            id: `created-${number}`,
+            parentScriptId: 'script-created',
+            memberName: 'Created member',
+            scriptCode: 'SCRIPT_CREATED',
+            chunkNumber: number,
+            sequence: number,
+            stage: FileRunStage.Written,
+            createdAt: AT,
+            queuedAt: AT,
+            stageEnteredAt: AT,
+            updatedAt: DONE_AT,
+            completedAt: DONE_AT,
+            fileName: `created-${number}.txt`,
+            filePath: `/created/${number}.txt`,
+            rows: 1,
+            estimatedBytes: 10,
+          },
+        ];
+      }),
+    );
+    const senderFiles = Array.from({ length: 1_000 }, (_, index) =>
+      planned(`/sender/${index + 1}.txt`, null),
+    );
+    const deliveredFiles = Array.from({ length: 1_000 }, (_, index) =>
+      planned(`/delivered/${index + 1}.txt`, DONE_AT),
+    );
+    activeRun.set(
+      baseSnapshot({
+        fileStatuses,
+        senderBatches: {
+          sending: batch('sending', SenderBatchStatus.InProgress, senderFiles),
+          delivered: batch('delivered', SenderBatchStatus.Completed, deliveredFiles),
+        },
+      }),
+    );
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelectorAll('.process-file-card')).toHaveLength(0);
+    expect(host.querySelectorAll('.process-dispatch-file')).toHaveLength(0);
+    const fileGroup = host.querySelector<HTMLElement>('[data-testid^="process-file-group-"]')!;
+    buttonWithText(fileGroup, 'Показать файлы').click();
+    fixture.detectChanges();
+    expect(fileGroup.querySelectorAll('.process-file-card')).toHaveLength(20);
+    expect(fileGroup.textContent).toContain('1–20 из 1000');
+    buttonWithText(fileGroup, 'Следующие 20').click();
+    fixture.detectChanges();
+    expect(fileGroup.querySelectorAll('.process-file-card')).toHaveLength(20);
+    expect(fileGroup.textContent).toContain('21–40 из 1000');
+
+    const sender = host.querySelector<HTMLElement>('[data-testid="process-node-sender"]')!;
+    sender.querySelector<HTMLButtonElement>('.process-card')!.click();
+    fixture.detectChanges();
+    expect(sender.querySelectorAll('.process-dispatch-file')).toHaveLength(20);
+
+    buttonWithText(
+      host.querySelector('[data-testid="process-zone-delivered"]')!,
+      'Показать отправленные',
+    ).click();
+    fixture.detectChanges();
+    const delivered = host.querySelector<HTMLElement>('[data-testid="process-zone-delivered"]')!;
+    delivered.querySelector<HTMLButtonElement>('.process-delivery-group__summary')!.click();
+    fixture.detectChanges();
+    expect(delivered.querySelectorAll('.process-dispatch-file')).toHaveLength(20);
+    expect(
+      host.querySelectorAll('.process-file-card, .process-dispatch-file').length,
+    ).toBeLessThanOrEqual(60);
+  });
+
+  it('clamps every live-shrunk queue page to the current data instead of requiring repeated Previous clicks', () => {
+    const members = Object.fromEntries(
+      Array.from({ length: 21 }, (_, index) => [
+        `member-${index + 1}`,
+        {
+          memberName: `Member ${index + 1}`,
+          status: MemberRunLifecycleStatus.Pending,
           lastStep: null,
           message: null,
-          updatedAt: '2026-09-21T10:01:00Z',
+          queuePosition: index + 1,
+          sequence: index + 1,
+          updatedAt: AT,
         },
-      },
-      scriptStatuses: {
-        failed: {
-          id: 'failed-script',
-          memberName: 'Failed member',
-          scriptCode: 'FAILED_SCRIPT',
-          stage: ScriptRunStage.Failed,
-          discoveredAt: '2026-09-21T10:00:00Z',
-          stageEnteredAt: '2026-09-21T10:01:00Z',
-          updatedAt: '2026-09-21T10:01:00Z',
+      ]),
+    );
+    activeRun.set(baseSnapshot({ memberStatuses: members }));
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+
+    fixture.componentInstance.next('members', 21);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Member 21');
+
+    activeRun.set(
+      baseSnapshot({
+        memberStatuses: { first: members['member-1'] },
+      }),
+    );
+    fixture.detectChanges();
+    expect(fixture.componentInstance.memberPage()).toBe(0);
+
+    activeRun.set(baseSnapshot({ memberStatuses: members }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.memberPage()).toBe(0);
+    expect(fixture.nativeElement.textContent).toContain('Member 1');
+    expect(fixture.nativeElement.textContent).not.toContain('Member 21');
+  });
+
+  it('renders a partially sent batch as distinct sender and delivered groups with disjoint files', () => {
+    activeRun.set(
+      baseSnapshot({
+        senderBatches: {
+          partial: batch('partial', SenderBatchStatus.Completed, [
+            planned('/partial/sent.txt', DONE_AT),
+            planned('/partial/waiting.txt', null),
+          ]),
         },
-        cancelled: {
-          id: 'cancelled-script',
-          memberName: 'Cancelled member',
-          scriptCode: 'CANCELLED_SCRIPT',
-          stage: ScriptRunStage.Cancelled,
-          discoveredAt: '2026-09-21T10:00:00Z',
-          stageEnteredAt: '2026-09-21T10:01:00Z',
-          updatedAt: '2026-09-21T10:01:00Z',
+      }),
+    );
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const sender = host.querySelector<HTMLElement>('[data-testid="process-node-sender"]')!;
+    const delivered = host.querySelector<HTMLElement>('[data-testid="process-zone-delivered"]')!;
+
+    expect(sender.querySelectorAll('.process-card')).toHaveLength(1);
+    expect(delivered.querySelectorAll('.process-delivery-group')).toHaveLength(0);
+    sender.querySelector<HTMLButtonElement>('.process-card')!.click();
+    fixture.detectChanges();
+    expect(sender.textContent).toContain('waiting.txt');
+    expect(sender.textContent).not.toContain('sent.txt');
+
+    buttonWithText(delivered, 'Показать отправленные').click();
+    fixture.detectChanges();
+    const summary = delivered.querySelector<HTMLElement>('.process-delivery-group__summary')!;
+    expect(summary.textContent).toContain('Member');
+    summary.click();
+    fixture.detectChanges();
+    expect(delivered.textContent).toContain('sent.txt');
+    expect(delivered.textContent).not.toContain('waiting.txt');
+    expect(sender.querySelectorAll('.process-card')).toHaveLength(1);
+    expect(delivered.querySelectorAll('.process-delivery-group')).toHaveLength(1);
+    expect(
+      sender.querySelector('.process-card')?.classList.contains('process-delivery-group'),
+    ).toBe(false);
+  });
+
+  it('shows static timestamps instead of per-card ticking clocks and a final end-to-end timeline', () => {
+    activeRun.set(
+      baseSnapshot({
+        memberStatuses: {
+          waiting: {
+            memberName: 'Waiting',
+            status: MemberRunLifecycleStatus.Pending,
+            lastStep: null,
+            message: null,
+            queuePosition: 1,
+            sequence: 1,
+            updatedAt: AT,
+          },
         },
-      },
-      senderBatches: {
-        failed: {
-          batchId: 'failed-batch',
-          memberName: 'Failed member',
-          status: SenderBatchStatus.Failed,
-          updatedAt: '2026-09-21T10:01:00Z',
-          sentFiles: [],
+        senderBatches: {
+          delivered: batch('delivered', SenderBatchStatus.Completed, [
+            planned('/done/result.txt', DONE_AT),
+          ]),
         },
-        skipped: {
-          batchId: 'skipped-batch',
-          memberName: 'Skipped member',
-          status: SenderBatchStatus.SkippedByRequest,
-          updatedAt: '2026-09-21T10:01:00Z',
-          sentFiles: [],
-        },
-      },
-    });
+      }),
+    );
     const fixture = TestBed.createComponent(ProcessRunViewComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    expect(fixture.componentInstance.activeCardCount()).toBe(0);
-    expect(
-      (fixture.componentInstance as unknown as { intervalId: ReturnType<typeof setInterval> | null })
-        .intervalId,
-    ).toBeNull();
-    const cardFor = (text: string) =>
-      Array.from(host.querySelectorAll<HTMLElement>('.process-card')).find((card) =>
-        card.textContent?.includes(text),
-      );
-    expect(cardFor('Cancelled member')?.classList.contains('process-tone--neutral')).toBe(true);
-    expect(cardFor('CANCELLED_SCRIPT')?.classList.contains('process-tone--neutral')).toBe(true);
-    expect(cardFor('Skipped member')?.classList.contains('process-tone--neutral')).toBe(true);
+    expect(host.textContent).toContain('Ожидает с');
+    expect(host.textContent).not.toMatch(/\d\d:\d\d:\d\d назад/);
+    buttonWithText(host, 'Показать отправленные').click();
+    fixture.detectChanges();
+    expect(host.textContent).toContain('В очереди с');
+    expect(host.textContent).toContain('Отправка с');
+    expect(host.textContent).toContain('Завершено');
+    expect(host.textContent).toContain('Всего:');
+  });
+
+  it('keeps a failure on its handler and opens text-only accessible details', async () => {
+    activeRun.set(
+      baseSnapshot({
+        status: RunLifecycleStatus.Failed,
+        memberStatuses: {
+          failed: {
+            memberName: 'Resolver failed',
+            status: MemberRunLifecycleStatus.Failed,
+            lastStep: null,
+            message: null,
+            queuePosition: 1,
+            sequence: 1,
+            updatedAt: DONE_AT,
+            failure: {
+              ...failure('member', 'resolver', 'resolver-code', '<img src=x> safe text'),
+              memberName: 'Resolver <img src=member>',
+              scriptCode: 'SELECT <svg onload=x>',
+              workerId: 2,
+              filePath: '/out/<img src=file>.txt',
+              chunkNumber: 7,
+            },
+          },
+        },
+      }),
+    );
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const resolver = host.querySelector<HTMLElement>('[data-testid="process-node-resolver"]')!;
+
+    resolver.querySelector<HTMLButtonElement>('button')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const dialog = host.querySelector<HTMLElement>('[data-testid="process-error-details"]')!;
+    expect(dialog.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(dialog.textContent).toContain('resolver-code');
+    expect(dialog.textContent).toContain('<img src=x> safe text');
+    expect(dialog.textContent).toContain('Resolver <img src=member>');
+    expect(dialog.textContent).toContain('SELECT <svg onload=x>');
+    expect(dialog.textContent).toContain('2');
+    expect(dialog.textContent).toContain('/out/<img src=file>.txt');
+    expect(dialog.textContent).toContain('7');
+    expect(dialog.querySelector('img')).toBeNull();
+    expect(dialog.querySelector('svg')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('[data-testid="process-error-close"]'));
+  });
+
+  it('uses native fullscreen on the process root and restores the control state on exit', async () => {
+    activeRun.set(
+      baseSnapshot({
+        memberStatuses: {
+          input: {
+            memberName: 'Input',
+            status: MemberRunLifecycleStatus.Pending,
+            lastStep: null,
+            message: null,
+            updatedAt: AT,
+          },
+        },
+      }),
+    );
+    const rootPrototype = document.documentElement as HTMLElement & {
+      requestFullscreen?: () => Promise<void>;
+    };
+    const originalRequest = rootPrototype.requestFullscreen;
+    rootPrototype.requestFullscreen = () => Promise.resolve();
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const root = host.querySelector<HTMLElement>('[data-testid="process-root"]')!;
+    const button = host.querySelector<HTMLButtonElement>('[data-testid="process-fullscreen"]')!;
+    const request = vi.fn().mockResolvedValue(undefined);
+    root.requestFullscreen = request;
+
+    await fixture.componentInstance.toggleFullscreen({ currentTarget: button } as unknown as Event);
+    expect(request).toHaveBeenCalledOnce();
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: root });
+    fixture.componentInstance.onFullscreenChange();
+    expect(fixture.componentInstance.isFullscreen()).toBe(true);
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+    fixture.componentInstance.onFullscreenChange();
+    expect(fixture.componentInstance.isFullscreen()).toBe(false);
+    rootPrototype.requestFullscreen = originalRequest;
+  });
+
+  it('resets expanded content and pages when a different run replaces the snapshot', () => {
+    activeRun.set(
+      baseSnapshot({
+        fileStatuses: {
+          file: {
+            id: 'file',
+            parentScriptId: 'script',
+            memberName: 'Member',
+            scriptCode: 'SCRIPT',
+            chunkNumber: 1,
+            stage: FileRunStage.Written,
+            createdAt: AT,
+            queuedAt: AT,
+            stageEnteredAt: AT,
+            updatedAt: DONE_AT,
+            completedAt: DONE_AT,
+            fileName: 'file.txt',
+            filePath: '/file.txt',
+          },
+        },
+      }),
+    );
+    const fixture = TestBed.createComponent(ProcessRunViewComponent);
+    fixture.detectChanges();
+    const group = fixture.componentInstance.pipeline().fileGroups[0];
+    fixture.componentInstance.toggleFileGroup(group);
+    fixture.componentInstance.next('groupFiles', 100);
+    fixture.componentInstance.toggleDelivered();
+
+    activeRun.update((run) => ({ ...run!, correlationId: 'run-2' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.expandedFileGroup()).toBeNull();
+    expect(fixture.componentInstance.fileDetailPage()).toBe(0);
+    expect(fixture.componentInstance.deliveredExpanded()).toBe(false);
   });
 });
+
+function baseSnapshot(overrides: Partial<RunStatusInfo>): RunStatusInfo {
+  return {
+    correlationId: 'run-1',
+    taskCode: 'run',
+    status: RunLifecycleStatus.Running,
+    targetCodes: [],
+    createdAt: AT,
+    updatedAt: DONE_AT,
+    ...overrides,
+  };
+}
+
+function script(id: string, stage: ScriptRunStage, workerId: number | null) {
+  return {
+    id,
+    memberName: 'Member',
+    scriptCode: id.toUpperCase(),
+    stage,
+    workOrder: 1,
+    sequence: 1,
+    discoveredAt: AT,
+    stageEnteredAt: AT,
+    startedAt: stage === ScriptRunStage.Running ? AT : null,
+    updatedAt: DONE_AT,
+    completedAt: null,
+    workerId,
+    records: 10,
+  };
+}
+
+function planned(filePath: string, sentAt: string | null) {
+  return {
+    fileName: filePath.split('/').at(-1)!,
+    filePath,
+    queuedAt: AT,
+    sentAt,
+    estimatedBytes: 10,
+    actualBytes: sentAt ? 9 : null,
+  };
+}
+
+function batch(id: string, status: SenderBatchStatus, plannedFiles: ReturnType<typeof planned>[]) {
+  return {
+    batchId: id,
+    memberName: 'Member',
+    status,
+    updatedAt: DONE_AT,
+    queuedAt: AT,
+    startedAt: status === SenderBatchStatus.Ready ? null : AT,
+    fileCount: plannedFiles.length,
+    sequence: 1,
+    plannedFiles,
+    sentFiles: plannedFiles
+      .filter((item) => item.sentAt)
+      .map((item) => ({ filePath: item.filePath, sentAt: item.sentAt! })),
+  };
+}
 
 function failure(entityType: string, stage: string, code: string, message: string) {
   return {
@@ -417,7 +556,7 @@ function failure(entityType: string, stage: string, code: string, message: strin
     stage,
     code,
     message,
-    occurredAt: '2026-09-21T10:01:00Z',
+    occurredAt: DONE_AT,
     memberName: null,
     scriptCode: null,
     workerId: null,
@@ -425,4 +564,12 @@ function failure(entityType: string, stage: string, code: string, message: strin
     chunkNumber: null,
     batchId: null,
   };
+}
+
+function buttonWithText(root: ParentNode, text: string): HTMLButtonElement {
+  const button = Array.from(root.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(text),
+  );
+  if (!button) throw new Error(`Button not found: ${text}`);
+  return button;
 }

@@ -69,7 +69,10 @@ public class MainUnloadHostedService(
                             @event.Message);
                     }
 
-                    await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                    if (RunStatusHubContract.ShouldPublishStatusEvent(@event))
+                    {
+                        await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                    }
 
                     await PublishRunStateAsync(
                         @event.CorrelationId,
