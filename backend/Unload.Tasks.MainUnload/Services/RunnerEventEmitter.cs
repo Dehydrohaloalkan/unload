@@ -48,9 +48,10 @@ internal class RunnerEventEmitter
         long? estimatedBytes = null,
         string? batchId = null,
         int? batchFileCount = null,
-        RunnerFailureInfo? failure = null)
+        RunnerFailureInfo? failure = null,
+        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, failure, CancellationToken.None).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, failure, batchFiles, CancellationToken.None).AsTask();
     }
 
     public Task EmitAsync(
@@ -63,9 +64,10 @@ internal class RunnerEventEmitter
         long? estimatedBytes = null,
         string? batchId = null,
         int? batchFileCount = null,
-        RunnerFailureInfo? failure = null)
+        RunnerFailureInfo? failure = null,
+        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
     {
-        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, failure, cancellationToken).AsTask();
+        return EmitCoreAsync(step, message, null, records, filePath, workerId: null, chunkNumber, estimatedBytes, batchId, batchFileCount, failure, batchFiles, cancellationToken).AsTask();
     }
 
     public async Task EmitForScriptAsync(
@@ -79,7 +81,8 @@ internal class RunnerEventEmitter
         long? estimatedBytes = null,
         string? batchId = null,
         int? batchFileCount = null,
-        RunnerFailureInfo? failure = null)
+        RunnerFailureInfo? failure = null,
+        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
     {
         await EmitCoreAsync(
             step,
@@ -93,6 +96,7 @@ internal class RunnerEventEmitter
             batchId,
             batchFileCount,
             failure,
+            batchFiles,
             CancellationToken.None);
     }
 
@@ -108,7 +112,8 @@ internal class RunnerEventEmitter
         long? estimatedBytes = null,
         string? batchId = null,
         int? batchFileCount = null,
-        RunnerFailureInfo? failure = null)
+        RunnerFailureInfo? failure = null,
+        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
     {
         await EmitCoreAsync(
             step,
@@ -122,6 +127,7 @@ internal class RunnerEventEmitter
             batchId,
             batchFileCount,
             failure,
+            batchFiles,
             cancellationToken);
     }
 
@@ -138,7 +144,7 @@ internal class RunnerEventEmitter
         {
             if (script is null)
             {
-                await EmitAsync(step, message, records: null, filePath: null, chunkNumber: chunkNumber, estimatedBytes: null, batchId: batchId, batchFileCount: null, failure: failure, cancellationToken: CancellationToken.None);
+                await EmitAsync(step, message, records: null, filePath: null, chunkNumber: chunkNumber, estimatedBytes: null, batchId: batchId, batchFileCount: null, failure: failure, batchFiles: null, cancellationToken: CancellationToken.None);
             }
             else
             {
@@ -154,6 +160,7 @@ internal class RunnerEventEmitter
                     batchId: batchId,
                     batchFileCount: null,
                     failure: failure,
+                    batchFiles: null,
                     cancellationToken: CancellationToken.None);
             }
         }
@@ -186,6 +193,7 @@ internal class RunnerEventEmitter
         string? batchId,
         int? batchFileCount,
         RunnerFailureInfo? failure,
+        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles,
         CancellationToken cancellationToken)
     {
         await _writeLock.WaitAsync(cancellationToken);
@@ -207,7 +215,8 @@ internal class RunnerEventEmitter
                 batchFileCount,
                 Sequence: _sequencer.Next(),
                 WorkOrder: script?.WorkOrder,
-                Failure: failure);
+                Failure: failure,
+                BatchFiles: batchFiles);
             await _channel.Writer.WriteAsync(RunnerFailureMessages.Sanitize(@event), cancellationToken);
         }
         finally

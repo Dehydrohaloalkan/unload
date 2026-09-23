@@ -2457,6 +2457,53 @@
           }
         }
       },
+      "SenderBatchFileStatusInfo": {
+        "required": [
+          "filePath",
+          "fileName",
+          "estimatedBytes",
+          "actualBytes",
+          "queuedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "estimatedBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "actualBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "queuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "SenderBatchStatus": {
         "type": "integer"
       },
@@ -2536,6 +2583,15 @@
                 "$ref": "#/components/schemas/RunnerFailureInfo"
               }
             ]
+          },
+          "plannedFiles": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SenderBatchFileStatusInfo"
+            }
           }
         }
       },

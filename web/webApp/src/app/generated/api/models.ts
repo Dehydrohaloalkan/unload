@@ -36,6 +36,7 @@ export type { RunWorkerStatusInfo } from './models/run-worker-status-info';
 export type { ScriptRunStage } from './models/script-run-stage';
 export type { ScriptRunStatusInfo } from './models/script-run-status-info';
 export type { ScriptTaskRunResult } from './models/script-task-run-result';
+export type { SenderBatchFileStatusInfo } from './models/sender-batch-file-status-info';
 export type { SenderBatchStatus } from './models/sender-batch-status';
 export type { SenderBatchStatusInfo } from './models/sender-batch-status-info';
 export type { SenderFeedbackRequest } from './models/sender-feedback-request';

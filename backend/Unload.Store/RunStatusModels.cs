@@ -192,7 +192,8 @@ public record SenderBatchStatusInfo(
     DateTimeOffset? StartedAt = null,
     int? FileCount = null,
     long? Sequence = null,
-    RunnerFailureInfo? Failure = null);
+    RunnerFailureInfo? Failure = null,
+    IReadOnlyCollection<SenderBatchFileStatusInfo>? PlannedFiles = null);
 
 /// <summary>
 /// Снимок состояния конкретного запуска выгрузки.

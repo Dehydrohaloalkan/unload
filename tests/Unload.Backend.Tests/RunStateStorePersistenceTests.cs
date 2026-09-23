@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Unload.Core;
 using Unload.Store;
 
@@ -144,6 +145,58 @@ public class RunStateStorePersistenceTests
         Assert.Equal("run-1", run.GetProperty("CorrelationId").GetString());
         Assert.Equal("extra", run.GetProperty("TaskCode").GetString());
         Assert.False(run.GetProperty("PublishToGateway").GetBoolean());
+    }
+
+    [Fact]
+    public void PlannedBatchFiles_RoundTripWithPartialSentState()
+    {
+        using var fixture = new RunStateStoreFixture();
+        var firstPath = fixture.ArtifactPath("first.txt");
+        var secondPath = fixture.ArtifactPath("second.txt");
+        fixture.Start();
+        fixture.ApplyEvent(
+            RunnerStep.GatewayBatchQueued,
+            memberName: "Member A",
+            batchId: "batch-1",
+            batchFileCount: 2,
+            batchFiles:
+            [
+                new(firstPath, "first.txt", 10, 11, DateTimeOffset.UtcNow),
+                new(secondPath, "second.txt", 20, 21, DateTimeOffset.UtcNow)
+            ]);
+        fixture.ApplyFeedback(SenderFeedbackKind.FileSent, filePath: firstPath);
+        fixture.Store.SetFailed("run-1", "stop for persisted terminal fixture");
+
+        fixture.Restart();
+
+        var batch = fixture.Store.Get("run-1")!.SenderBatches!["batch-1"];
+        Assert.Equal(2, batch.PlannedFiles!.Count);
+        Assert.NotNull(batch.PlannedFiles.Single(file => file.FileName == "first.txt").SentAt);
+        Assert.Null(batch.PlannedFiles.Single(file => file.FileName == "second.txt").SentAt);
+    }
+
+    [Fact]
+    public void LegacySnapshotWithoutPlannedFiles_RemainsReadable()
+    {
+        using var fixture = new RunStateStoreFixture();
+        fixture.Start();
+        fixture.ApplyEvent(
+            RunnerStep.GatewayBatchQueued,
+            memberName: "Member A",
+            batchId: "batch-1",
+            batchFileCount: 1);
+        fixture.Store.SetFailed("run-1", "stop for persisted terminal fixture");
+
+        var root = JsonNode.Parse(File.ReadAllText(fixture.StateFilePath))!.AsObject();
+        var batch = root["Runs"]!.AsArray()[0]!["SenderBatches"]!["batch-1"]!.AsObject();
+        Assert.True(batch.Remove("PlannedFiles"));
+        File.WriteAllText(fixture.StateFilePath, root.ToJsonString());
+
+        fixture.Restart();
+
+        var restored = fixture.Store.Get("run-1")!.SenderBatches!["batch-1"];
+        Assert.Null(restored.PlannedFiles);
+        Assert.Equal(1, restored.FileCount);
     }
 
     [Fact]

@@ -306,6 +306,7 @@ sequenceDiagram
     participant Worker as MainUnloadHostedService
     participant Engine as MainUnloadEngine
     participant State as RunStateStore
+    participant Live as RunStatusLivePublisher
     participant Gateway
 
     UI->>API: POST /api/runs
@@ -321,7 +322,8 @@ sequenceDiagram
     loop каждое RunnerEvent
         Engine-->>Worker: progress / artifact / completed
         Worker->>State: ApplyEvent()
-        Worker-->>UI: SignalR status + run_status
+        Worker-->>UI: SignalR status
+        Worker->>Live: coalesced run_status snapshot
     end
     Engine->>Gateway: sender batches, если включено
     Gateway->>State: sender feedback
@@ -412,7 +414,8 @@ flowchart LR
     FtpWorker -->|FILE_SENT / BATCH_COMPLETED / BATCH_FAILED| Feedback[Feedback channel]
     Feedback --> Projection[SenderFeedbackProjectionBackgroundService]
     Projection --> State[RunStateStore]
-    Projection --> SignalR[run_status]
+    Projection --> Live[RunStatusLivePublisher]
+    Live -->|serialized, coalesced run_status| SignalR[SignalR clients]
 ```
 
 `FtpGatewayBackgroundService` сначала полностью загружает все файлы партии в staging, затем переименовывает их в target в отсортированном порядке. Потребитель target-каталога не должен увидеть частично записанный файл.
@@ -634,6 +637,20 @@ refresh страницы. Это сбрасывает yesterday-only dashboard/h
 
 `RealtimeHubService` слушает `status`, `run_status`, `preset_state`, автоматически переподключается и вручную перезапускает полностью закрытое соединение.
 
+Полный `run_status` растёт вместе с количеством scripts и файлов, поэтому `RunLaunchController`, main/extra
+workers и sender-feedback projection передают его через общий singleton `RunStatusLivePublisher`. Обычный progress объединяется
+отдельно для каждого correlation ID в окно 150 мс: в сеть уходит только самый новый snapshot окна.
+Отправки сериализованы, а snapshot с более старым `UpdatedAt` и sequence не может уйти после нового.
+Первый `Running`, запрос отмены, terminal-состояние и snapshot с новым failure отправляются немедленно.
+Ошибка SignalR журналируется, но snapshot не ставится в бесконечный retry: клиент восстанавливается через
+REST polling и обязательный refresh после reconnect. При штатной остановке publisher пытается сбросить
+ожидающие snapshots, но уважает cancellation host-а и ограничивает flush двумя секундами. После terminal
+send полный snapshot и рабочая запись удаляются из publisher. Чтобы запоздалый progress или повторный
+terminal не воскресили завершённый запуск, остаётся только correlation ID в FIFO tombstone-кэше максимум
+на 1024 запуска; при переполнении детерминированно вытесняется самый старый ID. Это ограничение касается только live SignalR-трафика:
+`RunStateStore`, REST-ответы и cadence persistence не throttling-уются. Лёгкое событие `status`
+(`RunnerEvent`) продолжает передаваться для каждого события main/extra движка.
+
 Если SignalR недоступен во время активной задачи, `RunStore` и `ExtraStore` включают HTTP polling статуса. После reconnect stores обновляют snapshot, чтобы добрать пропущенные события. Таким образом SignalR ускоряет отображение, но не является единственным способом восстановить состояние.
 
 Для main run `RunStore` устанавливает локальный `runLaunchPending` до отправки POST. Главная карточка и выборочный запуск используют один и тот же `startRunAsync`, поэтому медленный POST не может породить второй запрос. После принятого `202` guard не снимается, пока status не принят либо `GET /api/runs/active` явно не подтвердит отсутствие активного запуска; `404`/ошибка status-запроса переводят состояние в conservative reconciliation, а не в «свободно». После terminal-состояния store сохраняет busy-состояние до тех пор, пока `GET /api/runs/active` не вернёт `404`: terminal snapshot и освобождение `RunActivationChannel` — разные моменты lifecycle.
@@ -658,15 +675,23 @@ Browser storage хранит только локальные UI-настройк
 проекцию готовых файлов.
 
 `RunStatusInfo.SenderBatches` — отдельная проекция lifecycle партий gateway. После успешного
-`PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии
-и количеством файлов: это создаёт batch в `Ready` с `QueuedAt`. Когда FTP worker действительно
+`PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии,
+количеством и точным составом файлов. `SenderBatchStatusInfo.PlannedFiles` хранит нормализованный
+путь, имя, известный оценочный/фактический размер, `QueuedAt` и nullable `SentAt` каждого файла;
+это authoritative-связь между созданными артефактами и конкретной отправкой без frontend-эвристик.
+Событие создаёт batch в `Ready` с `QueuedAt`. Когда FTP worker действительно
 начинает `ProcessBatchAsync`, он публикует `BatchStarted`, переводящий batch в `InProgress` и
 фиксирующий `StartedAt` до подключения к FTP. `FileSent`, `BatchCompleted` и `BatchFailed`
 сохраняют прежние роли. Runner events и sender feedback приходят по независимым каналам, поэтому
 проекция допускает обратный порядок: поздний `GatewayBatchQueued` дополняет `QueuedAt` и
-`FileCount`, не меняя уже достигнутый `InProgress` или терминальный статус и его `UpdatedAt`.
+`FileCount`, восстанавливает planned membership и отмечает уже отправленные пути, не меняя уже
+достигнутый `InProgress` или терминальный статус и его `UpdatedAt`. `FileSent` сопоставляется по
+нормализованному пути идемпотентно; feedback неизвестного legacy-файла остаётся в `SentFiles`, но
+не добавляется в authoritative `PlannedFiles`. Имя мембера из `GatewayBatchQueued` имеет приоритет
+над feedback и не может быть заменено несовпадающим именем независимо от порядка событий.
 Повторная отправка пока публикует batch напрямую и не создаёт runner `GatewayBatchQueued`, поэтому
-для её партий `QueuedAt` может отсутствовать.
+для её партий `QueuedAt` и `PlannedFiles` могут отсутствовать. Старые persisted snapshots без
+`PlannedFiles` читаются как прежде.
 
 Для sender failure `SenderBatchStatusInfo.Failure` содержит stage `sender`, batch/member identity,
 код и причину. Этот failure также доступен на run и соответствующем member status, если member

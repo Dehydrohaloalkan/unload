@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 using Unload.Store;
 
@@ -11,13 +10,13 @@ public class SenderFeedbackProjectionBackgroundService(
     IGatewaySenderFeedbackSource feedbackSource,
     IGatewaySenderFeedbackConsumer feedbackConsumer,
     RunStateStore runStateStore,
-    IHubContext<RunStatusHub> hubContext,
+    RunStatusLivePublisher livePublisher,
     ILogger<SenderFeedbackProjectionBackgroundService> logger) : BackgroundService
 {
     private readonly IGatewaySenderFeedbackSource _feedbackSource = feedbackSource;
     private readonly IGatewaySenderFeedbackConsumer _feedbackConsumer = feedbackConsumer;
     private readonly RunStateStore _runStateStore = runStateStore;
-    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly RunStatusLivePublisher _livePublisher = livePublisher;
     private readonly ILogger<SenderFeedbackProjectionBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -32,7 +31,9 @@ public class SenderFeedbackProjectionBackgroundService(
                     var state = _runStateStore.Get(feedback.CorrelationId);
                     if (state is not null)
                     {
-                        await _hubContext.Clients.All.SendRunStatusAsync(state, stoppingToken);
+                        await _livePublisher.PublishAsync(
+                            state,
+                            immediate: feedback.Kind == SenderFeedbackKind.BatchFailed || feedback.Failure is not null);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

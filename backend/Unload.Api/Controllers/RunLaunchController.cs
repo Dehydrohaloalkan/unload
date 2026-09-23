@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Models;
+using Unload.Api.Services;
 using Unload.Bootstrapper;
 using Unload.Store;
 using Unload.Tasks;
@@ -23,6 +24,7 @@ public class RunLaunchController(
     DailyWindowPolicy dailyWindowPolicy,
     ExtraBanksService extraBanksService,
     IHubContext<RunStatusHub> hubContext,
+    RunStatusLivePublisher livePublisher,
     ILogger<RunLaunchController> logger) : ControllerBase
 {
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
@@ -32,6 +34,7 @@ public class RunLaunchController(
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly ExtraBanksService _extraBanksService = extraBanksService;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly RunStatusLivePublisher _livePublisher = livePublisher;
     private readonly ILogger<RunLaunchController> _logger = logger;
 
     [HttpPost]
@@ -49,7 +52,7 @@ public class RunLaunchController(
                 cancellationToken);
 
             _logger.LogInformation("Run accepted. CorrelationId: {CorrelationId}", result.ExecutionId);
-            await PublishRunStateAsync(result.ExecutionId, cancellationToken);
+            await PublishRunStateAsync(result.ExecutionId);
 
             var response = CreateAcceptedResponse(result.ExecutionId);
             return Accepted(response.RunStatusPath, response);
@@ -126,7 +129,7 @@ public class RunLaunchController(
                 cancellationToken);
 
             _logger.LogInformation("Extra accepted. CorrelationId: {CorrelationId}", result.ExecutionId);
-            await PublishRunStateAsync(result.ExecutionId, cancellationToken);
+            await PublishRunStateAsync(result.ExecutionId);
 
             var response = CreateAcceptedResponse(result.ExecutionId);
             return Accepted(response.RunStatusPath, response);
@@ -155,19 +158,19 @@ public class RunLaunchController(
 
         _runStateStore.SetCancellationRequested(correlationId, "Run cancellation requested.");
         _logger.LogInformation("Run cancellation requested. CorrelationId: {CorrelationId}", correlationId);
-        await PublishRunStateAsync(correlationId, cancellationToken);
+        await PublishRunStateAsync(correlationId);
 
         return Accepted(
             $"/api/runs/{correlationId}",
             new RunCancellationAcceptedResponse(correlationId, "cancellation_requested"));
     }
 
-    private async Task PublishRunStateAsync(string correlationId, CancellationToken cancellationToken)
+    private async Task PublishRunStateAsync(string correlationId)
     {
         var runState = _runStateStore.Get(correlationId);
         if (runState is not null)
         {
-            await _hubContext.Clients.All.SendRunStatusAsync(runState, cancellationToken);
+            await _livePublisher.PublishAsync(runState, immediate: true);
         }
     }
 

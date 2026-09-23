@@ -16,6 +16,7 @@ public class MainUnloadHostedService(
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     MainUnloadEngine runner,
     IHubContext<RunStatusHub> hubContext,
+    RunStatusLivePublisher livePublisher,
     ILogger<MainUnloadHostedService> logger) : BackgroundService
 {
     private readonly RunActivationChannel _runWorkflow = runWorkflow;
@@ -23,6 +24,7 @@ public class MainUnloadHostedService(
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly MainUnloadEngine _runner = runner;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
+    private readonly RunStatusLivePublisher _livePublisher = livePublisher;
     private readonly ILogger<MainUnloadHostedService> _logger = logger;
 
     /// <summary>
@@ -48,7 +50,7 @@ public class MainUnloadHostedService(
             using var runCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, activation.CancellationToken);
             var runToken = runCts.Token;
             _runStateStore.SetRunning(request.CorrelationId);
-            await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+            await PublishRunStateAsync(request.CorrelationId, immediate: true);
             _logger.LogInformation("Run moved to Running. CorrelationId: {CorrelationId}", request.CorrelationId);
 
             try
@@ -69,7 +71,9 @@ public class MainUnloadHostedService(
 
                     await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
 
-                    await PublishRunStateAsync(@event.CorrelationId, stoppingToken);
+                    await PublishRunStateAsync(
+                        @event.CorrelationId,
+                        immediate: @event.Step == RunnerStep.Failed || @event.Failure is not null);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -79,7 +83,7 @@ public class MainUnloadHostedService(
             catch (OperationCanceledException)
             {
                 _runStateStore.SetCancelled(request.CorrelationId, "Run was cancelled by user.");
-                await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+                await PublishRunStateAsync(request.CorrelationId);
                 _logger.LogInformation("Run cancelled by user. CorrelationId: {CorrelationId}", request.CorrelationId);
             }
             catch (Exception ex)
@@ -101,7 +105,7 @@ public class MainUnloadHostedService(
                         "RUN_BACKGROUND_WORKER_FAILED",
                         RunnerFailureMessages.ForStage("background_worker"),
                         DateTimeOffset.UtcNow));
-                await PublishRunStateAsync(request.CorrelationId, stoppingToken);
+                await PublishRunStateAsync(request.CorrelationId);
             }
             finally
             {
@@ -162,7 +166,7 @@ public class MainUnloadHostedService(
             if (current.Status == RunLifecycleStatus.CancellationRequested)
             {
                 _runStateStore.SetCancelled(correlationId, "Run was cancelled while waiting for gateway delivery.");
-                await PublishRunStateAsync(correlationId, cancellationToken);
+                await PublishRunStateAsync(correlationId);
                 return _runStateStore.Get(correlationId);
             }
 
@@ -172,7 +176,9 @@ public class MainUnloadHostedService(
         return _runStateStore.Get(correlationId);
     }
 
-    private async Task PublishRunStateAsync(string correlationId, CancellationToken cancellationToken)
+    private async Task PublishRunStateAsync(
+        string correlationId,
+        bool immediate = false)
     {
         var state = _runStateStore.Get(correlationId);
         if (state is null)
@@ -180,6 +186,6 @@ public class MainUnloadHostedService(
             return;
         }
 
-        await _hubContext.Clients.All.SendRunStatusAsync(state, cancellationToken);
+        await _livePublisher.PublishAsync(state, immediate);
     }
 }

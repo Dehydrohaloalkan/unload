@@ -41,6 +41,7 @@ public class SignalRContractTests
             new[]
             {
                 "batchFileCount",
+                "batchFiles",
                 "batchId",
                 "chunkNumber",
                 "correlationId",

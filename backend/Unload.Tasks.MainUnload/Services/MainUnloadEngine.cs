@@ -397,13 +397,23 @@ public class MainUnloadEngine
                     {
                         failureStage = "gateway_publish";
                         await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
+                        var queuedAt = DateTimeOffset.UtcNow;
+                        var batchFiles = memberBatch.Files
+                            .Select(file => new SenderBatchFileStatusInfo(
+                                FilePath: Path.GetFullPath(file.FilePath),
+                                FileName: file.FileName,
+                                EstimatedBytes: null,
+                                ActualBytes: file.SizeBytes,
+                                QueuedAt: queuedAt))
+                            .ToArray();
                         await eventEmitter.EmitForScriptAsync(
                             script,
                             RunnerStep.GatewayBatchQueued,
                             $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
                             workerId: workerId,
                             batchId: memberBatch.BatchId,
-                            batchFileCount: memberBatch.Files.Count);
+                            batchFileCount: memberBatch.Files.Count,
+                            batchFiles: batchFiles);
                     }
 
                     await eventEmitter.EmitForScriptAsync(
