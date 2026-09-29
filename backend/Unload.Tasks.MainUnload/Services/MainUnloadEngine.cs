@@ -104,13 +104,8 @@ public class MainUnloadEngine
             runOutputDirectory = RunnerOutputDirectoryFactory.CreateRunOutputDirectory(request.OutputDirectory);
             var runFilesDirectory = RunnerOutputDirectoryFactory.CreateRunFilesDirectory(runOutputDirectory);
 
-            await eventEmitter.EmitAsync(RunnerStep.RequestAccepted, "Run request accepted.");
-
             failureStage = "resolver";
             var (resolvedTargets, bigScriptTargetCodes) = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
-            await eventEmitter.EmitAsync(
-                RunnerStep.TargetsResolved,
-                $"Targets resolved: {resolvedTargets.Count}.");
 
             var scripts = resolvedTargets
                 .SelectMany(static x => x.Value)
@@ -179,9 +174,6 @@ public class MainUnloadEngine
 
             if (!request.PublishToGateway)
             {
-                await eventEmitter.EmitAsync(
-                    RunnerStep.PublishedToGateway,
-                    "Gateway publish skipped by request (PublishToGateway=false).");
                 return;
             }
 
@@ -382,21 +374,11 @@ public class MainUnloadEngine
                     {
                         failureStage = "gateway_publish";
                         await _gatewayPublisher.PublishFileBatchReadyAsync(memberBatch, cancellationToken);
-                        var queuedAt = DateTimeOffset.UtcNow;
-                        var batchFiles = memberBatch.Files
-                            .Select(file => new SenderBatchFileStatusInfo(
-                                FilePath: Path.GetFullPath(file.FilePath),
-                                FileName: file.FileName,
-                                EstimatedBytes: null,
-                                ActualBytes: file.SizeBytes,
-                                QueuedAt: queuedAt))
-                            .ToArray();
                         await eventEmitter.EmitForScriptAsync(
                             script,
                             RunnerStep.GatewayBatchQueued,
                             $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
-                            batchId: memberBatch.BatchId,
-                            batchFiles: batchFiles);
+                            batchId: memberBatch.BatchId);
                     }
 
                     await eventEmitter.EmitForScriptAsync(

@@ -22,7 +22,6 @@ import {
   canStartExport,
   canUseMainOrExtra,
   resolveExtraLastCompletedAt,
-  resolveWorkflowPhase,
 } from './utils/workflow-view-state.util';
 
 /**
@@ -55,14 +54,7 @@ export class WorkflowStore {
   readonly errorMessage = this.errorStore.errorMessage;
   readonly connectionReady = this.hub.connectionReady;
   readonly currentTime = this.clock.currentTime;
-  readonly serverTimeZoneId = this.clock.timeZoneId;
-
-  readonly catalog = this.catalogStore.catalog;
-  readonly members = this.catalogStore.members;
   readonly historyMemberNames = this.catalogStore.historyMemberNames;
-
-  readonly selectedTargetCodes = this.selectionStore.selectedTargetCodes;
-  readonly selectedCount = this.selectionStore.selectedCount;
 
   readonly outputFilesByPath = this.outputFilesStore.filesByOutputPath;
 
@@ -107,7 +99,6 @@ export class WorkflowStore {
   readonly todayHistory = this.dashboardStore.todayHistory;
   readonly todayRuns = this.dashboardStore.todayRuns;
   readonly allTodayRuns = this.dashboardStore.allTodayRuns;
-  readonly latestTodayRun = this.dashboardStore.latestTodayRun;
 
   readonly buildSystemDownloadUrl = this.api.buildDownloadUrl;
   readonly buildSystemArchiveUrl = this.api.buildArchiveUrl;
@@ -151,8 +142,6 @@ export class WorkflowStore {
     ),
   );
 
-  readonly phase = computed(() => resolveWorkflowPhase(this.presetStore.presetState()));
-
   init(): void {
     if (this.initialized) {
       return;
@@ -179,10 +168,6 @@ export class WorkflowStore {
 
     void this.hub.connect();
     void this.bootstrapAsync();
-  }
-
-  async refreshAsync(): Promise<void> {
-    await this.bootstrapAsync();
   }
 
   toggleMember(targetCodes: string[], selected: boolean): void {

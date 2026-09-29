@@ -18,16 +18,13 @@ internal sealed class RunStateProjector
             .Where(static memberName => !string.IsNullOrWhiteSpace(memberName))
             .Select(static memberName => memberName.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select((memberName, index) => new { memberName, QueuePosition = index + 1 })
             .ToDictionary(
-                static item => item.memberName,
-                item => new MemberRunStatusInfo(
-                    item.memberName,
+                static memberName => memberName,
+                memberName => new MemberRunStatusInfo(
+                    memberName,
                     MemberRunLifecycleStatus.Pending,
-                    LastStep: null,
                     Message: "Awaiting processing.",
-                    UpdatedAt: now,
-                    QueuePosition: item.QueuePosition),
+                    UpdatedAt: now),
                 StringComparer.OrdinalIgnoreCase);
 
         return new RunStatusInfo(

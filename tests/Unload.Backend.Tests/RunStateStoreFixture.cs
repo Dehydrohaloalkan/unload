@@ -45,8 +45,7 @@ internal sealed class RunStateStoreFixture : IDisposable
         string? scriptCode = null,
         string? filePath = null,
         string? message = null,
-        string? batchId = null,
-        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
+        string? batchId = null)
     {
         Store.ApplyEvent(new RunnerEvent(
             OccurredAt: DateTimeOffset.UtcNow,
@@ -56,8 +55,7 @@ internal sealed class RunStateStoreFixture : IDisposable
             MemberName: memberName,
             ScriptCode: scriptCode,
             FilePath: filePath,
-            BatchId: batchId,
-            BatchFiles: batchFiles));
+            BatchId: batchId));
     }
 
     public void ApplyFeedback(
@@ -66,7 +64,8 @@ internal sealed class RunStateStoreFixture : IDisposable
         string memberName = "Member A",
         string batchId = "batch-1",
         string? filePath = null,
-        string? message = null)
+        string? message = null,
+        RunnerFailureInfo? failure = null)
     {
         Store.ApplySenderFeedback(new SenderFileDispatchFeedback(
             DateTimeOffset.UtcNow,
@@ -75,7 +74,8 @@ internal sealed class RunStateStoreFixture : IDisposable
             batchId,
             kind,
             filePath,
-            message));
+            message,
+            failure));
     }
 
     public RunStateStore Restart()

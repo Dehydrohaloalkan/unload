@@ -13,7 +13,6 @@ namespace Unload.Core;
 /// <param name="FilePath">Путь к файлу результата (если применимо).</param>
 /// <param name="BatchId">Идентификатор gateway-партии, если событие относится к постановке партии в очередь.</param>
 /// <param name="Failure">Структурированная диагностика ошибки, если событие сообщает об ошибке.</param>
-/// <param name="BatchFiles">Точный состав gateway-партии для события постановки в очередь.</param>
 public record RunnerEvent(
     DateTimeOffset OccurredAt,
     string CorrelationId,
@@ -23,5 +22,4 @@ public record RunnerEvent(
     string? ScriptCode = null,
     string? FilePath = null,
     string? BatchId = null,
-    RunnerFailureInfo? Failure = null,
-    IReadOnlyCollection<SenderBatchFileStatusInfo>? BatchFiles = null);
+    RunnerFailureInfo? Failure = null);

@@ -103,7 +103,7 @@
 Базовый слой контрактов:
 
 - модели домена: `RunRequest`, `ScriptDefinition`, `DatabaseRow`, `FileChunk`, `WrittenFile`, `RunnerEvent`, `RunnerStep`;
-- контракты: `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`, `IRequestHasher`.
+- контракты: `ICatalogService`, `IDatabaseClient`, `IDatabaseClientFactory`, `IFileChunkWriter`.
 
 Меняется редко. Общие контракты без логики оркестрации.
 
@@ -151,10 +151,6 @@
 - конфигурация через секцию `Gateway.Ftp` в appsettings.
 
 Заменяет in-memory MQ-заглушку из прежней архитектуры.
-
-### `backend/Unload.Cryptography`
-
-Хеширование запросов: `Sha256RequestHasher`.
 
 ### `backend/Unload.Store`
 

@@ -32,16 +32,13 @@ public enum MemberRunLifecycleStatus
 /// </summary>
 /// <param name="MemberName">Имя мембера.</param>
 /// <param name="Status">Текущий статус мембера.</param>
-/// <param name="LastStep">Последний обработанный шаг раннера для мембера.</param>
 /// <param name="Message">Последнее сообщение о состоянии мембера.</param>
 /// <param name="UpdatedAt">Время последнего обновления статуса мембера.</param>
 public record MemberRunStatusInfo(
     string MemberName,
     MemberRunLifecycleStatus Status,
-    RunnerStep? LastStep,
     string? Message,
     DateTimeOffset UpdatedAt,
-    int? QueuePosition = null,
     RunnerFailureInfo? Failure = null);
 
 /// <summary>
@@ -70,11 +67,7 @@ public record SenderBatchStatusInfo(
     DateTimeOffset UpdatedAt,
     IReadOnlyCollection<SenderFileDispatchStateInfo> SentFiles,
     string? Message = null,
-    DateTimeOffset? QueuedAt = null,
-    DateTimeOffset? StartedAt = null,
-    int? FileCount = null,
-    RunnerFailureInfo? Failure = null,
-    IReadOnlyCollection<SenderBatchFileStatusInfo>? PlannedFiles = null);
+    RunnerFailureInfo? Failure = null);
 
 /// <summary>
 /// Снимок состояния конкретного запуска выгрузки.

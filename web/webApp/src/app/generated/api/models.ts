@@ -31,7 +31,6 @@ export type { RunOutputArtifactInfo } from './models/run-output-artifact-info';
 export type { RunStartRequest } from './models/run-start-request';
 export type { RunStatusInfo } from './models/run-status-info';
 export type { ScriptTaskRunResult } from './models/script-task-run-result';
-export type { SenderBatchFileStatusInfo } from './models/sender-batch-file-status-info';
 export type { SenderBatchStatus } from './models/sender-batch-status';
 export type { SenderBatchStatusInfo } from './models/sender-batch-status-info';
 export type { SenderFeedbackRequest } from './models/sender-feedback-request';

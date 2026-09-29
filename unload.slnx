@@ -4,7 +4,6 @@
     <Project Path="backend/Unload.Bootstrapper/Unload.Bootstrapper.csproj" />
     <Project Path="backend/Unload.Catalog/Unload.Catalog.csproj" />
     <Project Path="backend/Unload.Core/Unload.Core.csproj" />
-    <Project Path="backend/Unload.Cryptography/Unload.Cryptography.csproj" />
     <Project Path="backend/Unload.DataBase/Unload.DataBase.csproj" />
     <Project Path="backend/Unload.FileWriter/Unload.FileWriter.csproj" />
     <Project Path="backend/Unload.Gateway/Unload.Gateway.csproj" />

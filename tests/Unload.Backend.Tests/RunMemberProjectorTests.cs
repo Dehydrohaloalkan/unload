@@ -21,7 +21,6 @@ public class RunMemberProjectorTests
         var member = Assert.Single(result).Value;
         Assert.Equal("Member A", member.MemberName);
         Assert.Equal(expectedStatus, member.Status);
-        Assert.Equal(step, member.LastStep);
     }
 
     [Theory]
@@ -66,7 +65,7 @@ public class RunMemberProjectorTests
 
     private static MemberRunStatusInfo Member(string name, MemberRunLifecycleStatus status)
     {
-        return new MemberRunStatusInfo(name, status, RunnerStep.QueryStarted, "started", Now);
+        return new MemberRunStatusInfo(name, status, "started", Now);
     }
 
     private static IReadOnlyDictionary<string, MemberRunStatusInfo> Members(MemberRunStatusInfo member)

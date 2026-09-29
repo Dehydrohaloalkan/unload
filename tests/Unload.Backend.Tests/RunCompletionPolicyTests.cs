@@ -109,7 +109,7 @@ public class RunCompletionPolicyTests
 
     private static MemberRunStatusInfo Member(string name)
     {
-        return new MemberRunStatusInfo(name, MemberRunLifecycleStatus.Completed, RunnerStep.Completed, "done", Now);
+        return new MemberRunStatusInfo(name, MemberRunLifecycleStatus.Completed, "done", Now);
     }
 
     private static RunOutputArtifactInfo Artifact(string memberName, string path)

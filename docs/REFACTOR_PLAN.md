@@ -56,7 +56,7 @@
 Инфраструктура (без структурных изменений):
 
 - `Unload.Core` — доменные модели + инфраструктурные контракты. `IRunner` отсюда уезжает.
-- `Unload.Catalog`, `Unload.DataBase`, `Unload.FileWriter`, `Unload.Cryptography`, `Unload.Gateway`.
+- `Unload.Catalog`, `Unload.DataBase`, `Unload.FileWriter`, `Unload.Gateway`.
 
 Новые / консолидированные:
 
@@ -85,7 +85,7 @@ Api ──> Bootstrapper ──> Tasks ──> Store ──> Core
                           │  └─> Tasks.MainUnload ──> Tasks, Store, Catalog, DataBase, FileWriter, Gateway
                           │  └─> Tasks.ExtraUnload ──> Tasks, Store, DataBase, Gateway
                           │  └─> Tasks.Preset      ──> Tasks, Store, DataBase
-                          └─> Gateway, Cryptography
+                          └─> Gateway
 ```
 
 `Unload.Tasks` НЕ зависит от конкретных проектов задач — задачи регистрируются в DI как

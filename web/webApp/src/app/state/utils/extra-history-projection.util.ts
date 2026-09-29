@@ -10,7 +10,7 @@ import {
   HistoryRunNode,
   HistoryScriptNode,
 } from './history-projection.models';
-import { buildRunMemberIndex, extraFilePathKey, memberKey } from './member-index.util';
+import { buildMemberBatchGroups, extraFilePathKey, memberKey } from './member-index.util';
 import { resolveMemberStatusLabel, resolveRunStatusLabel } from './labels.util';
 import { sortNames } from './sort.util';
 
@@ -30,13 +30,13 @@ export function buildExtraHistoryNode(
   const record = todayHistory.find(
     (item) => item.taskCode === 'extra' && item.correlationId === correlationId,
   );
-  const index = buildRunMemberIndex(run);
+  const batchGroups = buildMemberBatchGroups(run);
   const files = collectExtraFiles(run, record, outputFilesByPath);
   const scripts = buildExtraScripts(
     files,
     run,
     correlationId,
-    index,
+    batchGroups,
     queuedGatewayPaths,
     bankNamesByCode,
   );
@@ -121,7 +121,7 @@ function buildExtraScripts(
   files: Map<string, ExtraFile>,
   run: RunStatusInfo,
   correlationId: string,
-  index: ReturnType<typeof buildRunMemberIndex>,
+  batchGroups: ReturnType<typeof buildMemberBatchGroups>,
   queuedGatewayPaths: Set<string>,
   bankNamesByCode: Record<string, string>,
 ): HistoryScriptNode[] {
@@ -130,7 +130,7 @@ function buildExtraScripts(
     const { scriptCode, bankCode } = parseExtraFilePath(file.filePath, file.fileName);
     const bankName =
       bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
-    const batches = index.batchGroups.get(memberKey(scriptCode)) ?? [];
+    const batches = batchGroups.get(memberKey(scriptCode)) ?? [];
     const gatewayDeliveries = buildFileGatewayDeliveries(file.filePath, batches, true);
     const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
     const row: HistoryFileRow = {

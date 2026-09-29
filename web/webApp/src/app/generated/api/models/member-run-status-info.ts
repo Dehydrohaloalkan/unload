@@ -3,13 +3,10 @@
 
 import { MemberRunLifecycleStatus } from '../models/member-run-lifecycle-status';
 import { RunnerFailureInfo } from '../models/runner-failure-info';
-import { RunnerStep } from '../models/runner-step';
 export interface MemberRunStatusInfo {
   failure?: (null | RunnerFailureInfo);
-  lastStep: (null | RunnerStep);
   memberName: string;
   message: (string | null);
-  queuePosition?: (number | string | null);
   status: MemberRunLifecycleStatus;
   updatedAt: string;
 }

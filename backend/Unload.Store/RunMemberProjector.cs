@@ -15,7 +15,7 @@ internal static class RunMemberProjector
 
         if (@event.Step == RunnerStep.Completed)
         {
-            return UpdateAll(map, MemberRunLifecycleStatus.Completed, @event.Step, @event.Message, now);
+            return UpdateAll(map, MemberRunLifecycleStatus.Completed, @event.Message, now);
         }
 
         if (@event.Step == RunnerStep.Failed && string.IsNullOrWhiteSpace(@event.MemberName))
@@ -44,10 +44,8 @@ internal static class RunMemberProjector
         map[memberName] = new MemberRunStatusInfo(
             memberName,
             status,
-            @event.Step,
             @event.Message,
             now,
-            QueuePosition: existing?.QueuePosition,
             Failure: @event.Step == RunnerStep.Failed ? @event.Failure : existing?.Failure);
 
         return map;
@@ -56,7 +54,6 @@ internal static class RunMemberProjector
     public static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateAll(
         IReadOnlyDictionary<string, MemberRunStatusInfo>? source,
         MemberRunLifecycleStatus status,
-        RunnerStep step,
         string? message,
         DateTimeOffset now,
         RunnerFailureInfo? failure = null)
@@ -71,7 +68,6 @@ internal static class RunMemberProjector
             x => x.Value with
             {
                 Status = status,
-                LastStep = step,
                 Message = message,
                 UpdatedAt = now,
                 Failure = failure
@@ -93,7 +89,6 @@ internal static class RunMemberProjector
                 : x.Value with
                 {
                     Status = status,
-                    LastStep = RunnerStep.Failed,
                     Message = message,
                     UpdatedAt = now,
                     Failure = failure
@@ -122,7 +117,6 @@ internal static class RunMemberProjector
                 : current with
             {
                 Status = MemberRunLifecycleStatus.Failed,
-                LastStep = RunnerStep.Failed,
                 Message = failure.Message,
                 UpdatedAt = now,
                 Failure = failure
@@ -130,7 +124,6 @@ internal static class RunMemberProjector
             : new MemberRunStatusInfo(
                 normalized,
                 MemberRunLifecycleStatus.Failed,
-                RunnerStep.Failed,
                 failure.Message,
                 now,
                 Failure: failure);

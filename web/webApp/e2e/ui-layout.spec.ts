@@ -166,14 +166,12 @@ function historyRunSnapshot() {
       done: {
         memberName: 'Выгрузившийся мембер',
         status: 2,
-        lastStep: null,
         message: null,
         updatedAt: timestamp,
       },
       failed: {
         memberName: 'Невыгрузившийся мембер',
         status: 3,
-        lastStep: null,
         message: 'Не удалось записать файл',
         updatedAt: timestamp,
         failure: {

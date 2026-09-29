@@ -132,30 +132,22 @@ public class RunStateStorePersistenceTests
     }
 
     [Fact]
-    public void PlannedBatchFiles_RoundTripWithPartialSentState()
+    public void SentBatchFiles_RoundTrip()
     {
         using var fixture = new RunStateStoreFixture();
         var firstPath = fixture.ArtifactPath("first.txt");
-        var secondPath = fixture.ArtifactPath("second.txt");
         fixture.Start();
         fixture.ApplyEvent(
             RunnerStep.GatewayBatchQueued,
             memberName: "Member A",
-            batchId: "batch-1",
-            batchFiles:
-            [
-                new(firstPath, "first.txt", 10, 11, DateTimeOffset.UtcNow),
-                new(secondPath, "second.txt", 20, 21, DateTimeOffset.UtcNow)
-            ]);
+            batchId: "batch-1");
         fixture.ApplyFeedback(SenderFeedbackKind.FileSent, filePath: firstPath);
         fixture.Store.SetFailed("run-1", "stop for persisted terminal fixture");
 
         fixture.Restart();
 
         var batch = fixture.Store.Get("run-1")!.SenderBatches!["batch-1"];
-        Assert.Equal(2, batch.PlannedFiles!.Count);
-        Assert.NotNull(batch.PlannedFiles.Single(file => file.FileName == "first.txt").SentAt);
-        Assert.Null(batch.PlannedFiles.Single(file => file.FileName == "second.txt").SentAt);
+        Assert.Equal(Path.GetFullPath(firstPath), Assert.Single(batch.SentFiles).FilePath);
     }
 
     [Fact]
@@ -166,24 +158,48 @@ public class RunStateStorePersistenceTests
         fixture.ApplyEvent(
             RunnerStep.GatewayBatchQueued,
             memberName: "Member A",
-            batchId: "batch-1",
-            batchFiles: [new(fixture.ArtifactPath(), "result.txt", null, 10, DateTimeOffset.UtcNow)]);
-        fixture.Store.SetFailed("run-1", "stop for persisted terminal fixture");
+            batchId: "batch-1");
+        var failure = new RunnerFailureInfo(
+            "sender",
+            "batch",
+            "batch-1",
+            "Member A",
+            null,
+            null,
+            null,
+            null,
+            "batch-1",
+            "SENDER_FAILED",
+            "Gateway sender failed.",
+            DateTimeOffset.UtcNow);
+        fixture.ApplyFeedback(SenderFeedbackKind.BatchFailed, failure: failure);
 
         var root = JsonNode.Parse(File.ReadAllText(fixture.StateFilePath))!.AsObject();
         var run = root["Runs"]!.AsArray()[0]!.AsObject();
+        run["MemberStatuses"]!["Member A"]!["LastStep"] = "Failed";
+        run["MemberStatuses"]!["Member A"]!["QueuePosition"] = 1;
         run["WorkerStatuses"] = new JsonObject();
         run["ScriptStatuses"] = new JsonObject();
         run["FileStatuses"] = new JsonObject();
         var batch = run["SenderBatches"]!["batch-1"]!.AsObject();
-        Assert.True(batch.Remove("PlannedFiles"));
+        batch["QueuedAt"] = DateTimeOffset.UtcNow;
+        batch["StartedAt"] = DateTimeOffset.UtcNow;
+        batch["FileCount"] = 1;
+        batch["PlannedFiles"] = new JsonArray(new JsonObject
+        {
+            ["FilePath"] = fixture.ArtifactPath(),
+            ["FileName"] = "result.txt",
+            ["ActualBytes"] = 10
+        });
         File.WriteAllText(fixture.StateFilePath, root.ToJsonString());
 
         fixture.Restart();
 
-        var restored = fixture.Store.Get("run-1")!.SenderBatches!["batch-1"];
-        Assert.Null(restored.PlannedFiles);
-        Assert.Equal(1, restored.FileCount);
+        var restoredRun = fixture.Store.Get("run-1")!;
+        var restored = restoredRun.SenderBatches!["batch-1"];
+        Assert.Equal(SenderBatchStatus.Failed, restored.Status);
+        Assert.Equal("SENDER_FAILED", restored.Failure!.Code);
+        Assert.Equal("SENDER_FAILED", restoredRun.Failure!.Code);
     }
 
     [Fact]

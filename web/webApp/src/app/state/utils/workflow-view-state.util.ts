@@ -5,8 +5,6 @@ import {
   RunStatusInfo,
 } from '../../app.models';
 
-export type WorkflowPhase = 'gate' | 'tasks';
-
 export function buildExtraBankNamesByCode(banks: ExtraBankInfo[]): Record<string, string> {
   const names: Record<string, string> = {};
   for (const bank of banks) {
@@ -38,8 +36,4 @@ export function canStartExport(
   exportRunning: boolean,
 ): boolean {
   return workflowAllowed && !presetRunning && !exportRunning;
-}
-
-export function resolveWorkflowPhase(presetState: PresetGateState | null): WorkflowPhase {
-  return presetState?.presetCompleted ? 'tasks' : 'gate';
 }

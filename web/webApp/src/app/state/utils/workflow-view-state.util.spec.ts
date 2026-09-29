@@ -4,7 +4,6 @@ import {
   canStartExport,
   canUseMainOrExtra,
   resolveExtraLastCompletedAt,
-  resolveWorkflowPhase,
 } from './workflow-view-state.util';
 
 describe('workflow view state', () => {
@@ -48,12 +47,6 @@ describe('workflow view state', () => {
     },
   ])('resolves main and extra availability to $expected', ({ state, expected }) => {
     expect(canUseMainOrExtra(state)).toBe(expected);
-  });
-
-  it('switches to tasks only after preset completion', () => {
-    expect(resolveWorkflowPhase(null)).toBe('gate');
-    expect(resolveWorkflowPhase(createPreset({ presetCompleted: false }))).toBe('gate');
-    expect(resolveWorkflowPhase(createPreset({ presetCompleted: true }))).toBe('tasks');
   });
 
   it.each([

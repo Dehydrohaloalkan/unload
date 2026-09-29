@@ -30,7 +30,6 @@ export const SenderBatchStatus = {
 } as const satisfies Record<string, SenderBatchStatus>;
 
 export type SenderFileDispatchStateInfo = ApiModels.SenderFileDispatchStateInfo;
-export type SenderBatchFileStatusInfo = ApiModels.SenderBatchFileStatusInfo;
 export type SenderBatchStatusInfo = ApiModels.SenderBatchStatusInfo;
 export type RunnerFailureInfo = ApiModels.RunnerFailureInfo;
 export type RunStatusInfo = ApiModels.RunStatusInfo;

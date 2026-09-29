@@ -1428,7 +1428,6 @@
         "required": [
           "memberName",
           "status",
-          "lastStep",
           "message",
           "updatedAt"
         ],
@@ -1440,16 +1439,6 @@
           "status": {
             "$ref": "#/components/schemas/MemberRunLifecycleStatus"
           },
-          "lastStep": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RunnerStep"
-              }
-            ]
-          },
           "message": {
             "type": [
               "null",
@@ -1459,15 +1448,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "queuePosition": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
           },
           "failure": {
             "oneOf": [
@@ -2122,53 +2102,6 @@
           }
         }
       },
-      "SenderBatchFileStatusInfo": {
-        "required": [
-          "filePath",
-          "fileName",
-          "estimatedBytes",
-          "actualBytes",
-          "queuedAt"
-        ],
-        "type": "object",
-        "properties": {
-          "filePath": {
-            "type": "string"
-          },
-          "fileName": {
-            "type": "string"
-          },
-          "estimatedBytes": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "actualBytes": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "queuedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "sentAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          }
-        }
-      },
       "SenderBatchStatus": {
         "type": "integer"
       },
@@ -2207,29 +2140,6 @@
               "string"
             ]
           },
-          "queuedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "startedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "fileCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
           "failure": {
             "oneOf": [
               {
@@ -2239,15 +2149,6 @@
                 "$ref": "#/components/schemas/RunnerFailureInfo"
               }
             ]
-          },
-          "plannedFiles": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/SenderBatchFileStatusInfo"
-            }
           }
         }
       },

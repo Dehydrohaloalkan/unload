@@ -152,11 +152,7 @@ public sealed class MainUnloadChaosTests
         var queued = Assert.Single(events, static item => item.Step == RunnerStep.GatewayBatchQueued);
         var scriptCompleted = Assert.Single(events, static item => item.Step == RunnerStep.ScriptCompleted);
         Assert.Equal("chaos-run-1:Chaos member", queued.BatchId);
-        var plannedFile = Assert.Single(queued.BatchFiles!);
-        Assert.Equal(Path.GetFullPath(plannedFile.FilePath), plannedFile.FilePath);
-        Assert.False(string.IsNullOrWhiteSpace(plannedFile.FileName));
-        Assert.True(plannedFile.ActualBytes > 0);
-        Assert.Null(plannedFile.SentAt);
+        Assert.Equal("Chaos member", queued.MemberName);
         Assert.True(events.IndexOf(queued) < events.IndexOf(scriptCompleted));
     }
 

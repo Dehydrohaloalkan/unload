@@ -110,7 +110,7 @@ public class GatewayFeedbackProjectorTests
     }
 
     [Fact]
-    public void Queued_CreatesReadyBatchWithTimestampAndFileCount()
+    public void Queued_CreatesReadyBatch()
     {
         var queued = QueueEvent();
 
@@ -118,33 +118,12 @@ public class GatewayFeedbackProjectorTests
 
         var batch = Assert.Single(result).Value;
         Assert.Equal(SenderBatchStatus.Ready, batch.Status);
-        Assert.Equal(queued.OccurredAt, batch.QueuedAt);
-        Assert.Equal(2, batch.FileCount);
-        Assert.Null(batch.StartedAt);
-        Assert.Equal(2, batch.PlannedFiles!.Count);
+        Assert.Equal("Member A", batch.MemberName);
+        Assert.Empty(batch.SentFiles);
     }
 
     [Fact]
-    public void Queued_ProjectsExactNormalizedFileMembership()
-    {
-        var queued = QueueEvent(files:
-        [
-            Planned(" /tmp/z.txt ", "z.txt", actualBytes: 31),
-            Planned("/tmp/a.txt", "a.txt", estimatedBytes: 20)
-        ]);
-
-        var batch = GatewayFeedbackProjector.ApplyQueued(null, queued, Now)["batch-1"];
-
-        Assert.Equal(
-            [Path.GetFullPath("/tmp/a.txt"), Path.GetFullPath("/tmp/z.txt")],
-            batch.PlannedFiles!.Select(static file => file.FilePath));
-        var plannedFiles = Assert.IsAssignableFrom<IReadOnlyCollection<SenderBatchFileStatusInfo>>(batch.PlannedFiles);
-        Assert.Equal(20, plannedFiles.First().EstimatedBytes);
-        Assert.Equal(31, plannedFiles.Last().ActualBytes);
-    }
-
-    [Fact]
-    public void Started_PromotesQueuedBatchAndRecordsStartTimestamp()
+    public void Started_PromotesQueuedBatch()
     {
         var queued = GatewayFeedbackProjector.ApplyQueued(source: null, QueueEvent(), Now);
         var startedAt = Now.AddMinutes(1);
@@ -156,9 +135,7 @@ public class GatewayFeedbackProjectorTests
 
         var batch = result["batch-1"];
         Assert.Equal(SenderBatchStatus.InProgress, batch.Status);
-        Assert.Equal(startedAt, batch.StartedAt);
-        Assert.NotNull(batch.QueuedAt);
-        Assert.Equal(2, batch.FileCount);
+        Assert.Equal(startedAt, batch.UpdatedAt);
     }
 
     [Fact]
@@ -174,9 +151,6 @@ public class GatewayFeedbackProjectorTests
 
         var batch = result["batch-1"];
         Assert.Equal(SenderBatchStatus.InProgress, batch.Status);
-        Assert.Equal(startedAt, batch.StartedAt);
-        Assert.Equal(QueueEvent().OccurredAt, batch.QueuedAt);
-        Assert.Equal(2, batch.FileCount);
         Assert.Equal(startedAt, batch.UpdatedAt);
     }
 
@@ -196,12 +170,11 @@ public class GatewayFeedbackProjectorTests
 
         var batch = result["batch-1"];
         Assert.Equal(SenderBatchStatus.InProgress, batch.Status);
-        Assert.Equal(startedAt, batch.StartedAt);
         Assert.Single(batch.SentFiles);
     }
 
     [Fact]
-    public void FileSent_MarksOnlyMatchingPlannedFileAndDuplicateIsIdempotent()
+    public void FileSentAfterQueue_IsIdempotent()
     {
         var queued = GatewayFeedbackProjector.ApplyQueued(null, QueueEvent(), Now);
         var sentAt = Now.AddMinutes(1);
@@ -217,13 +190,11 @@ public class GatewayFeedbackProjectorTests
 
         var batch = twice["batch-1"];
         Assert.Single(batch.SentFiles);
-        var plannedFiles = Assert.IsAssignableFrom<IReadOnlyCollection<SenderBatchFileStatusInfo>>(batch.PlannedFiles);
-        Assert.Equal(sentAt, plannedFiles.Single(file => file.FileName == "a.txt").SentAt);
-        Assert.Null(plannedFiles.Single(file => file.FileName == "b.txt").SentAt);
+        Assert.Equal(sentAt, batch.SentFiles.Single().SentAt);
     }
 
     [Fact]
-    public void FeedbackBeforeQueue_EnrichesPlannedFileAndQueueReplacesFeedbackMemberName()
+    public void FeedbackBeforeQueue_PreservesSentFileAndQueueReplacesFeedbackMemberName()
     {
         var feedback = GatewayFeedbackProjector.Apply(
             null,
@@ -241,7 +212,7 @@ public class GatewayFeedbackProjectorTests
 
         var batch = result["batch-1"];
         Assert.Equal("Authoritative Member", batch.MemberName);
-        Assert.Equal(Now.AddMinutes(1), batch.PlannedFiles!.Single(file => file.FileName == "a.txt").SentAt);
+        Assert.Equal(Now.AddMinutes(1), Assert.Single(batch.SentFiles).SentAt);
     }
 
     [Fact]
@@ -276,9 +247,46 @@ public class GatewayFeedbackProjectorTests
 
         var batch = result["batch-1"];
         Assert.Equal(expectedStatus, batch.Status);
-        Assert.Equal(2, batch.FileCount);
-        Assert.NotNull(batch.QueuedAt);
         Assert.Equal(Now.AddMinutes(1), batch.UpdatedAt);
+    }
+
+    [Fact]
+    public void LateQueuedEvent_PreservesTerminalSentFilesAndFailure()
+    {
+        var path = Path.GetFullPath("/tmp/sent.txt");
+        var failure = new RunnerFailureInfo(
+            "sender",
+            "batch",
+            "batch-1",
+            "Feedback Member",
+            null,
+            null,
+            null,
+            path,
+            "batch-1",
+            "SENDER_FAILED",
+            "Gateway sender failed.",
+            Now);
+        var terminal = Batches(new SenderBatchStatusInfo(
+            "batch-1",
+            "Feedback Member",
+            SenderBatchStatus.Failed,
+            Now.AddMinutes(1),
+            [new SenderFileDispatchStateInfo(path, Now)],
+            Message: "failed",
+            Failure: failure));
+
+        var result = GatewayFeedbackProjector.ApplyQueued(
+            terminal,
+            QueueEvent(memberName: "Authoritative Member"),
+            Now.AddMinutes(2));
+
+        var batch = result["batch-1"];
+        Assert.Equal(SenderBatchStatus.Failed, batch.Status);
+        Assert.Equal(Now.AddMinutes(1), batch.UpdatedAt);
+        Assert.Equal("Authoritative Member", batch.MemberName);
+        Assert.Equal(path, Assert.Single(batch.SentFiles).FilePath);
+        Assert.Same(failure, batch.Failure);
     }
 
     [Fact]
@@ -337,27 +345,13 @@ public class GatewayFeedbackProjectorTests
             message);
     }
 
-    private static RunnerEvent QueueEvent(
-        string memberName = "Member A",
-        IReadOnlyCollection<SenderBatchFileStatusInfo>? files = null) => new(
-            Now,
-            "run-1",
-            RunnerStep.GatewayBatchQueued,
-            "Gateway batch queued.",
-            MemberName: memberName,
-            BatchId: "batch-1",
-            BatchFiles: files ??
-            [
-                Planned("/tmp/a.txt", "a.txt", actualBytes: 10),
-                Planned("/tmp/b.txt", "b.txt", actualBytes: 20)
-            ]);
-
-    private static SenderBatchFileStatusInfo Planned(
-        string path,
-        string name,
-        long? estimatedBytes = null,
-        long? actualBytes = null) =>
-        new(path, name, estimatedBytes, actualBytes, Now);
+    private static RunnerEvent QueueEvent(string memberName = "Member A") => new(
+        Now,
+        "run-1",
+        RunnerStep.GatewayBatchQueued,
+        "Gateway batch queued.",
+        MemberName: memberName,
+        BatchId: "batch-1");
 
     private static IReadOnlyDictionary<string, SenderBatchStatusInfo> Batches(SenderBatchStatusInfo batch)
     {

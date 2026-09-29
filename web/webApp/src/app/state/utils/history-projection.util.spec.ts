@@ -94,7 +94,6 @@ describe('history projection', () => {
         failed: {
           memberName: 'Member Failed',
           status: MemberRunLifecycleStatus.Failed,
-          lastStep: null,
           message: 'Не удалось записать файл',
           updatedAt: '2026-08-07T10:04:00Z',
           failure: {

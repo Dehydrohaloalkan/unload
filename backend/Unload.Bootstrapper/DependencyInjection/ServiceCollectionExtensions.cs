@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Unload.Catalog;
 using Unload.Core;
-using Unload.Cryptography;
 using Unload.DataBase;
 using Unload.FileWriter;
 using Unload.Gateway;
@@ -64,8 +63,6 @@ public static class ServiceCollectionExtensions
         {
             services.AddHostedService<FtpGatewayBackgroundService>();
         }
-        services.AddSingleton<IRequestHasher, Sha256RequestHasher>();
-
         var stateDirectory = Path.Combine(config.Paths.OutputDirectory, "_state");
         var runStateFilePath = Path.Combine(stateDirectory, "runs.json");
         var taskHistoryFilePath = Path.Combine(stateDirectory, "task-history.json");

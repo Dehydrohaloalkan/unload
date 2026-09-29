@@ -90,7 +90,6 @@ flowchart LR
 | `Unload.Catalog` / `JsonCatalogService` | Читает `configs/catalog.json`, связывает группы, мемберов, targets и SQL-файлы, отмечает большие скрипты | Все правила каталога и именования находятся в одном месте |
 | `Unload.DataBase` / `DatabaseClientFactory` | Создаёт независимый клиент БД для каждого worker и выполняет SQL | Изолирует конкретное подключение к БД от задач и движков |
 | `Unload.FileWriter` / `PipeSeparatedFileChunkWriter` | Записывает чанки, заголовки и строки с разделителем `\|`; синхронизирует запись в один файл | Движок отвечает за процесс, writer — только за корректный формат и конкурентную запись |
-| `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
 | `Unload.Store` / `RunStateStore` | Предоставляет публичные доменные операции и последовательно выполняет mutation вместе с persistence | Это серверный источник истины и небольшой фасад над правилами проекции |
 | `Unload.Store` / `RunStatePersistence` | Последовательно захватывает актуальный набор состояний и записывает snapshot через один writer | Конкурентные вызовы не могут сохранить устаревший snapshot после более нового |
 | `Unload.Store` / `RunStateProjector` | Создаёт начальные снимки и применяет runner events к immutable `RunStatusInfo` | Правила построения состояния не смешиваются с конкурентным хранением |
@@ -165,7 +164,7 @@ Unload минимальный уровень — `Information`; для `Microsof
 
 - находит корень workspace по `configs/catalog.json` и каталогу `scripts/`;
 - валидирует секцию `Database`;
-- регистрирует catalog, database factory, file writer, hasher и gateway;
+- регистрирует catalog, database factory, file writer и gateway;
 - создаёт `RunStateStore` на `output/_state/runs.json`;
 - создаёт `TaskExecutionHistoryStore` на `output/_state/task-history.json`;
 - регистрирует `TimeProvider.System` как единый источник текущего времени по умолчанию;
@@ -624,22 +623,17 @@ Browser storage хранит только локальные UI-настройк
 
 `RunStatusInfo.SenderBatches` — отдельная проекция lifecycle партий gateway. После успешного
 `PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии и
-точным составом файлов. `SenderBatchStatusInfo.PlannedFiles` хранит нормализованный
-путь, имя, известный оценочный/фактический размер, `QueuedAt` и nullable `SentAt` каждого файла;
-это authoritative-связь между созданными артефактами и конкретной отправкой без frontend-эвристик.
-Событие создаёт batch в `Ready` с `QueuedAt`. Когда FTP worker действительно
-начинает `ProcessBatchAsync`, он публикует `BatchStarted`, переводящий batch в `InProgress` и
-фиксирующий `StartedAt` до подключения к FTP. `FileSent`, `BatchCompleted` и `BatchFailed`
-сохраняют прежние роли. Runner events и sender feedback приходят по независимым каналам, поэтому
-проекция допускает обратный порядок: поздний `GatewayBatchQueued` дополняет `QueuedAt` и
-`FileCount`, восстанавливает planned membership и отмечает уже отправленные пути, не меняя уже
-достигнутый `InProgress` или терминальный статус и его `UpdatedAt`. `FileSent` сопоставляется по
-нормализованному пути идемпотентно; feedback неизвестного legacy-файла остаётся в `SentFiles`, но
-не добавляется в authoritative `PlannedFiles`. Имя мембера из `GatewayBatchQueued` имеет приоритет
-над feedback и не может быть заменено несовпадающим именем независимо от порядка событий.
-Повторная отправка пока публикует batch напрямую и не создаёт runner `GatewayBatchQueued`, поэтому
-для её партий `QueuedAt` и `PlannedFiles` могут отсутствовать. Старые persisted snapshots без
-`PlannedFiles` читаются как прежде.
+именем мембера. Событие создаёт batch в `Ready`; `BatchStarted` и `FileSent` переводят его в
+`InProgress`, а `BatchCompleted` и `BatchFailed` завершают. Проекция хранит только подтверждённые
+sender-ом файлы в `SentFiles`. Пути нормализуются, сортируются и добавляются идемпотентно.
+
+Runner events и sender feedback приходят по независимым каналам, поэтому поздний
+`GatewayBatchQueued` не меняет уже достигнутый `InProgress` или terminal-статус, `UpdatedAt`,
+`SentFiles` и failure. Имя мембера из `GatewayBatchQueued` остаётся authoritative независимо от
+порядка событий. Любой feedback после terminal-статуса игнорируется. Повторная отправка публикует
+batch напрямую; её lifecycle и подтверждённые файлы проецируются тем же feedback-механизмом.
+Старые persisted snapshots с удалёнными telemetry-полями читаются за счёт игнорирования
+неизвестных JSON-свойств.
 
 Для sender failure `SenderBatchStatusInfo.Failure` содержит stage `sender`, batch/member identity,
 код и причину. Этот failure также доступен на run и соответствующем member status, если member

@@ -1,7 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <ItemGroup>
-    <ProjectReference Include="..\Unload.Core\Unload.Core.csproj" />
-  </ItemGroup>
-
-</Project>

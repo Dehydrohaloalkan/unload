@@ -6,7 +6,7 @@ import {
 } from './gateway-history-projection.util';
 import { HistoryFileRow, HistoryMemberResult, HistoryRunNode } from './history-projection.models';
 import { resolveMemberStatusLabel, resolveRunStatusLabel } from './labels.util';
-import { buildRunMemberIndex, memberKey } from './member-index.util';
+import { buildMemberBatchGroups, memberKey } from './member-index.util';
 import { sortNames } from './sort.util';
 
 export function buildRunHistoryNode(
@@ -19,8 +19,8 @@ export function buildRunHistoryNode(
     return null;
   }
 
-  const index = buildRunMemberIndex(run);
-  const memberFiles = buildRunMemberFiles(run, correlationId, queuedGatewayPaths, index);
+  const batchGroups = buildMemberBatchGroups(run);
+  const memberFiles = buildRunMemberFiles(run, correlationId, queuedGatewayPaths, batchGroups);
   const publishToGateway = run.publishToGateway ?? true;
   return {
     key: `run|${correlationId}`,
@@ -69,7 +69,7 @@ function buildRunMemberFiles(
   run: RunStatusInfo,
   correlationId: string,
   queuedGatewayPaths: Set<string>,
-  index: ReturnType<typeof buildRunMemberIndex>,
+  batchGroups: ReturnType<typeof buildMemberBatchGroups>,
 ): Record<string, HistoryFileRow[]> {
   const memberMap = new Map<string, HistoryFileRow[]>();
   for (const artifact of run.outputArtifacts ?? []) {
@@ -78,7 +78,7 @@ function buildRunMemberFiles(
     }
 
     const memberName = artifact.memberName || 'GLOBAL';
-    const batches = index.batchGroups.get(memberKey(memberName)) ?? [];
+    const batches = batchGroups.get(memberKey(memberName)) ?? [];
     const gatewayDeliveries = buildFileGatewayDeliveries(artifact.filePath, batches);
     const row: HistoryFileRow = {
       key: `run|${correlationId}|${artifact.filePath}`,

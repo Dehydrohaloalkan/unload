@@ -44,9 +44,8 @@ internal class RunnerEventEmitter
         string? filePath = null,
         string? batchId = null,
         RunnerFailureInfo? failure = null,
-        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null,
         CancellationToken cancellationToken = default) =>
-        EmitCoreAsync(step, message, null, filePath, batchId, failure, batchFiles, cancellationToken).AsTask();
+        EmitCoreAsync(step, message, null, filePath, batchId, failure, cancellationToken).AsTask();
 
     public Task EmitForScriptAsync(
         ScriptDefinition script,
@@ -55,9 +54,8 @@ internal class RunnerEventEmitter
         string? filePath = null,
         string? batchId = null,
         RunnerFailureInfo? failure = null,
-        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null,
         CancellationToken cancellationToken = default) =>
-        EmitCoreAsync(step, message, script, filePath, batchId, failure, batchFiles, cancellationToken).AsTask();
+        EmitCoreAsync(step, message, script, filePath, batchId, failure, cancellationToken).AsTask();
 
     public async Task TryEmitFailureAsync(
         RunnerStep step,
@@ -107,7 +105,6 @@ internal class RunnerEventEmitter
         string? filePath,
         string? batchId,
         RunnerFailureInfo? failure,
-        IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles,
         CancellationToken cancellationToken)
     {
         await _writeLock.WaitAsync(cancellationToken);
@@ -122,8 +119,7 @@ internal class RunnerEventEmitter
                 script?.ScriptCode,
                 filePath,
                 batchId,
-                Failure: failure,
-                BatchFiles: batchFiles);
+                Failure: failure);
             await _channel.Writer.WriteAsync(RunnerFailureMessages.Sanitize(@event), cancellationToken);
         }
         finally

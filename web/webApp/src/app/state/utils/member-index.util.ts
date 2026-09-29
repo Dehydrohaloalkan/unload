@@ -1,10 +1,4 @@
-import {
-  MemberRunStatusInfo,
-  RunOutputArtifactInfo,
-  RunStatusInfo,
-  SenderBatchStatusInfo,
-  SenderFileDispatchStateInfo,
-} from '../../app.models';
+import { RunStatusInfo, SenderBatchStatusInfo } from '../../app.models';
 
 /** Нормализованный ключ из имени мембера (lowercase + trim). */
 export function memberKey(value: string | null | undefined): string {
@@ -16,68 +10,27 @@ export function normalizeFilePath(value: string): string {
   return value.trim().toLowerCase().replaceAll('\\', '/');
 }
 
-export interface RunMemberIndex {
-  statuses: Map<string, MemberRunStatusInfo>;
-  batches: Map<string, SenderBatchStatusInfo>;
-  /** Все попытки отправки мембера, включая повторные requeue-партии. */
-  batchGroups: Map<string, SenderBatchStatusInfo[]>;
-  artifacts: Map<string, RunOutputArtifactInfo[]>;
-  /** Уникальные member-имена, замеченные в любом из подразделов run'а. */
-  memberNames: Set<string>;
-}
-
-/** Один проход по run-у — строим O(1) индексы вместо `Object.values(...).find(...)` в шаблонах. */
-export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
-  const statuses = new Map<string, MemberRunStatusInfo>();
-  const batches = new Map<string, SenderBatchStatusInfo>();
+/** Группирует все попытки gateway-отправки по мемберу, включая повторные requeue-партии. */
+export function buildMemberBatchGroups(
+  run: RunStatusInfo | null,
+): Map<string, SenderBatchStatusInfo[]> {
   const batchGroups = new Map<string, SenderBatchStatusInfo[]>();
-  const artifacts = new Map<string, RunOutputArtifactInfo[]>();
-  const memberNames = new Set<string>();
 
   if (!run) {
-    return { statuses, batches, batchGroups, artifacts, memberNames };
-  }
-
-  for (const status of Object.values(run.memberStatuses ?? {})) {
-    const key = memberKey(status.memberName);
-    if (!key) continue;
-    statuses.set(key, status);
-    memberNames.add(status.memberName);
+    return batchGroups;
   }
 
   for (const batch of Object.values(run.senderBatches ?? {})) {
     const key = memberKey(batch.memberName);
     if (!key) continue;
-    batches.set(key, batch);
     batchGroups.set(key, [...(batchGroups.get(key) ?? []), batch]);
-    memberNames.add(batch.memberName);
-  }
-
-  for (const artifact of run.outputArtifacts ?? []) {
-    if (!artifact.memberName) continue;
-    const key = memberKey(artifact.memberName);
-    const bucket = artifacts.get(key) ?? [];
-    bucket.push(artifact);
-    artifacts.set(key, bucket);
-    memberNames.add(artifact.memberName);
   }
 
   for (const group of batchGroups.values()) {
     group.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   }
 
-  return { statuses, batches, batchGroups, artifacts, memberNames };
-}
-
-export function isFileSentViaBatch(
-  filePath: string,
-  sentFiles: SenderFileDispatchStateInfo[] | null | undefined,
-): boolean {
-  if (!sentFiles?.length) {
-    return false;
-  }
-  const target = normalizeFilePath(filePath);
-  return sentFiles.some((file) => normalizeFilePath(file.filePath) === target);
+  return batchGroups;
 }
 
 /**
@@ -89,16 +42,4 @@ export function extraFilePathKey(filePath: string): string {
   const normalized = normalizeFilePath(filePath);
   const anchor = normalized.lastIndexOf('output-files/');
   return anchor >= 0 ? normalized.slice(anchor) : normalized;
-}
-
-/** Как `isFileSentViaBatch`, но сравнивает по каноническому хвосту пути (для extra). */
-export function isExtraFileSentViaBatch(
-  filePath: string,
-  sentFiles: SenderFileDispatchStateInfo[] | null | undefined,
-): boolean {
-  if (!sentFiles?.length) {
-    return false;
-  }
-  const target = extraFilePathKey(filePath);
-  return sentFiles.some((file) => extraFilePathKey(file.filePath) === target);
 }
