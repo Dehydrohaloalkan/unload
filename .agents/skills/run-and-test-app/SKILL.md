@@ -9,6 +9,7 @@ description: Start the Unload .NET API and Angular application locally and verif
 
 - Backend: `http://localhost:5000`.
 - Angular: `http://localhost:4200`; open this URL because it proxies `/api` and `/hubs` to the backend.
+- On the first page open after backend startup, select a configured database and enter any non-empty username/password; the development stub accepts them for the lifetime of the backend process.
 - `StubDatabaseClient` seeds development data from SQL markers:
   - `EXTRA_BANKS`: six banks, `B01` through `B06`.
   - `EXTRA_UNLOAD`: 50 rows per bank and honors `IN ('B01', ...)` filters.

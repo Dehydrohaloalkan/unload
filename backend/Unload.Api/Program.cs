@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Unload.Api;
 using Unload.Api.ErrorHandling;
 using Unload.Api.Services;
@@ -6,7 +9,21 @@ using Unload.Tasks.MainUnload;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using NLog.Web;
 
-var builder = WebApplication.CreateBuilder(args);
+#if DESKTOP_BUILD
+var desktopBuild = true;
+#else
+var desktopBuild = args.Contains("--desktop", StringComparer.OrdinalIgnoreCase);
+#endif
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = desktopBuild ? AppContext.BaseDirectory : null,
+});
+if (desktopBuild)
+{
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
 var openApiGenerationOnly = builder.Configuration.GetValue<bool>("OpenApiGenerationOnly");
 builder.Logging.ClearProviders();
 builder.Host.UseNLog();
@@ -56,6 +73,40 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapHub<RunStatusHub>(RunStatusHubContract.HubPath);
-app.Run();
+var webRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(webRoot))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapFallbackToFile("index.html");
+}
+
+if (!desktopBuild)
+{
+    app.Run();
+    return;
+}
+
+await app.StartAsync();
+var server = app.Services.GetRequiredService<IServer>();
+var address = server.Features.Get<IServerAddressesFeature>()?.Addresses.SingleOrDefault()
+    ?? throw new InvalidOperationException("Desktop server address was not assigned.");
+try
+{
+    var browserStart = OperatingSystem.IsWindows()
+        ? new ProcessStartInfo(address) { UseShellExecute = true }
+        : new ProcessStartInfo("xdg-open") { UseShellExecute = false };
+    if (!OperatingSystem.IsWindows())
+    {
+        browserStart.ArgumentList.Add(address);
+    }
+    Process.Start(browserStart);
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Could not open the desktop application in the default browser. URL: {Address}", address);
+}
+
+await app.WaitForShutdownAsync();
 
 public partial class Program;

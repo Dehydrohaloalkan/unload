@@ -127,7 +127,8 @@
 - создает клиентов БД (`DatabaseClientFactory`);
 - выполняет SQL;
 - возвращает `DbDataReader` для потокового чтения.
-- `connectionString` может быть plain-text строкой или строкой формата `dpapi:<base64>`, которая расшифровывается через Windows DPAPI (`CurrentUser`).
+- варианты баз и несекретные шаблоны подключения берутся из конфигурации, а выбранная база,
+  пользователь и пароль фиксируются в runtime-хранилище после ввода в интерфейсе.
 
 ### `backend/Unload.FileWriter`
 
@@ -377,7 +378,7 @@ SignalR:
 ### `appsettings` -> `Database`
 
 - `TimeoutSeconds`
-- `ConnectionString` (plain-text или `dpapi:<base64>`)
+- `Databases[]`: `Id`, `Name`, `ConnectionString` без пользователя и пароля; список показывается в UI
 
 ### `appsettings` -> `Runner`
 
@@ -432,6 +433,19 @@ Angular WebApp:
 cd .\web\webApp
 npm start
 ```
+
+При первом открытии после запуска backend интерфейс предлагает выбрать настроенную базу и ввести
+пользователя с паролем. После успешной проверки эти данные используются всеми новыми подключениями
+до остановки процесса и не записываются на диск.
+
+Desktop-сборки для Linux x64 и Windows x64:
+
+```bash
+./tools/publish-desktop.sh
+```
+
+Результат появляется в `artifacts/desktop/<runtime>`. Desktop executable запускает API только на
+случайном loopback-порту, раздаёт встроенную production-сборку Angular и открывает её в браузере.
 
 Полная проверка backend и frontend перед передачей изменений в Windows PowerShell или CMD:
 

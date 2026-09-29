@@ -4,6 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import {
   catalogGetCatalog$Json,
   catalogGetMembers$Json,
+  databaseGetStatus$Json,
+  databaseConnect$Json,
   gatewayRequeueRequeueToGateway$Json,
   runHistoryGetTodayRuns$Json,
   runHistoryGetWorkflowDashboard$Json,
@@ -21,6 +23,7 @@ import {
 import { UnloadApi } from '../generated/api/unload-api';
 import {
   CatalogInfo,
+  DatabaseCredentialStatusResponse,
   ExtraBankInfo,
   MemberCatalogItem,
   OutputFileInfo,
@@ -74,6 +77,20 @@ export class ApiClientService {
     return firstValueFrom(this.api.invoke(systemGetServerTime$Json));
   }
 
+  fetchDatabaseStatus(): Promise<DatabaseCredentialStatusResponse> {
+    return firstValueFrom(this.api.invoke(databaseGetStatus$Json));
+  }
+
+  connectDatabase(
+    databaseId: string,
+    username: string,
+    password: string,
+  ): Promise<DatabaseCredentialStatusResponse> {
+    return firstValueFrom(
+      this.api.invoke(databaseConnect$Json, { body: { databaseId, username, password } }),
+    );
+  }
+
   fetchDashboardSnapshot(): Promise<WorkflowDashboardSnapshotResponse> {
     return firstValueFrom(this.api.invoke(runHistoryGetWorkflowDashboard$Json));
   }
@@ -85,9 +102,7 @@ export class ApiClientService {
 
   async fetchActiveRun(): Promise<RunStatusInfo | null> {
     try {
-      const payload = await firstValueFrom(
-        this.api.invoke(runStatusGetActiveRun$Json),
-      );
+      const payload = await firstValueFrom(this.api.invoke(runStatusGetActiveRun$Json));
       return payload ?? null;
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 404) {
@@ -129,9 +144,7 @@ export class ApiClientService {
   }
 
   runPreset(adminOverride: boolean): Promise<ScriptTaskRunResult> {
-    return firstValueFrom(
-      this.api.invoke(runLaunchRunPreset$Json, { body: { adminOverride } }),
-    );
+    return firstValueFrom(this.api.invoke(runLaunchRunPreset$Json, { body: { adminOverride } }));
   }
 
   async fetchExtraBanks(): Promise<ExtraBankInfo[]> {

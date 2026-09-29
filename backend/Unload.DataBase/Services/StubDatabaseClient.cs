@@ -1,7 +1,5 @@
 using System.Data;
 using System.Data.Common;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using Unload.Core;
 
@@ -56,7 +54,7 @@ public class StubDatabaseClient : IDatabaseClient
 
     /// <summary>
     /// Создает заглушку клиента БД с настройками таймаута и строки подключения.
-    /// Поддерживает plain строку и формат шифрования <c>dpapi:&lt;base64&gt;</c>.
+    /// Получает готовую строку подключения от runtime credential store.
     /// </summary>
     /// <param name="timeout">Таймаут в секундах.</param>
     /// <param name="connectionString">Строка подключения в plain или зашифрованном виде.</param>
@@ -73,7 +71,7 @@ public class StubDatabaseClient : IDatabaseClient
         }
 
         _timeoutSeconds = timeout;
-        _connectionString = ResolveConnectionString(connectionString);
+        _connectionString = connectionString;
     }
 
     /// <summary>
@@ -222,44 +220,4 @@ public class StubDatabaseClient : IDatabaseClient
         return banks.Count > 0 ? banks : null;
     }
 
-    private static string ResolveConnectionString(string source)
-    {
-        const string dpapiPrefix = "dpapi:";
-        if (!source.StartsWith(dpapiPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return source;
-        }
-
-        var payload = source[dpapiPrefix.Length..];
-        if (string.IsNullOrWhiteSpace(payload))
-        {
-            throw new InvalidOperationException("Encrypted connection string payload is empty.");
-        }
-
-        try
-        {
-            if (!OperatingSystem.IsWindows())
-            {
-                throw new PlatformNotSupportedException("DPAPI decryption is supported only on Windows.");
-            }
-
-            var encryptedBytes = Convert.FromBase64String(payload);
-            var decryptedBytes = ProtectedData.Unprotect(encryptedBytes, optionalEntropy: null, DataProtectionScope.CurrentUser);
-            var decrypted = Encoding.UTF8.GetString(decryptedBytes);
-            if (string.IsNullOrWhiteSpace(decrypted))
-            {
-                throw new InvalidOperationException("Decrypted connection string is empty.");
-            }
-
-            return decrypted;
-        }
-        catch (FormatException ex)
-        {
-            throw new InvalidOperationException("Encrypted connection string must contain valid Base64 after 'dpapi:'.", ex);
-        }
-        catch (CryptographicException ex)
-        {
-            throw new InvalidOperationException("Failed to decrypt connection string using DPAPI CurrentUser scope.", ex);
-        }
-    }
 }

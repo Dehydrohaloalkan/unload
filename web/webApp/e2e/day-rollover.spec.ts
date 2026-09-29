@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-test('refreshes the open dashboard after the server-local date changes', async ({ page }) => {
+test('refreshes the open dashboard after the server-local date changes', async ({
+  page,
+  request,
+}) => {
+  await request.post('/api/database/connect', {
+    data: { databaseId: 'unload-dev', username: 'playwright', password: 'playwright' },
+  });
   await page.clock.install({ time: new Date('2026-09-21T20:59:59.000Z') });
 
   let dashboardRequests = 0;

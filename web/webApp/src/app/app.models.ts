@@ -52,6 +52,8 @@ export type OutputFileInfo = ApiModels.OutputFileInfo;
 export type ExtraBankInfo = ApiModels.ExtraBankInfo;
 export type WorkflowDashboardSnapshotResponse = ApiModels.WorkflowDashboard;
 export type ServerTimeResponse = ApiModels.ServerTimeResponse;
+export type DatabaseCredentialStatusResponse = ApiModels.DatabaseCredentialStatusResponse;
+export type DatabaseOptionResponse = ApiModels.DatabaseOptionResponse;
 
 export interface ProblemDetailsResponse extends ApiModels.ProblemDetails {
   errorCode?: string;

@@ -40,9 +40,19 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException("Database timeout must be greater than zero.");
         }
 
-        if (string.IsNullOrWhiteSpace(databaseSettings.ConnectionString))
+        if (databaseSettings.Databases.Count == 0 || databaseSettings.Databases.Any(static database =>
+                string.IsNullOrWhiteSpace(database.Id) ||
+                string.IsNullOrWhiteSpace(database.Name) ||
+                string.IsNullOrWhiteSpace(database.ConnectionString)))
         {
-            throw new InvalidOperationException("Database connection string is required.");
+            throw new InvalidOperationException("At least one valid database option is required.");
+        }
+        if (databaseSettings.Databases
+            .Select(static database => database.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() != databaseSettings.Databases.Count)
+        {
+            throw new InvalidOperationException("Database option identifiers must be unique.");
         }
 
         services.AddSingleton(config);
@@ -50,9 +60,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(config.HistoryRetention);
 
         services.AddSingleton<ICatalogService>(_ => new JsonCatalogService(config.Paths.CatalogPath, config.Paths.ScriptsDirectory));
-        services.AddSingleton<IDatabaseClientFactory>(_ => new DatabaseClientFactory(
+        services.AddSingleton<IDatabaseCredentialStore>(
+            _ => new DatabaseCredentialStore(databaseSettings.Databases.Select(static database =>
+                new DatabaseConnectionDefinition(database.Id, database.Name, database.ConnectionString)).ToArray()));
+        services.AddSingleton<IDatabaseClientFactory>(serviceProvider => new DatabaseClientFactory(
             databaseSettings.TimeoutSeconds,
-            databaseSettings.ConnectionString));
+            serviceProvider.GetRequiredService<IDatabaseCredentialStore>()));
         services.AddSingleton<IFileChunkWriter, PipeSeparatedFileChunkWriter>();
         services.Configure<GatewayOptions>(configuration.GetSection(GatewayOptions.SectionName));
         services.AddSingleton<FtpGatewayPublisher>();

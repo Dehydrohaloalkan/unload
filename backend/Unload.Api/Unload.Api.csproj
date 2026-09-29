@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <FrontendRoot>$(MSBuildProjectDirectory)/../../web/webApp</FrontendRoot>
+    <FrontendDist>$(FrontendRoot)/dist/webApp/browser</FrontendDist>
+    <DefineConstants Condition="'$(DesktopBuild)' == 'true'">$(DefineConstants);DESKTOP_BUILD</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Unload.Bootstrapper\Unload.Bootstrapper.csproj" />
     <ProjectReference Include="..\Unload.Gateway\Unload.Gateway.csproj" />
@@ -20,5 +26,22 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <ItemGroup Condition="'$(DesktopBuild)' == 'true'">
+    <Content Include="../../configs/**/*" Link="configs/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../scripts/**/*" Link="scripts/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="BuildDesktopFrontend" BeforeTargets="ComputeFilesToPublish" Condition="'$(DesktopBuild)' == 'true'">
+    <Exec WorkingDirectory="$(FrontendRoot)" Command="npm run build" />
+    <ItemGroup>
+      <DesktopFrontendFiles Include="$(FrontendDist)/**/*" />
+      <ResolvedFileToPublish Include="@(DesktopFrontendFiles)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

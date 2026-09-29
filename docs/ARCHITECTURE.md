@@ -680,6 +680,8 @@ Angular transport-код генерируется командой `npm run gene
 | `GET` | `/api/system/download-archive?path=` | Создать и скачать ZIP output-папки |
 | `POST` | `/api/system/gateway-upload` | Ручная загрузка файлов в gateway |
 | `POST` | `/api/system/sender-feedback` | Интеграционный вход sender feedback |
+| `GET` | `/api/database/status` | Вернуть статус и настроенный список доступных баз |
+| `POST` | `/api/database/connect` | Проверить и установить базу, пользователя и пароль до остановки backend |
 
 `OutputFilesService` нормализует путь и запрещает выход за пределы output root. В API возвращаются относительные пути, чтобы не раскрывать структуру файловой системы сервера.
 
@@ -706,7 +708,7 @@ SignalR не входит в OpenAPI, поэтому новый event требу
 
 | Секция | Ключи | Влияние |
 |---|---|---|
-| `Database` | `TimeoutSeconds`, `ConnectionString` | Подключение и timeout SQL; connection string может иметь формат `dpapi:<base64>` |
+| `Database` | `TimeoutSeconds`, `Databases[]` (`Id`, `Name`, `ConnectionString`) | Timeout и доступные в UI несекретные шаблоны подключений |
 | `Runner` | `WorkerCount`, размер чанка в runtime options | Параллелизм и разбиение main output |
 | `PresetGate` | `Enabled`, `StartHour`, `StartMinute`, `PollIntervalSeconds`, `ProbeSql` | Дневное окно и probe scheduler |
 | `Gateway.Ftp` | host, port, credentials, remote/staging directories, timeout | FTP-доставка |
@@ -714,6 +716,24 @@ SignalR не входит в OpenAPI, поэтому новый event требу
 | `Extra` | `ChunkSizeBytes`, имена каталогов/scripts | Разбиение и расположение extra SQL |
 
 Секреты нельзя переносить из environment-specific appsettings в этот документ или примеры команд.
+
+`DatabaseCredentialStore` хранит выбранную базу, пользователя и пароль только в памяти процесса.
+`DatabaseClientFactory` собирает полную строку подключения при создании каждого клиента, поэтому
+web и desktop используют один контур. UI получает только `Id` и `Name`, но не шаблоны connection
+string. Пока учетные данные не введены, scheduler не запускает database probe. Endpoint подключения
+проверяет `IDatabaseClient.IsConnected`, очищает runtime-данные при ошибке и не возвращает или не
+логирует секрет.
+
+### 15.1. Web и desktop host
+
+Обычный запуск `Unload.Api` остаётся web-сервером. Desktop publish компилируется с
+`DesktopBuild=true`, включает production-сборку Angular, `configs` и `scripts`, слушает случайный
+порт только на `127.0.0.1` и открывает URL в системном браузере. Для desktop корень ресурсов ищется
+также относительно `AppContext.BaseDirectory`, поэтому запуск не зависит от текущей директории.
+
+`tools/publish-desktop.sh` создаёт self-contained каталоги `linux-x64` и `win-x64` в
+`artifacts/desktop`. Backend runtime входит в публикацию; Electron/Tauri и установленный .NET не
+требуются.
 
 ## 16. Каталог, scripts и форматы main output
 

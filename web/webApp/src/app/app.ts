@@ -23,7 +23,12 @@ import { LiveClockComponent } from './components/live-clock.component';
 import { PresetStageComponent } from './components/preset-stage.component';
 import { RunCardComponent } from './components/run-card.component';
 import { AdminLoginDialogComponent } from './ui/admin-login-dialog.component';
+import {
+  DatabasePasswordDialogComponent,
+  DatabasePasswordDialogData,
+} from './ui/database-password-dialog.component';
 import { ErrorDialogComponent, ErrorDialogData } from './ui/error-dialog.component';
+import { ApiClientService } from './state/api-client.service';
 
 @Component({
   selector: 'app-root',
@@ -49,6 +54,7 @@ import { ErrorDialogComponent, ErrorDialogData } from './ui/error-dialog.compone
 export class App {
   readonly store = inject(WorkflowStore);
   private readonly appErrorStore = inject(AppErrorStore);
+  private readonly api = inject(ApiClientService);
   private readonly dialog = inject(MatDialog);
   private errorDialogRef: MatDialogRef<ErrorDialogComponent> | null = null;
   private presentedErrorKey: string | null = null;
@@ -78,6 +84,8 @@ export class App {
       this.presentedErrorKey = key;
       this.presentError(source, key);
     });
+
+    queueMicrotask(() => void this.initialize());
   }
 
   readonly probeCompleted = computed(() => {
@@ -145,6 +153,37 @@ export class App {
     this.store.setPublishExtraToGateway(true);
     // Главная карточка всегда запускает полную выгрузку; подмножество банков — из панели деталей.
     void this.store.runExtraAsync(null);
+  }
+
+  private async initialize(): Promise<void> {
+    let dialogData: DatabasePasswordDialogData;
+    try {
+      const status = await this.api.fetchDatabaseStatus();
+      if (status.configured) {
+        this.store.init();
+        return;
+      }
+      dialogData = { databases: status.databases };
+    } catch {
+      this.store.init();
+      return;
+    }
+
+    this.dialog
+      .open(DatabasePasswordDialogComponent, {
+        width: '28rem',
+        maxWidth: 'calc(100vw - 2rem)',
+        autoFocus: '#database-username',
+        disableClose: true,
+        restoreFocus: false,
+        data: dialogData,
+      })
+      .afterClosed()
+      .subscribe((configured) => {
+        if (configured) {
+          this.store.init();
+        }
+      });
   }
 
   private presentError(source: ErrorSource, key: string): void {

@@ -53,19 +53,21 @@ public static class UnloadConfigurationLoader
 
     private static string ResolveWorkspaceRoot()
     {
-        var current = new DirectoryInfo(Directory.GetCurrentDirectory());
-
-        while (current is not null)
+        foreach (var startPath in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory }.Distinct())
         {
-            var catalog = Path.Combine(current.FullName, "configs", "catalog.json");
-            var scripts = Path.Combine(current.FullName, "scripts");
-
-            if (File.Exists(catalog) && Directory.Exists(scripts))
+            var current = new DirectoryInfo(startPath);
+            while (current is not null)
             {
-                return current.FullName;
-            }
+                var catalog = Path.Combine(current.FullName, "configs", "catalog.json");
+                var scripts = Path.Combine(current.FullName, "scripts");
 
-            current = current.Parent;
+                if (File.Exists(catalog) && Directory.Exists(scripts))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
         }
 
         throw new DirectoryNotFoundException(

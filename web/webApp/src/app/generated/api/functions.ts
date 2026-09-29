@@ -9,6 +9,14 @@ export type { CatalogGetMembers$Plain$Params as CatalogGetMembers$Plain$Params }
 export { catalogGetMembers$Plain as catalogGetMembers$Plain } from './fn/catalog/catalog-get-members-plain';
 export type { CatalogGetMembers$Json$Params as CatalogGetMembers$Json$Params } from './fn/catalog/catalog-get-members-json';
 export { catalogGetMembers$Json as catalogGetMembers$Json } from './fn/catalog/catalog-get-members-json';
+export type { DatabaseGetStatus$Plain$Params as DatabaseGetStatus$Plain$Params } from './fn/database/database-get-status-plain';
+export { databaseGetStatus$Plain as databaseGetStatus$Plain } from './fn/database/database-get-status-plain';
+export type { DatabaseGetStatus$Json$Params as DatabaseGetStatus$Json$Params } from './fn/database/database-get-status-json';
+export { databaseGetStatus$Json as databaseGetStatus$Json } from './fn/database/database-get-status-json';
+export type { DatabaseConnect$Plain$Params as DatabaseConnect$Plain$Params } from './fn/database/database-connect-plain';
+export { databaseConnect$Plain as databaseConnect$Plain } from './fn/database/database-connect-plain';
+export type { DatabaseConnect$Json$Params as DatabaseConnect$Json$Params } from './fn/database/database-connect-json';
+export { databaseConnect$Json as databaseConnect$Json } from './fn/database/database-connect-json';
 export type { GatewayRequeueRequeueToGateway$Plain$Params as GatewayRequeueRequeueToGateway$Plain$Params } from './fn/gateway-requeue/gateway-requeue-requeue-to-gateway-plain';
 export { gatewayRequeueRequeueToGateway$Plain as gatewayRequeueRequeueToGateway$Plain } from './fn/gateway-requeue/gateway-requeue-requeue-to-gateway-plain';
 export type { GatewayRequeueRequeueToGateway$Json$Params as GatewayRequeueRequeueToGateway$Json$Params } from './fn/gateway-requeue/gateway-requeue-requeue-to-gateway-json';

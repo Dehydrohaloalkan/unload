@@ -22,6 +22,15 @@ export const RU = {
   'app.admin.submit': 'Войти',
   'app.admin.wrongPassword': 'Неверный пароль.',
 
+  'database.dialogHeader': 'Подключение к базе данных',
+  'database.dialogDescription':
+    'Выберите базу и введите учетные данные. Они хранятся только до остановки приложения.',
+  'database.databaseLabel': 'База данных',
+  'database.usernameLabel': 'Пользователь',
+  'database.passwordLabel': 'Пароль базы данных',
+  'database.connect': 'Подключиться',
+  'database.connectionFailed': 'Не удалось подключиться. Проверьте пароль и повторите попытку.',
+
   'dayWindow.waiting': 'Ожидание данных дневного окна.',
   'dayWindow.active': 'Дневное окно активно: preset выполнен, этапы 2-4 доступны.',
   'dayWindow.readyForPreset': 'Проба успешна: можно запускать preset.',

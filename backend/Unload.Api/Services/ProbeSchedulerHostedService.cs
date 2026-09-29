@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Unload.Core;
 using Unload.Tasks;
 
 namespace Unload.Api.Services;
@@ -11,6 +12,7 @@ public class ProbeSchedulerHostedService(
     DailyWindowPolicy dailyWindowPolicy,
     PresetCompletionRecovery presetCompletionRecovery,
     TaskWorkflow taskWorkflow,
+    IDatabaseCredentialStore credentialStore,
     IHubContext<RunStatusHub> hubContext,
     ILogger<ProbeSchedulerHostedService> logger,
     TimeProvider timeProvider) : BackgroundService
@@ -21,6 +23,7 @@ public class ProbeSchedulerHostedService(
     private readonly DailyWindowPolicy _dailyWindowPolicy = dailyWindowPolicy;
     private readonly PresetCompletionRecovery _presetCompletionRecovery = presetCompletionRecovery;
     private readonly TaskWorkflow _taskWorkflow = taskWorkflow;
+    private readonly IDatabaseCredentialStore _credentialStore = credentialStore;
     private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly ILogger<ProbeSchedulerHostedService> _logger = logger;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -49,6 +52,10 @@ public class ProbeSchedulerHostedService(
         var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollIntervalSeconds));
         try
         {
+            while (!_credentialStore.IsConfigured)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250), stoppingToken);
+            }
             await RunCheckSafelyAsync(stoppingToken);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
@@ -95,6 +102,11 @@ public class ProbeSchedulerHostedService(
         }
 
         if (!_options.Enabled)
+        {
+            return;
+        }
+
+        if (!_credentialStore.IsConfigured)
         {
             return;
         }

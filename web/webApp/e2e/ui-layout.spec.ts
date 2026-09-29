@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request }) => {
+  await request.post('/api/database/connect', {
+    data: { databaseId: 'unload-dev', username: 'playwright', password: 'playwright' },
+  });
   await page.goto('/');
   await expect(page.locator('.stage-stack')).toBeVisible();
 });
