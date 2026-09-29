@@ -18,45 +18,8 @@ export const MemberRunLifecycleStatus = {
   Cancelled: 4,
 } as const satisfies Record<string, MemberRunLifecycleStatus>;
 
-export type RunnerStep = ApiModels.RunnerStep;
-export const RunnerStep = {
-  RequestAccepted: 0,
-  TargetsResolved: 1,
-  ScriptDiscovered: 2,
-  QueryStarted: 3,
-  QueryCompleted: 4,
-  ChunkCreated: 5,
-  FileWritten: 6,
-  ScriptCompleted: 7,
-  PublishedToGateway: 8,
-  Completed: 9,
-  Failed: 10,
-  FileWriteStarted: 11,
-  GatewayBatchQueued: 12,
-} as const satisfies Record<string, RunnerStep>;
-
 export type MemberRunStatusInfo = ApiModels.MemberRunStatusInfo;
-export type RunWorkerStatusInfo = ApiModels.RunWorkerStatusInfo;
 export type RunOutputArtifactInfo = ApiModels.RunOutputArtifactInfo;
-export type FileRunStage = ApiModels.FileRunStage;
-export type FileRunStatusInfo = ApiModels.FileRunStatusInfo;
-export const FileRunStage = {
-  QueuedForWrite: 0,
-  Written: 1,
-  Failed: 2,
-  Cancelled: 3,
-} as const satisfies Record<string, FileRunStage>;
-
-export type ScriptRunStage = ApiModels.ScriptRunStage;
-export type ScriptRunStatusInfo = ApiModels.ScriptRunStatusInfo;
-export const ScriptRunStage = {
-  AwaitingWorker: 0,
-  Running: 1,
-  Completed: 2,
-  Failed: 3,
-  Cancelled: 4,
-} as const satisfies Record<string, ScriptRunStage>;
-
 export type SenderBatchStatus = ApiModels.SenderBatchStatus;
 export const SenderBatchStatus = {
   Ready: 0,
@@ -71,26 +34,6 @@ export type SenderBatchFileStatusInfo = ApiModels.SenderBatchFileStatusInfo;
 export type SenderBatchStatusInfo = ApiModels.SenderBatchStatusInfo;
 export type RunnerFailureInfo = ApiModels.RunnerFailureInfo;
 export type RunStatusInfo = ApiModels.RunStatusInfo;
-
-export interface RunnerEvent {
-  occurredAt: string;
-  correlationId: string;
-  step: RunnerStep;
-  message: string;
-  memberName: string | null;
-  scriptCode: string | null;
-  records: number | null;
-  filePath: string | null;
-  workerId: number | null;
-  chunkNumber: number | null;
-  estimatedBytes: number | null;
-  batchId: string | null;
-  batchFileCount: number | null;
-  batchFiles?: SenderBatchFileStatusInfo[] | null;
-  sequence?: number;
-  workOrder?: number | null;
-  failure?: RunnerFailureInfo | null;
-}
 
 export type MemberCatalogItem = ApiModels.MemberCatalogItem;
 export type CatalogGroupInfo = ApiModels.CatalogGroupInfo;
@@ -126,12 +69,6 @@ export interface TaskUiState {
   stale: boolean;
 }
 
-export interface MemberLogLine {
-  time: string;
-  step: RunnerStep;
-  message: string;
-}
-
 export interface MemberViewModel {
   key: string;
   memberCode: string;
@@ -139,12 +76,6 @@ export interface MemberViewModel {
   name: string;
   targetCodes: string[];
   selected: boolean;
-  status: MemberRunLifecycleStatus;
-  lastStep: RunnerStep | null;
-  message: string | null;
-  updatedAt: string | null;
-  logs: MemberLogLine[];
-  outputArtifacts: RunOutputArtifactInfo[];
 }
 
 export interface MemberGroupViewModel {

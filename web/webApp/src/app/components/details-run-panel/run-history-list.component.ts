@@ -10,6 +10,7 @@ import { I18nKey } from '../../i18n/ru';
 import {
   GatewayDelivery,
   HistoryFileRow,
+  HistoryMemberResult,
   HistoryRunNode,
   HistoryScriptNode,
   HistoryTaskCode,
@@ -185,8 +186,20 @@ export class RunHistoryListComponent {
     return node.memberNames.map((memberName) => ({
       key: `${node.key}|${memberName.toLowerCase()}`,
       memberName,
+      result: this.memberResult(node, memberName),
       files: node.memberFiles[memberName] ?? [],
     }));
+  }
+
+  scriptResult(node: HistoryRunNode, script: HistoryScriptNode): HistoryMemberResult | null {
+    return this.memberResult(node, script.scriptCode);
+  }
+
+  private memberResult(node: HistoryRunNode, name: string): HistoryMemberResult | null {
+    const key = name.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(node.memberResults, key)
+      ? node.memberResults[key]
+      : null;
   }
 
   historyScripts(node: HistoryRunNode): HistoryScriptNode[] {
@@ -278,7 +291,10 @@ export class RunHistoryListComponent {
   private emitRequeue(): void {
     this.requeueSnapshot.set([...this.selectedHistoryFiles()]);
 
-    const grouped = new Map<string, { taskCode: string; correlationId: string; filePaths: Set<string> }>();
+    const grouped = new Map<
+      string,
+      { taskCode: string; correlationId: string; filePaths: Set<string> }
+    >();
     for (const row of this.selectedHistoryFiles()) {
       const key = `${row.taskCode}|${row.correlationId}`;
       const existing = grouped.get(key);

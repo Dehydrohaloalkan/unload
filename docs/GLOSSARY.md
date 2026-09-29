@@ -103,8 +103,8 @@ Terminal status означает, что execution больше не продо�
 
 ### Run state
 
-Полная серверная проекция `run` или `extra`: lifecycle, workers, scripts/members, artifacts и
-gateway delivery. Источник истины — `RunStateStore` и `runs.json`.
+Полная серверная проекция `run` или `extra`: lifecycle, итоговые состояния members/scripts,
+artifacts, failures и gateway delivery. Источник истины — `RunStateStore` и `runs.json`.
 Префикс `Run` в именах этого общего контракта не означает только main run; конкретный тип задачи
 задаётся полем `TaskCode`.
 

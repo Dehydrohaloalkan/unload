@@ -93,8 +93,8 @@ flowchart LR
 | `Unload.Cryptography` / `Sha256RequestHasher` | Строит SHA-256 hash запроса | Стабильный технический идентификатор не смешивается с orchestration-кодом |
 | `Unload.Store` / `RunStateStore` | Предоставляет публичные доменные операции и последовательно выполняет mutation вместе с persistence | Это серверный источник истины и небольшой фасад над правилами проекции |
 | `Unload.Store` / `RunStatePersistence` | Последовательно захватывает актуальный набор состояний и записывает snapshot через один writer | Конкурентные вызовы не могут сохранить устаревший snapshot после более нового |
-| `Unload.Store` / `RunStateProjector` | Создаёт начальные снимки, применяет runner events к immutable `RunStatusInfo` и координирует специализированные projections | Правила построения состояния не смешиваются с конкурентным хранением |
-| `Unload.Store` / `RunMemberProjector`, `RunArtifactProjector`, `RunWorkerProjector`, `RunScriptProjector` | Обновляют соответственно состояния мемберов, список файлов, занятость workers и persisted-карточки скриптов | Каждое простое правило можно прочитать и проверить без полного жизненного цикла запуска |
+| `Unload.Store` / `RunStateProjector` | Создаёт начальные снимки и применяет runner events к immutable `RunStatusInfo` | Правила построения состояния не смешиваются с конкурентным хранением |
+| `Unload.Store` / `RunMemberProjector`, `RunArtifactProjector` | Обновляют итоговые состояния мемберов и список созданных файлов | UI получает только необходимый результат без отдельных worker/script/file projections |
 | `Unload.Store` / `GatewayFeedbackProjector` | Проецирует `FileSent`, `BatchCompleted` и `BatchFailed` в карту sender batches | Нормализация путей, дедупликация и статусы доставки изолированы от runner events |
 | `Unload.Store` / `RunCompletionPolicy` | Чисто вычисляет terminal status после runner completion и gateway feedback | Условия `Completed`/`Failed` и режим без gateway покрываются отдельной таблицей тестов |
 | `Unload.Store` / `RunTaskCodeResolver` | Изолирует fallback-определение task code для feedback с неизвестным correlation ID | Зависимость от строковых префиксов находится в одном явно названном и тестируемом месте |
@@ -115,13 +115,6 @@ flowchart LR
 | `Unload.Api` / `RunStatusController` | Возвращает список, active run и состояние по correlation ID | Простые state-запросы зависят только от store и main activation channel |
 | `Unload.Api` / `RunHistoryController` | Возвращает today, dashboard и history | Исторические проекции и retention default находятся в одной transport-зоне |
 | `Unload.Api` / `GatewayRequeueController` | Принимает запрос повторной публикации готовых файлов | Gateway-команда не смешивается с запуском SQL-выгрузки |
-
-`RunScriptProjector` использует нормализованный без учета регистра ключ пары `memberName` +
-`scriptCode`: case-варианты одного скрипта не создают дубликатов. `RunnerEvent` пока не несёт
-target code, поэтому проекция не может различить одинаковую пару member/script из разных targets;
-расширять event contract для этого отдельно потребуется перед появлением такого сценария.
-Карточка появляется только из `ScriptDiscovered` с обоими полями; legacy-события, включая текущий
-Extra pipeline без `MemberName` и без `ScriptDiscovered`, намеренно не синтезируют карточку.
 
 Все четыре run-контроллера сохраняют общий route prefix `/api/runs`. `RunLaunchController`
 использует один private launch-wrapper для преобразования `TaskLaunchException` в прежний
@@ -319,11 +312,11 @@ sequenceDiagram
     Worker->>Channel: ReadActivationsAsync()
     Worker->>State: SetRunning()
     Worker->>Engine: RunAsync()
-    loop каждое RunnerEvent
-        Engine-->>Worker: progress / artifact / completed
+    loop значимые RunnerEvent
+        Engine-->>Worker: member / artifact / completed
         Worker->>State: ApplyEvent()
-        Worker-->>UI: SignalR status
-        Worker->>Live: coalesced run_status snapshot
+        Worker->>Live: run_status snapshot
+        Live-->>UI: SignalR run_status
     end
     Engine->>Gateway: sender batches, если включено
     Gateway->>State: sender feedback
@@ -341,32 +334,25 @@ sequenceDiagram
 5. запускает `WorkerCount` workers: `n - 1` ориентированы на big scripts, один сохраняется для light scripts;
 6. каждый worker использует собственный database client;
 7. строки читаются потоково, накапливаются до лимита чанка и передаются file writer;
-8. создаются `RunnerEvent` для scripts, workers, файлов и общего lifecycle;
+8. создаются `RunnerEvent` для состояния мемберов, готовых файлов и общего lifecycle;
 9. готовые файлы группируются по мемберу в sender batches;
 10. после успешной постановки batch в очередь движок публикует member-scoped `ScriptCompleted`;
 11. записывается `run-report.csv`.
 
 Почему используются события: движок не должен напрямую менять Angular-модели или вызывать SignalR. `MainUnloadHostedService` принимает события, а `RunStateStore` строит из них единую проекцию состояния.
 
-### 8.3.1. Контракт вертикального Process UI
+### 8.3.1. Компактный контракт состояния
 
-Backend сохраняет данные для вертикальной state machine, а Angular отображает их нормализованной
-проекцией в физических зонах конвейера.
-`RunStatusInfo.MemberStatuses` создаётся сразу с
-case-insensitive dedupe и `QueuePosition`, поэтому target launch не теряет выбранных участников до
-первого resolver event. Script cards получают стабильный `WorkOrder`, а `RunnerEvent.Sequence`
-монотонен внутри correlation ID и назначается под lock перед публикацией, включая параллельные
-worker events. Проекции member/script/file/worker/batch сохраняют эти additive поля в
-`runs.json`; сортировка не должна зависеть от `UpdatedAt`.
+`RunStatusInfo` хранит общий lifecycle, `MemberStatuses`, созданные `OutputArtifacts`,
+`SenderBatches` и structured `Failure`. Статусы мемберов создаются при старте с
+case-insensitive dedupe и затем переходят между `Pending`, `Running`, `Completed`, `Failed` и
+`Cancelled`. Общая ошибка или отмена изменяет только незавершённых мемберов, поэтому уже готовый
+результат не теряется.
 
-Ошибка — это additive `Failure`/`RunnerFailureInfo`, а не только текст сообщения. Она содержит
-`Stage`, `EntityType`/`EntityId`, member/script, worker, chunk/file/batch identity, стабильный
-`Code`, message и `OccurredAt`. Resolver, query/row-read, file-write, report/gateway publish и
-sender catch sites создают scoped или run-level failure с доступным контекстом. Scoped failure
-переводит конкретные member/script/file/batch cards и worker assignment в `Failed`; worker не
-сбрасывается в `idle`. Run-level preflight/background failure может завершить незавершённые
-карточки как failed, но не подменяет уже завершённую scoped карточку. Это backend data contract
-для UI: карточка остаётся на точном этапе сбоя и открывает безопасные подробности ошибки.
+Отдельные persisted-проекции workers, scripts и промежуточных стадий записи файлов отсутствуют.
+`RunnerFailureInfo` сохраняет безопасные `Stage`, `Code`, message и доступный контекст
+member/script/file/batch. Этого достаточно, чтобы active view и история показывали итог каждого
+мембера и понятную причину сбоя без восстановления детального конвейера выполнения.
 
 ### 8.4. Когда `run` считается завершённым
 
@@ -415,7 +401,7 @@ flowchart LR
     Feedback --> Projection[SenderFeedbackProjectionBackgroundService]
     Projection --> State[RunStateStore]
     Projection --> Live[RunStatusLivePublisher]
-    Live -->|serialized, coalesced run_status| SignalR[SignalR clients]
+    Live -->|serialized run_status| SignalR[SignalR clients]
 ```
 
 `FtpGatewayBackgroundService` сначала полностью загружает все файлы партии в staging, затем переименовывает их в target в отсортированном порядке. Потребитель target-каталога не должен увидеть частично записанный файл.
@@ -518,12 +504,9 @@ in-memory состояния и его записи. Если несколько
 Бизнес-ошибки `TaskWorkflow` оформляются как `TaskLaunchException`, преобразуются в `application/problem+json` и содержат стабильный `errorCode`. Непредвиденные ошибки обрабатывает `GlobalExceptionHandler`; background workers ловят исключения сами, переводят состояние в `Failed` и продолжают читать следующие активации.
 
 Общий `RunnerStep.Failed` переводит run в `Failed`, но не перезаписывает уже завершённых мемберов:
-ошибочными становятся только незавершённые. Для member/script/file/worker/batch failure сохраняется
-`Failure` с точным этапом и entity identity; одна scoped failure не копируется массово по всем
-незавершённым карточкам. `MainUnloadHostedService` журналирует correlation/member/script, а
-`FtpGatewayBackgroundService` публикует structured sender failure. Worker assignment остаётся
-`failed` с исходным worker/member/script контекстом, чтобы причина не исчезала при финальном
-снимке.
+ошибочными становятся только незавершённые. Для run, member и sender batch сохраняется `Failure`
+с этапом, стабильным кодом, безопасным сообщением и доступным контекстом. Scoped sender failure
+помечает соответствующий member как `Failed`, а остальные завершённые мемберы не меняет.
 
 Angular сводит workflow-ошибки и исключения `GlobalAppErrorHandler` в один Material `alertdialog`.
 Диалог показывает категорию, полный человекочитаемый текст причины, рекомендацию по восстановлению
@@ -551,14 +534,9 @@ Angular сводит workflow-ошибки и исключения `GlobalAppErr
 ### 13.1. Слои Angular
 
 Frontend использует Angular 22.1, TypeScript 6.0, Angular Material 22 и NgRx Signal Store.
-Material отвечает за доступное поведение диалогов, вкладок, checkbox, tooltip и индикаторов;
-визуальный слой карточек, статусов и рабочих действий задаётся проектными CSS-токенами.
-Главный dashboard остаётся последовательным списком из четырёх этапов. Классы состояния на элементах
-списка связывают presentation-состояние store с глубиной карточки и маркером этапа; декоративный hover
-использует только CSS transform, включается лишь для точного указателя и отключается через
-`prefers-reduced-motion`. Панель деталей получает цветовой акцент выбранного этапа на уровне оболочки,
-а общие глобальные стили задают её глубину, вкладки и поверхности разделов. Вертикальным
-скролл-контейнером остаётся только `.details-drawer__body`; Material tab body не создаёт вложенный скролл.
+Material отвечает за диалоги, вкладки, checkbox, tooltip и индикаторы. Главный dashboard остаётся
+последовательным списком из четырёх этапов, а панель деталей постоянно закреплена рядом с ним.
+Выбор этапа меняет содержимое панели; на узком экране она становится обычным блоком под dashboard.
 Единый `UiConfirmService` изолирует компоненты от API конкретной реализации диалога. Stable-релиз
 `@ngrx/signals` пока ограничен Angular 21, поэтому версия `22.0.0-rc.0` зафиксирована точно и не обновляется
 неявно. Angular CLI 22.1.3 напрямую фиксирует уязвимый MCP SDK 1.29.0, поэтому `package.json`
@@ -584,51 +562,18 @@ Material отвечает за доступное поведение диало�
 | `gateway-history-projection.util.ts` | delivery status, принятые requeue paths, фактические `sentAt`, история партий и summary |
 | `history-selection.util.ts` | единые правила массового выбора file/member/script/bank/run/all и indeterminate state |
 | `workflow-view-state.util.ts` | чистые presentation-вычисления: bank labels, timestamps, доступность и UI phase |
-| `process-projection.models.ts` | immutable `ProcessPipelineViewModel`: вход мемберов, resolver, очередь скриптов, четыре worker slots, группы файлов, sender/delivery и click-ready failures |
-| `process-projection.util.ts` | чистая clock-independent проекция `RunStatusInfo`; порядок задают `QueuePosition`/`WorkOrder`/`Sequence`, а authoritative `PlannedFiles` перемещает файл между created/sender/delivered без клонов |
-| `process-display.util.ts` | чистые форматтеры длительностей, размеров, количеств и freshness snapshot без системного времени |
-| `ProcessRunViewComponent` | вертикальный responsive-конвейер main run, bounded раскрытие файлов и доступный failure dialog |
-
-Корень Process является inline-size CSS container. Сводка, worker grid, группы файлов и обычные карточки
-перестраиваются container queries по ширине drawer, а не viewport. Общие CSS-токены задают одинаковый
-border-box data-карточек (member, script, worker assignment, created group, sender, delivered);
-раскрываемые списки и пагинация находятся под базовой карточкой и не меняют её высоту.
+| `ActiveRunViewComponent` | компактный список текущих и итоговых состояний мемберов с причиной ошибки |
+| `RunHistoryListComponent` | persisted-результаты мемберов, файлы, delivery status и повторная отправка |
 
 UI-компоненты должны обращаться к `WorkflowStore`, а не самостоятельно собирать несколько HTTP-ответов. Это удерживает правила восстановления и вычисляемые состояния вне шаблонов.
 `WorkflowStore` сохраняет orchestration и координацию stores; чистые presentation-преобразования
 находятся в util-файлах и проверяются без Angular DI. Бизнес-допуск всё равно принимает backend:
 frontend availability управляет только состоянием кнопок и не заменяет `TaskWorkflow`.
 
-`buildProcessPipeline` строит immutable `ProcessPipelineViewModel` без зависимости от часов UI.
-Failed entity остаётся в физической зоне сбоя: resolver, script queue/worker, file group или sender;
-`ProcessFailureDetail` сохраняет stage/code/message и ссылку на member/script/file/worker/batch/run.
-Четыре worker slots существуют даже до назначения работы. Детерминированный member identity — один из
-восьми CSS-token классов, полученный из имени без случайных или inline-цветов; состояние всегда также
-передаётся текстом и не кодируется одним цветом.
-
-Файлы группируются по member+script с counts, rows, bytes и status breakdown. Созданный файл исключается
-из этой зоны, как только его нормализованный путь появляется в authoritative `PlannedFiles`. Внутри
-batch несданные `PlannedFiles` образуют sender-зону, а записи с `SentAt` — delivered-зону; повторно
-поставленный путь принадлежит только одному, наиболее актуальному batch. Legacy snapshot без
-`PlannedFiles` не синтезирует неизвестные ожидающие файлы и показывает только подтверждённые `SentFiles`.
-
-Очереди member/resolver/script, группы файлов, sender batches и delivered-зона используют страницы по
-20 элементов; раскрытие файлов и список retained failures каждого worker также ограничены 20 строками.
-Группы, sender batches и delivered-зона свёрнуты по умолчанию, поэтому DOM остаётся ограниченным и для
-тысячи файлов или большого burst ошибок. При смене `correlationId` все раскрытия и страницы сбрасываются.
-Статическая pipeline projection computed зависит только от server snapshot; секундного UI timer нет.
-Активные карточки выводят timestamp «с ...», terminal batch — сохранённую итоговую временную цепочку.
-Компонент не использует blur, бесконечные анимации или сохранение скрытого tab DOM через
-`preserveContent`; длинные списки ограничены пагинацией, а тяжёлые секции изолированы CSS containment.
-
-Run-level failure берётся из `ProcessPipelineViewModel.failures` отдельно от scoped failures и виден
-даже при пустых entity collections. Failure dialog удерживает клавиатурный focus внутри себя, закрывается
-по Escape и возвращает focus на вызвавшую карточку. Контекст dialog условно включает member, script,
-worker, file path и chunk number из failure reference.
-
-Полноэкранный режим применяется к корневому элементу процесса через native Fullscreen API, а не к
-всему приложению. Кнопка имеет `aria-pressed`, состояние синхронизируется по `fullscreenchange`, а
-после выхода фокус возвращается на управляющую кнопку.
+Active view показывает общий статус запуска и одну строку на мембера или extra-скрипт. Для ошибки
+рядом выводятся безопасное сообщение и краткий контекст `stage · code · script/file/batch`.
+История сохраняет тот же итог после перезагрузки страницы и отдельно показывает созданные файлы и
+фактическую доставку. Специализированной вкладки Process и визуального конвейера стадий нет.
 
 ### 13.2. Bootstrap страницы
 
@@ -652,23 +597,13 @@ refresh страницы. Это сбрасывает yesterday-only dashboard/h
 
 ### 13.3. SignalR и fallback
 
-`RealtimeHubService` слушает `status`, `run_status`, `preset_state`, автоматически переподключается и вручную перезапускает полностью закрытое соединение.
-
-Полный `run_status` растёт вместе с количеством scripts и файлов, поэтому `RunLaunchController`, main/extra
-workers и sender-feedback projection передают его через общий singleton `RunStatusLivePublisher`. Обычный progress объединяется
-отдельно для каждого correlation ID в окно 150 мс: в сеть уходит только самый новый snapshot окна.
-Отправки сериализованы, а snapshot с более старым `UpdatedAt` и sequence не может уйти после нового.
-Первый `Running`, запрос отмены, terminal-состояние и snapshot с новым failure отправляются немедленно.
-Ошибка SignalR журналируется, но snapshot не ставится в бесконечный retry: клиент восстанавливается через
-REST polling и обязательный refresh после reconnect. При штатной остановке publisher пытается сбросить
-ожидающие snapshots, но уважает cancellation host-а и ограничивает flush двумя секундами. После terminal
-send полный snapshot и рабочая запись удаляются из publisher. Чтобы запоздалый progress или повторный
-terminal не воскресили завершённый запуск, остаётся только correlation ID в FIFO tombstone-кэше максимум
-на 1024 запуска; при переполнении детерминированно вытесняется самый старый ID. Это ограничение касается только live SignalR-трафика:
-`RunStateStore`, REST-ответы и cadence persistence не throttling-уются. Высокочастотные milestones
-файлов (`ChunkCreated`, `FileWriteStarted`, `FileWritten`) доходят до UI через объединённый
-`run_status`; отдельный лёгкий `status` (`RunnerEvent`) сохраняет остальные редкие milestones,
-диагностику и ошибки.
+`RealtimeHubService` слушает `run_status` и `preset_state`, автоматически переподключается и вручную
+перезапускает полностью закрытое соединение. `RunLaunchController`, main/extra workers и
+sender-feedback projection передают компактный persisted snapshot через общий
+`RunStatusLivePublisher`. Отправки сериализованы; snapshot с более старым `UpdatedAt` и любой
+non-terminal snapshot после terminal не публикуются. Ошибка SignalR журналируется без бесконечного
+retry: клиент восстанавливается через REST polling и refresh после reconnect. Отдельного потока raw
+`RunnerEvent` в браузер нет.
 
 Если SignalR недоступен во время активной задачи, `RunStore` и `ExtraStore` включают HTTP polling статуса. После reconnect stores обновляют snapshot, чтобы добрать пропущенные события. Таким образом SignalR ускоряет отображение, но не является единственным способом восстановить состояние.
 
@@ -684,18 +619,12 @@ terminal не воскресили завершённый запуск, оста
 
 Browser storage хранит только локальные UI-настройки, например выбор targets и часть preset-view state. Он не является источником истины о серверном lifecycle.
 
-Для main run persisted `RunStatusInfo.FileStatuses` хранит file-карточки, связанные с
-родительским скриптом стабильным идентификатором `member + script + chunkNumber` без учета
-регистра. `FileWriteStarted` означает, что чанк передан `IFileChunkWriter`; длительность этого
-этапа включает возможное ожидание внутренней блокировки writer-а и не означает физическую запись
-первого байта. `FileWritten` дополняет ту же карточку фактическими именем/путём файла и числом
-строк. При fail, cancel или восстановлении после рестарта все незавершённые file-карточки получают
-соответствующее терминальное состояние; `OutputArtifacts` при этом сохраняет прежнюю, независимую
-проекцию готовых файлов.
+Готовые файлы main run сохраняются в `RunStatusInfo.OutputArtifacts`. Промежуточные chunk/write
+стадии не входят в persisted API-контракт и не отображаются в UI.
 
 `RunStatusInfo.SenderBatches` — отдельная проекция lifecycle партий gateway. После успешного
-`PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии,
-количеством и точным составом файлов. `SenderBatchStatusInfo.PlannedFiles` хранит нормализованный
+`PublishFileBatchReadyAsync` main runner публикует `GatewayBatchQueued` с идентификатором партии и
+точным составом файлов. `SenderBatchStatusInfo.PlannedFiles` хранит нормализованный
 путь, имя, известный оценочный/фактический размер, `QueuedAt` и nullable `SentAt` каждого файла;
 это authoritative-связь между созданными артефактами и конкретной отправкой без frontend-эвристик.
 Событие создаёт batch в `Ready` с `QueuedAt`. Когда FTP worker действительно
@@ -766,16 +695,16 @@ Hub: `/hubs/status`.
 
 | Событие | Payload | Назначение |
 |---|---|---|
-| `status` | `RunnerEvent` | Детальный шаг движка, включая additive `sequence`, `workOrder` и `failure` |
 | `run_status` | `RunStatusInfo` | Агрегированное persisted-состояние main/extra |
 | `preset_state` | `PresetGateState` | Состояние дневного окна |
 | `preset_replayed` | `ScriptTaskRunResult` | Результат повторного preset в admin mode |
 
-`SubscribeRun(correlationId)` сохранён в hub-контракте, но текущие status events рассылаются всем клиентам. Клиент обязан фильтровать данные по `correlationId` там, где это необходимо.
+`SubscribeRun(correlationId)` сохранён в hub-контракте, но `run_status` рассылается всем клиентам.
+Клиент обязан фильтровать данные по `correlationId` там, где это необходимо.
 
 Имена hub, метода и событий собраны в backend `RunStatusHubContract` и frontend
 `realtime-hub.contract.ts`. Backend публикует payload только через типизированные extension methods;
-contract tests фиксируют имена, соответствующие C# payload types и camelCase shape `RunnerEvent`.
+contract tests фиксируют имена и соответствующие C# payload types.
 SignalR не входит в OpenAPI, поэтому новый event требует синхронного изменения этих двух файлов и
 обоих наборов contract tests.
 

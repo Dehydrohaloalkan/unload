@@ -1299,136 +1299,6 @@
           }
         }
       },
-      "FileRunStage": {
-        "type": "integer"
-      },
-      "FileRunStatusInfo": {
-        "required": [
-          "id",
-          "parentScriptId",
-          "memberName",
-          "scriptCode",
-          "chunkNumber",
-          "stage",
-          "createdAt",
-          "queuedAt",
-          "stageEnteredAt",
-          "updatedAt"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "parentScriptId": {
-            "type": "string"
-          },
-          "memberName": {
-            "type": "string"
-          },
-          "scriptCode": {
-            "type": "string"
-          },
-          "chunkNumber": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "stage": {
-            "$ref": "#/components/schemas/FileRunStage"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "queuedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "stageEnteredAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "workerId": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "rows": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "estimatedBytes": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "fileName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "filePath": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "message": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "sequence": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "failure": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RunnerFailureInfo"
-              }
-            ]
-          }
-        }
-      },
       "GatewayUploadFileResult": {
         "required": [
           "fileName",
@@ -1598,15 +1468,6 @@
               "string"
             ],
             "format": "int32"
-          },
-          "sequence": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
           },
           "failure": {
             "oneOf": [
@@ -1924,7 +1785,6 @@
           "runStatusPath",
           "hubPath",
           "subscribeMethod",
-          "eventName",
           "runStatusEventName",
           "stopPath"
         ],
@@ -1940,9 +1800,6 @@
             "type": "string"
           },
           "subscribeMethod": {
-            "type": "string"
-          },
-          "eventName": {
             "type": "string"
           },
           "runStatusEventName": {
@@ -2196,15 +2053,6 @@
               "$ref": "#/components/schemas/RunOutputArtifactInfo"
             }
           },
-          "workerStatuses": {
-            "type": [
-              "null",
-              "object"
-            ],
-            "additionalProperties": {
-              "$ref": "#/components/schemas/RunWorkerStatusInfo"
-            }
-          },
           "senderBatches": {
             "type": [
               "null",
@@ -2217,189 +2065,6 @@
           "publishToGateway": {
             "type": "boolean",
             "default": true
-          },
-          "scriptStatuses": {
-            "type": [
-              "null",
-              "object"
-            ],
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ScriptRunStatusInfo"
-            }
-          },
-          "fileStatuses": {
-            "type": [
-              "null",
-              "object"
-            ],
-            "additionalProperties": {
-              "$ref": "#/components/schemas/FileRunStatusInfo"
-            }
-          },
-          "failure": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RunnerFailureInfo"
-              }
-            ]
-          }
-        }
-      },
-      "RunWorkerStatusInfo": {
-        "required": [
-          "workerId",
-          "state",
-          "scriptCode",
-          "memberName",
-          "updatedAt"
-        ],
-        "type": "object",
-        "properties": {
-          "workerId": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "state": {
-            "type": "string"
-          },
-          "scriptCode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "memberName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "sequence": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "failure": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RunnerFailureInfo"
-              }
-            ]
-          }
-        }
-      },
-      "ScriptRunStage": {
-        "type": "integer"
-      },
-      "ScriptRunStatusInfo": {
-        "required": [
-          "id",
-          "memberName",
-          "scriptCode",
-          "stage",
-          "discoveredAt",
-          "stageEnteredAt",
-          "updatedAt"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "memberName": {
-            "type": "string"
-          },
-          "scriptCode": {
-            "type": "string"
-          },
-          "stage": {
-            "$ref": "#/components/schemas/ScriptRunStage"
-          },
-          "discoveredAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "stageEnteredAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "startedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "workerId": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "records": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "message": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workOrder": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "sequence": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
           },
           "failure": {
             "oneOf": [
@@ -2564,15 +2229,6 @@
               "string"
             ],
             "format": "int32"
-          },
-          "sequence": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int64"
           },
           "failure": {
             "oneOf": [

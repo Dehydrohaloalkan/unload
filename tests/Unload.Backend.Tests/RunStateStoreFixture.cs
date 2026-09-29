@@ -7,14 +7,11 @@ internal sealed class RunStateStoreFixture : IDisposable
 {
     public RunStateStoreFixture(int workerCount = 2)
     {
-        WorkerCount = workerCount;
         ScratchDirectory = Path.Combine(Path.GetTempPath(), $"unload-run-state-{Guid.NewGuid():N}");
         Directory.CreateDirectory(ScratchDirectory);
         StateFilePath = Path.Combine(ScratchDirectory, "runs.json");
         Store = CreateStore();
     }
-
-    public int WorkerCount { get; }
 
     public string ScratchDirectory { get; }
 
@@ -47,29 +44,19 @@ internal sealed class RunStateStoreFixture : IDisposable
         string? memberName = null,
         string? scriptCode = null,
         string? filePath = null,
-        int? workerId = null,
         string? message = null,
-        int? records = null,
-        int? chunkNumber = null,
-        long? estimatedBytes = null,
         string? batchId = null,
-        int? batchFileCount = null,
         IReadOnlyCollection<SenderBatchFileStatusInfo>? batchFiles = null)
     {
         Store.ApplyEvent(new RunnerEvent(
-            DateTimeOffset.UtcNow,
-            correlationId,
-            step,
-            message ?? step.ToString(),
-            memberName,
-            scriptCode,
-            Records: records,
-            filePath,
-            workerId,
-            chunkNumber,
-            estimatedBytes,
-            batchId,
-            batchFileCount,
+            OccurredAt: DateTimeOffset.UtcNow,
+            CorrelationId: correlationId,
+            Step: step,
+            Message: message ?? step.ToString(),
+            MemberName: memberName,
+            ScriptCode: scriptCode,
+            FilePath: filePath,
+            BatchId: batchId,
             BatchFiles: batchFiles));
     }
 
@@ -104,6 +91,6 @@ internal sealed class RunStateStoreFixture : IDisposable
 
     private RunStateStore CreateStore()
     {
-        return new RunStateStore(WorkerCount, StateFilePath);
+        return new RunStateStore(StateFilePath);
     }
 }

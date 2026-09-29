@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 using Unload.Store;
 using Unload.Tasks;
@@ -15,7 +14,6 @@ public class MainUnloadHostedService(
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     MainUnloadEngine runner,
-    IHubContext<RunStatusHub> hubContext,
     RunStatusLivePublisher livePublisher,
     ILogger<MainUnloadHostedService> logger) : BackgroundService
 {
@@ -23,7 +21,6 @@ public class MainUnloadHostedService(
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly MainUnloadEngine _runner = runner;
-    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly RunStatusLivePublisher _livePublisher = livePublisher;
     private readonly ILogger<MainUnloadHostedService> _logger = logger;
 
@@ -50,7 +47,7 @@ public class MainUnloadHostedService(
             using var runCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, activation.CancellationToken);
             var runToken = runCts.Token;
             _runStateStore.SetRunning(request.CorrelationId);
-            await PublishRunStateAsync(request.CorrelationId, immediate: true);
+            await PublishRunStateAsync(request.CorrelationId);
             _logger.LogInformation("Run moved to Running. CorrelationId: {CorrelationId}", request.CorrelationId);
 
             try
@@ -69,14 +66,13 @@ public class MainUnloadHostedService(
                             @event.Message);
                     }
 
-                    if (RunStatusHubContract.ShouldPublishStatusEvent(@event))
+                    if (@event.Step is RunnerStep.QueryStarted or
+                        RunnerStep.ScriptCompleted or
+                        RunnerStep.Completed or
+                        RunnerStep.Failed)
                     {
-                        await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                        await PublishRunStateAsync(@event.CorrelationId);
                     }
-
-                    await PublishRunStateAsync(
-                        @event.CorrelationId,
-                        immediate: @event.Step == RunnerStep.Failed || @event.Failure is not null);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -179,9 +175,7 @@ public class MainUnloadHostedService(
         return _runStateStore.Get(correlationId);
     }
 
-    private async Task PublishRunStateAsync(
-        string correlationId,
-        bool immediate = false)
+    private async Task PublishRunStateAsync(string correlationId)
     {
         var state = _runStateStore.Get(correlationId);
         if (state is null)
@@ -189,6 +183,6 @@ public class MainUnloadHostedService(
             return;
         }
 
-        await _livePublisher.PublishAsync(state, immediate);
+        await _livePublisher.PublishAsync(state);
     }
 }

@@ -5,352 +5,127 @@ namespace Unload.Backend.Tests;
 
 public class RunStateStoreRunnerEventTests
 {
-    [Theory]
-    [InlineData(TerminalMutation.Failed)]
-    [InlineData(TerminalMutation.CancellationRequested)]
-    [InlineData(TerminalMutation.Cancelled)]
-    public void TerminalMutation_ForUnknownRunThrows(TerminalMutation mutation)
+    [Fact]
+    public void MemberLifecycle_TracksPendingRunningAndCompleted()
     {
         using var fixture = new RunStateStoreFixture();
+        fixture.Start(members: ["Member A"]);
+        Assert.Equal(MemberRunLifecycleStatus.Pending, Member(fixture).Status);
 
-        var action = () =>
-        {
-            switch (mutation)
-            {
-                case TerminalMutation.Failed:
-                    fixture.Store.SetFailed("missing", "failed");
-                    break;
-                case TerminalMutation.CancellationRequested:
-                    fixture.Store.SetCancellationRequested("missing", "stop requested");
-                    break;
-                case TerminalMutation.Cancelled:
-                    fixture.Store.SetCancelled("missing", "cancelled");
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(mutation));
-            }
-        };
+        fixture.ApplyEvent(RunnerStep.QueryStarted, memberName: "Member A", scriptCode: "script-a");
+        Assert.Equal(MemberRunLifecycleStatus.Running, Member(fixture).Status);
 
-        var exception = Assert.Throws<KeyNotFoundException>(action);
-        Assert.Contains("missing", exception.Message);
+        fixture.ApplyEvent(RunnerStep.ScriptCompleted, memberName: "Member A", scriptCode: "script-b");
+        Assert.Equal(MemberRunLifecycleStatus.Completed, Member(fixture).Status);
     }
 
     [Fact]
-    public void SetStarted_CreatesRunningStateWithPendingMembersAndIdleWorkers()
-    {
-        using var fixture = new RunStateStoreFixture(workerCount: 3);
-
-        fixture.Start(members: ["Member A", "member a", "Member B"]);
-
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Running, state.Status);
-        Assert.Equal("run", state.TaskCode);
-        Assert.True(state.PublishToGateway);
-        Assert.Equal(["TARGET-1"], state.TargetCodes);
-        Assert.Equal(2, state.MemberStatuses!.Count);
-        Assert.All(state.MemberStatuses.Values, member => Assert.Equal(MemberRunLifecycleStatus.Pending, member.Status));
-        Assert.Equal(3, state.WorkerStatuses!.Count);
-        Assert.All(state.WorkerStatuses.Values, worker => Assert.Equal("idle", worker.State));
-    }
-
-    [Fact]
-    public void ProgressEvents_ProjectWorkerMemberAndArtifactState()
+    public void FileWritten_AddsArtifactWithoutDuplicate()
     {
         using var fixture = new RunStateStoreFixture();
-        var artifactPath = fixture.ArtifactPath();
         fixture.Start();
+        var path = fixture.ArtifactPath();
 
-        fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
-            RunnerStep.QueryStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 2);
-        fixture.ApplyEvent(
-            RunnerStep.FileWritten,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            filePath: artifactPath,
-            workerId: 2);
-        fixture.ApplyEvent(
-            RunnerStep.FileWritten,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            filePath: artifactPath,
-            workerId: 2);
-        fixture.ApplyEvent(
-            RunnerStep.QueryCompleted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 2);
-        fixture.ApplyEvent(
-            RunnerStep.ScriptCompleted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 2);
+        fixture.ApplyEvent(RunnerStep.FileWritten, memberName: "Member A", scriptCode: "script-a", filePath: path);
+        fixture.ApplyEvent(RunnerStep.FileWritten, memberName: "Member A", scriptCode: "script-a", filePath: path);
 
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        var member = state.MemberStatuses!["Member A"];
-        Assert.Equal(MemberRunLifecycleStatus.Completed, member.Status);
-        Assert.Equal(RunnerStep.ScriptCompleted, member.LastStep);
-        var artifact = Assert.Single(state.OutputArtifacts!);
-        Assert.Equal("result.txt", artifact.FileName);
-        Assert.Equal(artifactPath, artifact.FilePath);
+        var artifact = Assert.Single(fixture.Store.Get("run-1")!.OutputArtifacts!);
+        Assert.Equal(path, artifact.FilePath);
+        Assert.Equal("Member A", artifact.MemberName);
         Assert.Equal("script-a", artifact.ScriptCode);
-        Assert.Equal("idle", state.WorkerStatuses![2].State);
-        Assert.Null(state.WorkerStatuses[2].ScriptCode);
-        var script = Assert.Single(state.ScriptStatuses!).Value;
-        Assert.Equal(ScriptRunStage.Completed, script.Stage);
-        Assert.Equal("script-a", script.ScriptCode);
     }
 
     [Fact]
-    public void CompletedWithoutGateway_BecomesTerminalAndAddsSkippedBatches()
-    {
-        using var fixture = new RunStateStoreFixture();
-        fixture.Start(publishToGateway: false, members: ["Member A", "Member B"]);
-        fixture.ApplyEvent(
-            RunnerStep.FileWritten,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            filePath: fixture.ArtifactPath());
-
-        fixture.ApplyEvent(RunnerStep.Completed, filePath: fixture.ScratchDirectory);
-
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Completed, state.Status);
-        Assert.Equal(RunnerStep.Completed, state.LastStep);
-        Assert.Equal(fixture.ScratchDirectory, state.OutputPath);
-        Assert.Equal(2, state.SenderBatches!.Count);
-        Assert.All(
-            state.SenderBatches.Values,
-            batch => Assert.Equal(SenderBatchStatus.SkippedByRequest, batch.Status));
-        Assert.All(
-            state.MemberStatuses!.Values,
-            member => Assert.Equal(MemberRunLifecycleStatus.Completed, member.Status));
-        Assert.All(state.WorkerStatuses!.Values, worker => Assert.Equal("idle", worker.State));
-    }
-
-    [Fact]
-    public void GatewayBatchQueuedRunnerEvent_ProjectsReadyBatchAndEnrichesEarlierStartedFeedback()
+    public void ScopedFailure_PreservesUsefulContext()
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
-        fixture.ApplyFeedback(SenderFeedbackKind.BatchStarted, batchId: "batch-a");
+        var failure = new RunnerFailureInfo(
+            "query", "script", "Member A:script-a", "Member A", "script-a",
+            null, null, null, null, "RUNNER_QUERY_FAILED", "Member A / script-a failed during query.",
+            DateTimeOffset.UtcNow);
 
-        fixture.ApplyEvent(
-            RunnerStep.GatewayBatchQueued,
-            memberName: "Member A",
-            batchId: "batch-a",
-            batchFileCount: 3);
+        fixture.Store.ApplyEvent(new RunnerEvent(
+            DateTimeOffset.UtcNow, "run-1", RunnerStep.Failed, failure.Message,
+            MemberName: "Member A", ScriptCode: "script-a", Failure: failure));
 
-        var batch = fixture.Store.Get("run-1")!.SenderBatches!["batch-a"];
-        Assert.Equal(SenderBatchStatus.InProgress, batch.Status);
-        Assert.NotNull(batch.StartedAt);
-        Assert.NotNull(batch.QueuedAt);
-        Assert.Equal(3, batch.FileCount);
+        var state = fixture.Store.Get("run-1")!;
+        Assert.Equal(RunLifecycleStatus.Failed, state.Status);
+        Assert.Equal("query", state.Failure!.Stage);
+        Assert.Equal("Member A", state.Failure.MemberName);
+        Assert.Equal("script-a", state.Failure.ScriptCode);
+        Assert.Equal("Query execution failed for script 'script-a'. Review the script and database logs.", state.Failure.Message);
+        Assert.Equal(state.Failure, state.MemberStatuses!["Member A"].Failure);
     }
 
-    [Fact]
-    public void FailedRunnerEvent_FailsOnlyUnfinishedMembersAndResetsWorkers()
+    [Theory]
+    [InlineData(TerminalMutation.AggregateFailure)]
+    [InlineData(TerminalMutation.SetFailed)]
+    [InlineData(TerminalMutation.SetCancelled)]
+    public void TerminalMutation_PreservesCompletedMembers(TerminalMutation mutation)
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start(members: ["Member A", "Member B"]);
-        fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
-            RunnerStep.QueryStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 1);
-        fixture.ApplyEvent(
-            RunnerStep.FileWriteStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1,
-            workerId: 1);
-        fixture.ApplyEvent(
-            RunnerStep.ScriptCompleted,
-            memberName: "Member B",
-            scriptCode: "script-b");
+        fixture.ApplyEvent(RunnerStep.ScriptCompleted, memberName: "Member A", scriptCode: "done");
 
-        fixture.ApplyEvent(RunnerStep.Failed, message: "database failed");
+        switch (mutation)
+        {
+            case TerminalMutation.AggregateFailure:
+                fixture.ApplyEvent(RunnerStep.Failed, message: "run failed");
+                break;
+            case TerminalMutation.SetFailed:
+                fixture.Store.SetFailed("run-1", "run failed");
+                break;
+            case TerminalMutation.SetCancelled:
+                fixture.Store.SetCancelled("run-1", "run cancelled");
+                break;
+        }
 
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Failed, state.Status);
-        Assert.Equal(RunnerStep.Failed, state.LastStep);
-        Assert.Equal("database failed", state.Message);
-        Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
-        Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses["Member B"].Status);
-        Assert.Equal("failed", state.WorkerStatuses![1].State);
-        Assert.Equal("script-a", state.WorkerStatuses[1].ScriptCode);
-        Assert.Equal("idle", state.WorkerStatuses[2].State);
-        Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
-        Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
+        var members = fixture.Store.Get("run-1")!.MemberStatuses!;
+        Assert.Equal(MemberRunLifecycleStatus.Completed, members["Member A"].Status);
+        Assert.Equal(
+            mutation == TerminalMutation.SetCancelled
+                ? MemberRunLifecycleStatus.Cancelled
+                : MemberRunLifecycleStatus.Failed,
+            members["Member B"].Status);
     }
 
     [Fact]
-    public void ExplicitFailure_FailsAllMembersAndResetsWorkers()
+    public void CompletedWithoutGateway_CompletesRunAndMembers()
     {
         using var fixture = new RunStateStoreFixture();
-        fixture.Start();
-        fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
-            RunnerStep.QueryStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 1);
-        fixture.ApplyEvent(
-            RunnerStep.FileWriteStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1,
-            workerId: 1);
+        fixture.Start(publishToGateway: false, members: ["Member A", "Member B"]);
 
-        fixture.Store.SetFailed("run-1", "worker crashed");
+        fixture.ApplyEvent(RunnerStep.Completed, filePath: fixture.ScratchDirectory);
 
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Failed, state.Status);
-        Assert.Equal("worker crashed", state.Message);
-        Assert.Equal(MemberRunLifecycleStatus.Failed, state.MemberStatuses!["Member A"].Status);
-        Assert.Equal("failed", state.WorkerStatuses![1].State);
-        Assert.Equal("script-a", state.WorkerStatuses[1].ScriptCode);
-        Assert.Equal(ScriptRunStage.Failed, Assert.Single(state.ScriptStatuses!).Value.Stage);
-        Assert.Equal(FileRunStage.Failed, Assert.Single(state.FileStatuses!).Value.Stage);
+        var state = fixture.Store.Get("run-1")!;
+        Assert.Equal(RunLifecycleStatus.Completed, state.Status);
+        Assert.All(state.MemberStatuses!.Values, member =>
+            Assert.Equal(MemberRunLifecycleStatus.Completed, member.Status));
+        Assert.All(state.SenderBatches!.Values, batch =>
+            Assert.Equal(SenderBatchStatus.SkippedByRequest, batch.Status));
     }
 
     [Fact]
-    public void ExplicitFailure_PersistsRunLevelFailureAndKeepsWorkerContext()
-    {
-        using var fixture = new RunStateStoreFixture();
-        fixture.Start();
-        fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
-            RunnerStep.QueryStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 1);
-
-        var failure = new RunnerFailureInfo(
-            "background_worker",
-            "run",
-            "run-1",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "RUN_BACKGROUND_WORKER_FAILED",
-            "worker crashed",
-            DateTimeOffset.UtcNow);
-        fixture.Store.SetFailed("run-1", failure.Message, failure);
-
-        var state = fixture.Store.Get("run-1");
-        Assert.NotNull(state);
-        Assert.Equal(failure, state!.Failure);
-        Assert.Equal(failure, state.MemberStatuses!["Member A"].Failure);
-        Assert.Equal("failed", state.WorkerStatuses![1].State);
-        Assert.Equal("Member A", state.WorkerStatuses[1].MemberName);
-    }
-
-    [Fact]
-    public void ExplicitCancellation_CancelsAllMembersAndResetsWorkers()
-    {
-        using var fixture = new RunStateStoreFixture();
-        fixture.Start();
-        fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
-            RunnerStep.QueryStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 1);
-        fixture.ApplyEvent(
-            RunnerStep.FileWriteStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1,
-            workerId: 1);
-        fixture.Store.SetCancellationRequested("run-1", "stop requested");
-
-        fixture.Store.SetCancelled("run-1", "cancelled by user");
-
-        var state = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Cancelled, state.Status);
-        Assert.Equal("cancelled by user", state.Message);
-        Assert.Equal(MemberRunLifecycleStatus.Cancelled, state.MemberStatuses!["Member A"].Status);
-        Assert.Equal("idle", state.WorkerStatuses![1].State);
-        Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
-        Assert.Equal(FileRunStage.Cancelled, Assert.Single(state.FileStatuses!).Value.Stage);
-    }
-
-    [Fact]
-    public void CancellationRequested_IgnoresProgressButAcceptsCompletedEvent()
+    public void TerminalState_IgnoresLaterRunnerEvents()
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start(publishToGateway: false);
-        fixture.Store.SetCancellationRequested("run-1", "stop requested");
-
-        fixture.ApplyEvent(
-            RunnerStep.FileWritten,
-            memberName: "Member A",
-            filePath: fixture.ArtifactPath());
-        var waiting = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.CancellationRequested, waiting.Status);
-        Assert.Empty(waiting.OutputArtifacts!);
-
-        fixture.ApplyEvent(RunnerStep.Completed);
-
-        var completed = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Completed, completed.Status);
-    }
-
-    [Fact]
-    public void TerminalState_IgnoresLaterRunnerEventsAndSetRunning()
-    {
-        using var fixture = new RunStateStoreFixture();
-        fixture.Start(publishToGateway: false);
-        fixture.ApplyEvent(
-            RunnerStep.FileWriteStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1);
         fixture.ApplyEvent(RunnerStep.Completed, message: "done");
-        var terminal = Assert.IsType<RunStatusInfo>(fixture.Store.Get("run-1"));
+        var terminal = fixture.Store.Get("run-1");
 
         fixture.ApplyEvent(RunnerStep.Failed, message: "late failure");
-        fixture.ApplyEvent(
-            RunnerStep.FileWritten,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1,
-            filePath: fixture.ArtifactPath());
-        fixture.Store.SetRunning("run-1");
 
         Assert.Same(terminal, fixture.Store.Get("run-1"));
-        Assert.Equal(RunLifecycleStatus.Completed, terminal.Status);
-        Assert.Equal("done", terminal.Message);
-        Assert.Equal(FileRunStage.QueuedForWrite, Assert.Single(terminal.FileStatuses!).Value.Stage);
     }
+
+    private static MemberRunStatusInfo Member(RunStateStoreFixture fixture) =>
+        fixture.Store.Get("run-1")!.MemberStatuses!["Member A"];
 
     public enum TerminalMutation
     {
-        Failed,
-        CancellationRequested,
-        Cancelled
+        AggregateFailure,
+        SetFailed,
+        SetCancelled
     }
 }

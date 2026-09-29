@@ -11,7 +11,8 @@
         [indeterminate]="allSelection.indeterminate"
         [disabled]="allSelection.total === 0"
         (change)="toggleHistoryGroup(allHistoryFiles(), $event.checked)"
-      >{{ 'history.selectAllFiles' | t }}</mat-checkbox>
+        >{{ 'history.selectAllFiles' | t }}</mat-checkbox
+      >
       <span class="history-selection-toolbar__count">
         {{
           'history.selectedCount'
@@ -39,7 +40,10 @@
               (change)="toggleHistoryGroup(runFiles(node), $event.checked)"
             ></mat-checkbox>
             <span class="history-run__title">
-              {{ node.taskCode === 'run' ? ('history.runLabel' | t) : ('history.extraLabel' | t) }} ·
+              {{
+                node.taskCode === 'run' ? ('history.runLabel' | t) : ('history.extraLabel' | t)
+              }}
+              ·
               {{ node.correlationId }}
               <span
                 class="history-run__gateway-badge"
@@ -79,14 +83,27 @@
                           (change)="toggleHistoryGroup(scriptFiles(script), $event.checked)"
                         ></mat-checkbox>
                         <span>{{ script.scriptCode }}</span>
+                        <span class="history-member__result">
+                          {{ scriptResult(node, script)?.status ?? ('history.memberNoResult' | t) }}
+                        </span>
                         <span>{{ formatFileCount(script.fileCount) }}</span>
                       </summary>
                       @if (isHistoryScriptOpen(scriptKey(node, script))) {
                         <div class="history-member__body">
+                          @if (scriptResult(node, script); as result) {
+                            @if (result.message) {
+                              <div class="history-member__message">{{ result.message }}</div>
+                            }
+                            @if (result.failureContext) {
+                              <div class="history-member__context">{{ result.failureContext }}</div>
+                            }
+                          }
                           @for (bank of script.banks; track bank.bankName) {
                             <details
                               class="history-member history-bank"
-                              (toggle)="onHistoryBankToggle($event, bankKey(node, script, bank.bankName))"
+                              (toggle)="
+                                onHistoryBankToggle($event, bankKey(node, script, bank.bankName))
+                              "
                             >
                               <summary class="history-member__summary">
                                 @let bankSelection = selectionState(bank.files);
@@ -117,12 +134,16 @@
                                         >{{ file.fileName }}</a
                                       >
                                       @if (file.occurredAt) {
-                                        <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
+                                        <span class="history-file__time">{{
+                                          formatTimestamp(file.occurredAt)
+                                        }}</span>
                                       }
                                       <span
                                         class="history-file__gateway"
                                         [class.history-file__gateway--sent]="file.sentToGateway"
-                                        [class.history-file__gateway--queued]="file.queuedForGateway"
+                                        [class.history-file__gateway--queued]="
+                                          file.queuedForGateway
+                                        "
                                         [class.history-file__gateway--pending]="
                                           !file.sentToGateway && !file.queuedForGateway
                                         "
@@ -158,10 +179,19 @@
                           (change)="toggleHistoryGroup(member.files, $event.checked)"
                         ></mat-checkbox>
                         <span>{{ member.memberName }}</span>
+                        <span class="history-member__result">
+                          {{ member.result?.status ?? ('history.memberNoResult' | t) }}
+                        </span>
                         <span>{{ formatFileCount(member.files.length) }}</span>
                       </summary>
                       @if (isHistoryMemberOpen(member.key)) {
                         <div class="history-member__body">
+                          @if (member.result?.message; as message) {
+                            <div class="history-member__message">{{ message }}</div>
+                          }
+                          @if (member.result?.failureContext; as context) {
+                            <div class="history-member__context">{{ context }}</div>
+                          }
                           @if (member.files.length === 0) {
                             <div class="details-empty">{{ 'history.emptyFiles' | t }}</div>
                           } @else {
@@ -179,7 +209,9 @@
                                   >{{ file.fileName }}</a
                                 >
                                 @if (file.occurredAt) {
-                                  <span class="history-file__time">{{ formatTimestamp(file.occurredAt) }}</span>
+                                  <span class="history-file__time">{{
+                                    formatTimestamp(file.occurredAt)
+                                  }}</span>
                                 }
                                 <span
                                   class="history-file__gateway"
@@ -234,7 +266,7 @@
                   accepted: summary.accepted,
                   total: summary.total,
                   rejected: summary.rejected,
-                  requestId: result.requestId
+                  requestId: result.requestId,
                 }
         }}
       }

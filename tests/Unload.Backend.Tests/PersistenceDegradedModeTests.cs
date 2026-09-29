@@ -9,7 +9,7 @@ public class PersistenceDegradedModeTests
     public void RunStateStore_KeepsFirstMutationAndBlocksFollowingMutations()
     {
         using var path = new BlockedPersistencePath();
-        var store = new RunStateStore(workerCount: 1, path.StateFilePath);
+        var store = new RunStateStore(path.StateFilePath);
 
         var writeFailure = Assert.Throws<IOException>(() => store.SetStarted(
             "run-1",
@@ -24,8 +24,7 @@ public class PersistenceDegradedModeTests
                 RunnerStep.QueryStarted,
                 "query started",
                 MemberName: "Member A",
-                ScriptCode: "script-1",
-                WorkerId: 1)));
+                ScriptCode: "script-1")));
 
         Assert.Equal(path.StateFilePath, unavailable.FilePath);
         Assert.Same(writeFailure, unavailable.InnerException);

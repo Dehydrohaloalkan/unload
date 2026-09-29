@@ -1,4 +1,5 @@
 import {
+  MemberRunLifecycleStatus,
   RequeueToGatewayResponse,
   RunLifecycleStatus,
   RunStatusInfo,
@@ -83,11 +84,47 @@ describe('history projection', () => {
     expect(nodes).toHaveLength(1);
     expect(nodes[0].taskCode).toBe('extra');
     expect(nodes[0].scripts?.map((script) => script.scriptCode)).toEqual(['SCRIPT_A', 'SCRIPT_B']);
-    expect(nodes[0].scripts?.map((script) => script.banks[0].bankName)).toEqual([
-      'Альфа',
-      'Бета',
-    ]);
+    expect(nodes[0].scripts?.map((script) => script.banks[0].bankName)).toEqual(['Альфа', 'Бета']);
     expect(nodes[0].scripts?.map((script) => script.fileCount)).toEqual([1, 1]);
+  });
+
+  it('keeps a failed member result and error context even when no file was created', () => {
+    const run = createRun({
+      memberStatuses: {
+        failed: {
+          memberName: 'Member Failed',
+          status: MemberRunLifecycleStatus.Failed,
+          lastStep: null,
+          message: 'Не удалось записать файл',
+          updatedAt: '2026-08-07T10:04:00Z',
+          failure: {
+            entityType: 'member',
+            entityId: 'Member Failed',
+            stage: 'file_write',
+            code: 'disk-full',
+            message: 'Не удалось записать файл',
+            occurredAt: '2026-08-07T10:04:00Z',
+            memberName: 'Member Failed',
+            scriptCode: 'SCRIPT_A',
+            workerId: null,
+            filePath: '/output/member.csv',
+            chunkNumber: null,
+            batchId: null,
+          },
+        },
+      },
+    });
+
+    const node = buildHistoryNodes(
+      createInput({ todayRuns: [run], knownMemberNames: ['Member Failed'] }),
+    )[0];
+
+    expect(node.memberFiles['Member Failed']).toBeUndefined();
+    expect(node.memberResults['member failed']).toEqual({
+      status: 'Ошибка',
+      message: 'Не удалось записать файл',
+      failureContext: 'file_write · disk-full · SCRIPT_A · /output/member.csv',
+    });
   });
 
   it('confirms only rows from accepted requeue batches', () => {
@@ -239,7 +276,6 @@ function createRun(overrides: Partial<RunStatusInfo> = {}): RunStatusInfo {
     outputPath: null,
     memberStatuses: null,
     outputArtifacts: null,
-    workerStatuses: null,
     senderBatches: null,
     ...overrides,
   };

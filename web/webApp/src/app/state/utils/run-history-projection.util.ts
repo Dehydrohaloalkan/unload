@@ -4,8 +4,8 @@ import {
   buildGatewayAttempts,
   resolveGatewayDelivery,
 } from './gateway-history-projection.util';
-import { HistoryFileRow, HistoryRunNode } from './history-projection.models';
-import { resolveRunStatusLabel } from './labels.util';
+import { HistoryFileRow, HistoryMemberResult, HistoryRunNode } from './history-projection.models';
+import { resolveMemberStatusLabel, resolveRunStatusLabel } from './labels.util';
 import { buildRunMemberIndex, memberKey } from './member-index.util';
 import { sortNames } from './sort.util';
 
@@ -37,9 +37,32 @@ export function buildRunHistoryNode(
       Object.values(run.senderBatches ?? {}),
     ),
     memberNames: collectRunMemberNames(run, knownMemberNames),
+    memberResults: buildMemberResults(run),
     memberFiles,
     gatewayAttempts: buildGatewayAttempts(run),
   };
+}
+
+function buildMemberResults(run: RunStatusInfo): Record<string, HistoryMemberResult> {
+  return Object.fromEntries(
+    Object.values(run.memberStatuses ?? {}).map((member) => [
+      memberKey(member.memberName),
+      {
+        status: resolveMemberStatusLabel(member.status),
+        message: member.failure?.message ?? member.message ?? null,
+        failureContext: member.failure
+          ? [
+              member.failure.stage,
+              member.failure.code,
+              member.failure.scriptCode,
+              member.failure.filePath,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : null,
+      },
+    ]),
+  );
 }
 
 function buildRunMemberFiles(

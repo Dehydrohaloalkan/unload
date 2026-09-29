@@ -23,8 +23,20 @@ describe('App', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain(RU['app.title']);
   });
 
+  it('should render the run details panel without an open action', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector('.details-panel') as HTMLElement | null;
+    expect(panel).toBeTruthy();
+    expect(panel?.textContent).toContain(RU['app.drawer.runTitle']);
+  });
+
   it('should present an unhandled error in a prominent dialog', async () => {
-    TestBed.inject(AppErrorStore).setUnhandledError(new Error('Не удалось прочитать файл конфигурации'));
+    TestBed.inject(AppErrorStore).setUnhandledError(
+      new Error('Не удалось прочитать файл конфигурации'),
+    );
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     await fixture.whenStable();

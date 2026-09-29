@@ -2,7 +2,6 @@ import {
   MemberRunStatusInfo,
   RunOutputArtifactInfo,
   RunStatusInfo,
-  RunWorkerStatusInfo,
   SenderBatchStatusInfo,
   SenderFileDispatchStateInfo,
 } from '../../app.models';
@@ -22,7 +21,6 @@ export interface RunMemberIndex {
   batches: Map<string, SenderBatchStatusInfo>;
   /** Все попытки отправки мембера, включая повторные requeue-партии. */
   batchGroups: Map<string, SenderBatchStatusInfo[]>;
-  workers: Map<string, RunWorkerStatusInfo[]>;
   artifacts: Map<string, RunOutputArtifactInfo[]>;
   /** Уникальные member-имена, замеченные в любом из подразделов run'а. */
   memberNames: Set<string>;
@@ -33,12 +31,11 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
   const statuses = new Map<string, MemberRunStatusInfo>();
   const batches = new Map<string, SenderBatchStatusInfo>();
   const batchGroups = new Map<string, SenderBatchStatusInfo[]>();
-  const workers = new Map<string, RunWorkerStatusInfo[]>();
   const artifacts = new Map<string, RunOutputArtifactInfo[]>();
   const memberNames = new Set<string>();
 
   if (!run) {
-    return { statuses, batches, batchGroups, workers, artifacts, memberNames };
+    return { statuses, batches, batchGroups, artifacts, memberNames };
   }
 
   for (const status of Object.values(run.memberStatuses ?? {})) {
@@ -56,17 +53,6 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
     memberNames.add(batch.memberName);
   }
 
-  for (const worker of Object.values(run.workerStatuses ?? {})) {
-    const key = memberKey(worker.memberName);
-    if (!key) continue;
-    const bucket = workers.get(key) ?? [];
-    bucket.push(worker);
-    workers.set(key, bucket);
-  }
-  for (const bucket of workers.values()) {
-    bucket.sort((left, right) => Number(left.workerId) - Number(right.workerId));
-  }
-
   for (const artifact of run.outputArtifacts ?? []) {
     if (!artifact.memberName) continue;
     const key = memberKey(artifact.memberName);
@@ -80,7 +66,7 @@ export function buildRunMemberIndex(run: RunStatusInfo | null): RunMemberIndex {
     group.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
   }
 
-  return { statuses, batches, batchGroups, workers, artifacts, memberNames };
+  return { statuses, batches, batchGroups, artifacts, memberNames };
 }
 
 export function isFileSentViaBatch(

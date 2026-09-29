@@ -43,6 +43,12 @@ export interface HistoryScriptNode {
   fileCount: number;
 }
 
+export interface HistoryMemberResult {
+  status: string;
+  message: string | null;
+  failureContext: string | null;
+}
+
 export type GatewayDelivery = 'off' | 'delivered' | 'partial' | 'notSent' | 'failed';
 
 export interface HistoryRunNode {
@@ -56,6 +62,7 @@ export interface HistoryRunNode {
   publishToGateway: boolean;
   gatewayDelivery: GatewayDelivery;
   memberNames: string[];
+  memberResults: Record<string, HistoryMemberResult>;
   memberFiles: Record<string, HistoryFileRow[]>;
   gatewayAttempts: HistoryGatewayAttempt[];
   scripts?: HistoryScriptNode[];

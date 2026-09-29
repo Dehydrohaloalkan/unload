@@ -46,7 +46,6 @@ public class ExtraUnloadEngine(
             SingleReader = true,
             SingleWriter = false,
         });
-        var sequencer = new RunnerEventSequencer();
         var emitLock = new SemaphoreSlim(1, 1);
 
         async Task EmitAsync(RunnerEvent @event, CancellationToken token)
@@ -54,8 +53,7 @@ public class ExtraUnloadEngine(
             await emitLock.WaitAsync(token);
             try
             {
-                var normalized = RunnerFailureMessages.Sanitize(@event);
-                await channel.Writer.WriteAsync(normalized with { Sequence = sequencer.Next() }, token);
+                await channel.Writer.WriteAsync(RunnerFailureMessages.Sanitize(@event), token);
             }
             finally
             {
@@ -99,8 +97,7 @@ public class ExtraUnloadEngine(
             Message: totalFiles == 0
                 ? "Доп-выгрузка завершена, 0 файлов."
                 : $"Доп-выгрузка завершена. Файлов: {totalFiles}.",
-            FilePath: runDirectory,
-            Sequence: sequencer.Next());
+            FilePath: runDirectory);
     }
 
     /// <summary>Выполняет один скрипт, пишет его события в <paramref name="writer"/> и возвращает число файлов.</summary>
@@ -150,7 +147,7 @@ public class ExtraUnloadEngine(
                 ? $"Скрипт {scriptCode} выполнен, 0 файлов."
                 : $"Скрипт {scriptCode} выполнен: файлов {writeResult.FilesWritten}, строк {execResult.Records}.";
             await emitAsync(
-                Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage, records: execResult.Records),
+                Event(request, RunnerStep.ScriptCompleted, scriptCode, completedMessage),
                 cancellationToken);
 
             return writeResult.FilesWritten;
@@ -238,7 +235,6 @@ public class ExtraUnloadEngine(
         RunnerStep step,
         string scriptCode,
         string message,
-        int? records = null,
         string? filePath = null)
     {
         return new RunnerEvent(
@@ -248,7 +244,6 @@ public class ExtraUnloadEngine(
             Message: message,
             MemberName: scriptCode,
             ScriptCode: scriptCode,
-            Records: records,
             FilePath: filePath);
     }
 }

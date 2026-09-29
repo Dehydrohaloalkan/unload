@@ -110,19 +110,14 @@ public class MainUnloadEngine
             var (resolvedTargets, bigScriptTargetCodes) = await _catalogService.ResolveAsync(request.TargetCodes, cancellationToken);
             await eventEmitter.EmitAsync(
                 RunnerStep.TargetsResolved,
-                $"Targets resolved: {resolvedTargets.Count}.",
-                records: resolvedTargets.Count);
+                $"Targets resolved: {resolvedTargets.Count}.");
 
             var scripts = resolvedTargets
                 .SelectMany(static x => x.Value)
                 .OrderBy(static x => x.FirstCodeDigit)
                 .ThenBy(static x => x.TargetCode, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static x => x.ScriptCode, StringComparer.OrdinalIgnoreCase)
-                .Select(static (script, index) => script with { WorkOrder = index + 1 })
                 .ToArray();
-
-            foreach (var script in scripts)
-                await eventEmitter.EmitForScriptAsync(script, RunnerStep.ScriptDiscovered, $"Discovered script {script.ScriptCode}.");
 
             if (scripts.Length == 0)
             {
@@ -215,9 +210,7 @@ public class MainUnloadEngine
                 ex.Failure.Message,
                 ex.Failure,
                 ex.Script,
-                ex.WorkerId,
-                ex.ChunkNumber,
-                ex.BatchId);
+                batchId: ex.BatchId);
         }
         catch (Exception)
         {
@@ -306,8 +299,7 @@ public class MainUnloadEngine
             await eventEmitter.EmitForScriptAsync(
                 script,
                 RunnerStep.QueryStarted,
-                $"Worker #{workerId} running query for script {script.ScriptCode}.",
-                workerId: workerId);
+                $"Running query for script {script.ScriptCode}.");
 
             await using var reader = await client.GetDataReaderAsync(script.SqlText, cancellationToken);
             var columns = RunnerEngineDataReader.GetColumns(reader);
@@ -374,13 +366,6 @@ public class MainUnloadEngine
             else if (rowsRead == 0)
                 reportRows.Add(new RunReportRow(script.MemberName, script.ScriptType, script.FirstCodeDigit, string.Empty, 0, false, 0));
 
-            await eventEmitter.EmitForScriptAsync(
-                script,
-                RunnerStep.QueryCompleted,
-                $"Worker #{workerId} finished query for script {script.ScriptCode}.",
-                records: rowsRead,
-                workerId: workerId);
-
             if (!string.IsNullOrWhiteSpace(script.MemberName))
             {
                 var memberName = script.MemberName.Trim();
@@ -410,9 +395,7 @@ public class MainUnloadEngine
                             script,
                             RunnerStep.GatewayBatchQueued,
                             $"Gateway batch queued. Files: {memberBatch.Files.Count}.",
-                            workerId: workerId,
                             batchId: memberBatch.BatchId,
-                            batchFileCount: memberBatch.Files.Count,
                             batchFiles: batchFiles);
                     }
 
@@ -422,9 +405,6 @@ public class MainUnloadEngine
                         publishToGateway
                             ? $"Member completed. Gateway batch queued. Files: {memberBatch.Files.Count}."
                             : "Member completed. Gateway publish skipped by request.",
-                        records: rowsRead,
-                        filePath: null,
-                        workerId: workerId,
                         cancellationToken: cancellationToken);
                 }
                 else if (remaining == 0)
@@ -433,9 +413,6 @@ public class MainUnloadEngine
                         script,
                         RunnerStep.ScriptCompleted,
                         "Member completed. No output files were produced.",
-                        records: rowsRead,
-                        filePath: null,
-                        workerId: workerId,
                         cancellationToken: cancellationToken);
                 }
             }
@@ -525,28 +502,7 @@ public class MainUnloadEngine
         ConcurrentBag<RunReportRow> reportRows,
         CancellationToken cancellationToken)
     {
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.ChunkCreated,
-            $"Chunk #{chunkNumber} created for {script.ScriptCode}.",
-            records: rows.Length,
-            workerId: workerId,
-            chunkNumber: chunkNumber,
-            estimatedBytes: byteSize);
-
         var chunk = new FileChunk(script, chunkNumber, rows, byteSize);
-        // This marks hand-off to IFileChunkWriter, not the physical first byte. Its elapsed stage
-        // intentionally includes any wait inside the writer, including its file lock.
-        await eventEmitter.EmitForScriptAsync(
-            script,
-            RunnerStep.FileWriteStarted,
-            $"Chunk #{chunkNumber} queued for writing.",
-            records: rows.Length,
-            filePath: null,
-            workerId: workerId,
-            chunkNumber: chunkNumber,
-            estimatedBytes: byteSize,
-            cancellationToken: cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         var written = await _fileChunkWriter.WriteChunkAsync(chunk, runFilesDirectory, cancellationToken);
         stopwatch.Stop();
@@ -556,11 +512,7 @@ public class MainUnloadEngine
             script,
             RunnerStep.FileWritten,
             $"File written: {Path.GetFileName(written.FilePath)}.",
-            records: written.RowsCount,
             filePath: written.FilePath,
-            workerId: workerId,
-            chunkNumber: chunkNumber,
-            estimatedBytes: written.ByteSize,
             cancellationToken: cancellationToken);
 
         reportRows.Add(new RunReportRow(

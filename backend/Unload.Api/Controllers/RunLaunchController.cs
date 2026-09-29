@@ -170,7 +170,7 @@ public class RunLaunchController(
         var runState = _runStateStore.Get(correlationId);
         if (runState is not null)
         {
-            await _livePublisher.PublishAsync(runState, immediate: true);
+            await _livePublisher.PublishAsync(runState);
         }
     }
 
@@ -213,7 +213,6 @@ public class RunLaunchController(
             $"/api/runs/{correlationId}",
             RunStatusHubContract.HubPath,
             RunStatusHubContract.SubscribeMethod,
-            RunStatusHubContract.StatusEvent,
             RunStatusHubContract.RunStatusEvent,
             $"/api/runs/{correlationId}/stop");
     }

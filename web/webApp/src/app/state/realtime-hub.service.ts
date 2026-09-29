@@ -1,11 +1,7 @@
 import { Injectable, inject, isDevMode, signal } from '@angular/core';
-import {
-  HubConnection,
-  HubConnectionBuilder,
-  HubConnectionState,
-} from '@microsoft/signalr';
+import { HubConnection, HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
 import { Subject } from 'rxjs';
-import { PresetGateState, RunStatusInfo, RunnerEvent } from '../app.models';
+import { PresetGateState, RunStatusInfo } from '../app.models';
 import { API_BASE_URL } from './api-base-url.token';
 import { REALTIME_HUB_CONTRACT } from './realtime-hub.contract';
 import { joinApiUrl } from './utils/api-url.util';
@@ -21,12 +17,10 @@ export class RealtimeHubService {
 
   readonly connectionReady = signal(false);
 
-  private readonly statusEventsSubject = new Subject<RunnerEvent>();
   private readonly runStatusEventsSubject = new Subject<RunStatusInfo>();
   private readonly presetStateEventsSubject = new Subject<PresetGateState>();
   private readonly reconnectedSubject = new Subject<void>();
 
-  readonly statusEvents$ = this.statusEventsSubject.asObservable();
   readonly runStatusEvents$ = this.runStatusEventsSubject.asObservable();
   readonly presetStateEvents$ = this.presetStateEventsSubject.asObservable();
   readonly reconnected$ = this.reconnectedSubject.asObservable();
@@ -42,11 +36,6 @@ export class RealtimeHubService {
       // гибернации/долгого обрыва соединение умирало навсегда до ручного refresh.
       .withAutomaticReconnect({ nextRetryDelayInMilliseconds: () => RECONNECT_DELAY_MS })
       .build();
-
-    // Доставляем все события всем подписчикам; разделение run/extra делают сторы по taskCode/correlationId.
-    connection.on(REALTIME_HUB_CONTRACT.statusEvent, (event: RunnerEvent) => {
-      this.statusEventsSubject.next(event);
-    });
 
     connection.on(REALTIME_HUB_CONTRACT.runStatusEvent, (status: RunStatusInfo) => {
       this.runStatusEventsSubject.next(status);
@@ -108,7 +97,11 @@ export class RealtimeHubService {
 
   async subscribeRun(correlationId: string | null): Promise<void> {
     this.currentCorrelationId = correlationId;
-    if (!correlationId || !this.connection || this.connection.state !== HubConnectionState.Connected) {
+    if (
+      !correlationId ||
+      !this.connection ||
+      this.connection.state !== HubConnectionState.Connected
+    ) {
       return;
     }
 
@@ -120,5 +113,4 @@ export class RealtimeHubService {
       }
     }
   }
-
 }

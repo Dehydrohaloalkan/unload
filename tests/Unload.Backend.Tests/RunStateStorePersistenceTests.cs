@@ -41,25 +41,14 @@ public class RunStateStorePersistenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ActiveStateAfterRestart_BecomesCancelledAndResetsWorkers(bool cancellationRequested)
+    public void ActiveStateAfterRestart_BecomesCancelled(bool cancellationRequested)
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
         fixture.ApplyEvent(
-            RunnerStep.ScriptDiscovered,
-            memberName: "Member A",
-            scriptCode: "script-a");
-        fixture.ApplyEvent(
             RunnerStep.QueryStarted,
             memberName: "Member A",
-            scriptCode: "script-a",
-            workerId: 1);
-        fixture.ApplyEvent(
-            RunnerStep.FileWriteStarted,
-            memberName: "Member A",
-            scriptCode: "script-a",
-            chunkNumber: 1,
-            workerId: 1);
+            scriptCode: "script-a");
         if (cancellationRequested)
         {
             fixture.Store.SetCancellationRequested("run-1", "stop requested");
@@ -71,11 +60,7 @@ public class RunStateStorePersistenceTests
         Assert.Equal(RunLifecycleStatus.Cancelled, state.Status);
         Assert.Equal(RunnerStep.Failed, state.LastStep);
         Assert.Equal("Run was interrupted due to server restart.", state.Message);
-        Assert.Equal("idle", state.WorkerStatuses![1].State);
-        Assert.Null(state.WorkerStatuses[1].ScriptCode);
-        Assert.Null(state.WorkerStatuses[1].MemberName);
-        Assert.Equal(ScriptRunStage.Cancelled, Assert.Single(state.ScriptStatuses!).Value.Stage);
-        Assert.Equal(FileRunStage.Cancelled, Assert.Single(state.FileStatuses!).Value.Stage);
+        Assert.Equal(MemberRunLifecycleStatus.Cancelled, state.MemberStatuses!["Member A"].Status);
     }
 
     [Theory]
@@ -117,7 +102,6 @@ public class RunStateStorePersistenceTests
         Assert.Equal(beforeRestart.PublishToGateway, afterRestart.PublishToGateway);
         Assert.Equal(beforeRestart.MemberStatuses, afterRestart.MemberStatuses);
         Assert.Equal(beforeRestart.OutputArtifacts, afterRestart.OutputArtifacts);
-        Assert.Equal(beforeRestart.WorkerStatuses, afterRestart.WorkerStatuses);
         Assert.Equal(beforeRestart.SenderBatches!.Count, afterRestart.SenderBatches!.Count);
         foreach (var (batchId, expectedBatch) in beforeRestart.SenderBatches)
         {
@@ -158,7 +142,6 @@ public class RunStateStorePersistenceTests
             RunnerStep.GatewayBatchQueued,
             memberName: "Member A",
             batchId: "batch-1",
-            batchFileCount: 2,
             batchFiles:
             [
                 new(firstPath, "first.txt", 10, 11, DateTimeOffset.UtcNow),
@@ -176,7 +159,7 @@ public class RunStateStorePersistenceTests
     }
 
     [Fact]
-    public void LegacySnapshotWithoutPlannedFiles_RemainsReadable()
+    public void SnapshotWithRemovedTelemetryFields_RemainsReadable()
     {
         using var fixture = new RunStateStoreFixture();
         fixture.Start();
@@ -184,11 +167,15 @@ public class RunStateStorePersistenceTests
             RunnerStep.GatewayBatchQueued,
             memberName: "Member A",
             batchId: "batch-1",
-            batchFileCount: 1);
+            batchFiles: [new(fixture.ArtifactPath(), "result.txt", null, 10, DateTimeOffset.UtcNow)]);
         fixture.Store.SetFailed("run-1", "stop for persisted terminal fixture");
 
         var root = JsonNode.Parse(File.ReadAllText(fixture.StateFilePath))!.AsObject();
-        var batch = root["Runs"]!.AsArray()[0]!["SenderBatches"]!["batch-1"]!.AsObject();
+        var run = root["Runs"]!.AsArray()[0]!.AsObject();
+        run["WorkerStatuses"] = new JsonObject();
+        run["ScriptStatuses"] = new JsonObject();
+        run["FileStatuses"] = new JsonObject();
+        var batch = run["SenderBatches"]!["batch-1"]!.AsObject();
         Assert.True(batch.Remove("PlannedFiles"));
         File.WriteAllText(fixture.StateFilePath, root.ToJsonString());
 

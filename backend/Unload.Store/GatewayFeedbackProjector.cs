@@ -32,8 +32,7 @@ internal static class GatewayFeedbackProjector
             Message: currentBatch?.Message ?? @event.Message,
             QueuedAt: currentBatch?.QueuedAt ?? @event.OccurredAt,
             StartedAt: currentBatch?.StartedAt,
-            FileCount: @event.BatchFileCount ?? currentBatch?.FileCount,
-            Sequence: @event.Sequence > 0 ? @event.Sequence : currentBatch?.Sequence,
+            FileCount: @event.BatchFiles?.Count ?? currentBatch?.FileCount,
             Failure: currentBatch?.Failure,
             PlannedFiles: plannedFiles);
 
@@ -111,7 +110,6 @@ internal static class GatewayFeedbackProjector
                     ? feedback.OccurredAt
                     : null),
             FileCount: currentBatch?.FileCount,
-            Sequence: currentBatch?.Sequence,
             Failure: failure,
             PlannedFiles: plannedFiles);
 

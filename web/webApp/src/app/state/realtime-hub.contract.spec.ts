@@ -6,7 +6,6 @@ describe('SignalR contract', () => {
     expect(REALTIME_HUB_CONTRACT).toEqual({
       hubPath: '/hubs/status',
       subscribeMethod: 'SubscribeRun',
-      statusEvent: 'status',
       runStatusEvent: 'run_status',
       presetStateEvent: 'preset_state',
       presetReplayedEvent: 'preset_replayed',

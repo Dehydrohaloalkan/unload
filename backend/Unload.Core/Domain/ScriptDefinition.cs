@@ -14,7 +14,6 @@ namespace Unload.Core;
 /// <param name="MemberName">Имя участника, к которому относится скрипт.</param>
 /// <param name="ScriptPath">Полный путь к исходному SQL-файлу.</param>
 /// <param name="SqlText">Текст SQL-запроса, выполняемый в БД.</param>
-/// <param name="WorkOrder">Стабильный порядковый номер скрипта в рамках запуска.</param>
 public record ScriptDefinition(
     string TargetCode,
     string ScriptCode,
@@ -25,5 +24,4 @@ public record ScriptDefinition(
     int FirstCodeDigit,
     string MemberName,
     string ScriptPath,
-    string SqlText,
-    int? WorkOrder = null);
+    string SqlText);

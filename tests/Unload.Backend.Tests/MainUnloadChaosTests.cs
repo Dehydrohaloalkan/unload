@@ -107,22 +107,17 @@ public sealed class MainUnloadChaosTests
     }
 
     [Fact]
-    public async Task FileWriteEvents_AreOrderedAndKeepChunkIdentity()
+    public async Task FileWritten_ContainsArtifactIdentityWithoutIntermediateTelemetry()
     {
         using var scratch = new ScratchDirectory();
         var engine = CreateEngine(ChaosPoint.None);
 
         var events = await CollectAsync(engine.RunAsync(Request(scratch.Path), CancellationToken.None));
-        var ordered = events.ToList();
-        var chunkCreated = Assert.Single(events, static item => item.Step == RunnerStep.ChunkCreated);
-        var writeStarted = Assert.Single(events, static item => item.Step == RunnerStep.FileWriteStarted);
-        var fileWritten = Assert.Single(events, static item => item.Step == RunnerStep.FileWritten && item.ChunkNumber is not null);
+        var fileWritten = Assert.Single(events, static item =>
+            item.Step == RunnerStep.FileWritten && item.MemberName is not null);
 
-        Assert.NotNull(chunkCreated.ChunkNumber);
-        Assert.Equal(chunkCreated.ChunkNumber, writeStarted.ChunkNumber);
-        Assert.Equal(chunkCreated.ChunkNumber, fileWritten.ChunkNumber);
-        Assert.True(ordered.IndexOf(chunkCreated) < ordered.IndexOf(writeStarted));
-        Assert.True(ordered.IndexOf(writeStarted) < ordered.IndexOf(fileWritten));
+        Assert.Equal("Chaos member", fileWritten.MemberName);
+        Assert.False(string.IsNullOrWhiteSpace(fileWritten.FilePath));
     }
 
     [Fact]
@@ -157,7 +152,6 @@ public sealed class MainUnloadChaosTests
         var queued = Assert.Single(events, static item => item.Step == RunnerStep.GatewayBatchQueued);
         var scriptCompleted = Assert.Single(events, static item => item.Step == RunnerStep.ScriptCompleted);
         Assert.Equal("chaos-run-1:Chaos member", queued.BatchId);
-        Assert.Equal(1, queued.BatchFileCount);
         var plannedFile = Assert.Single(queued.BatchFiles!);
         Assert.Equal(Path.GetFullPath(plannedFile.FilePath), plannedFile.FilePath);
         Assert.False(string.IsNullOrWhiteSpace(plannedFile.FileName));

@@ -6,23 +6,16 @@ namespace Unload.Core;
 /// </summary>
 public enum RunnerStep
 {
-    RequestAccepted,
-    TargetsResolved,
-    ScriptDiscovered,
-    QueryStarted,
-    QueryCompleted,
-    ChunkCreated,
-    FileWritten,
-    ScriptCompleted,
-    PublishedToGateway,
-    Completed,
-    Failed,
-    /// <summary>
-    /// Чанк передан writer-у для записи. Этап включает возможное ожидание внутренней блокировки файла.
-    /// </summary>
-    FileWriteStarted,
+    RequestAccepted = 0,
+    TargetsResolved = 1,
+    QueryStarted = 3,
+    FileWritten = 6,
+    ScriptCompleted = 7,
+    PublishedToGateway = 8,
+    Completed = 9,
+    Failed = 10,
     /// <summary>
     /// Партия файлов была успешно передана в очередь gateway.
     /// </summary>
-    GatewayBatchQueued
+    GatewayBatchQueued = 12
 }

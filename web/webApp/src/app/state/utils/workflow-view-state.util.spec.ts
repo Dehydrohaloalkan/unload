@@ -97,7 +97,6 @@ function createRun(overrides: Partial<RunStatusInfo> = {}): RunStatusInfo {
     outputPath: null,
     memberStatuses: null,
     outputArtifacts: null,
-    workerStatuses: null,
     senderBatches: null,
     ...overrides,
   };

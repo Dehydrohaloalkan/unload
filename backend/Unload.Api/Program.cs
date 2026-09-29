@@ -38,9 +38,7 @@ builder.Services.AddUnloadRuntime(builder.Configuration, registerBackgroundServi
 if (!openApiGenerationOnly)
 {
     builder.Services.AddSingleton<IRunStatusLiveTransport, SignalRRunStatusLiveTransport>();
-    builder.Services.AddSingleton<IRunStatusPublishDelay, RunStatusPublishDelay>();
     builder.Services.AddSingleton<RunStatusLivePublisher>();
-    builder.Services.AddHostedService(static services => services.GetRequiredService<RunStatusLivePublisher>());
     builder.Services.AddHostedService<HistoryRetentionBackgroundService>();
     builder.Services.AddHostedService<MainUnloadHostedService>();
     builder.Services.AddHostedService<ExtraUnloadHostedService>();

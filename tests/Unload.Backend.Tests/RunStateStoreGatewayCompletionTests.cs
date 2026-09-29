@@ -82,6 +82,7 @@ public class RunStateStoreGatewayCompletionTests
         Assert.DoesNotContain("ftp failed", state.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ftp failed", state.Failure!.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SenderBatchStatus.Failed, state.SenderBatches!["batch-1"].Status);
+        Assert.Equal(MemberRunLifecycleStatus.Completed, state.MemberStatuses!["Member A"].Status);
     }
 
     [Fact]

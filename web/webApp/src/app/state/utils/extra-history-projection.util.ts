@@ -11,7 +11,7 @@ import {
   HistoryScriptNode,
 } from './history-projection.models';
 import { buildRunMemberIndex, extraFilePathKey, memberKey } from './member-index.util';
-import { resolveRunStatusLabel } from './labels.util';
+import { resolveMemberStatusLabel, resolveRunStatusLabel } from './labels.util';
 import { sortNames } from './sort.util';
 
 export function buildExtraHistoryNode(
@@ -57,6 +57,25 @@ export function buildExtraHistoryNode(
       Object.values(run.senderBatches ?? {}),
     ),
     memberNames: sortNames(knownMemberNames),
+    memberResults: Object.fromEntries(
+      Object.values(run.memberStatuses ?? {}).map((member) => [
+        memberKey(member.memberName),
+        {
+          status: resolveMemberStatusLabel(member.status),
+          message: member.failure?.message ?? member.message ?? null,
+          failureContext: member.failure
+            ? [
+                member.failure.stage,
+                member.failure.code,
+                member.failure.scriptCode,
+                member.failure.filePath,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : null,
+        },
+      ]),
+    ),
     memberFiles: {},
     gatewayAttempts: buildGatewayAttempts(run),
     scripts,
@@ -83,7 +102,11 @@ function collectExtraFiles(
   }
 
   for (const artifact of run.outputArtifacts ?? []) {
-    if (artifact.filePath && artifact.fileName && !entries.has(extraFilePathKey(artifact.filePath))) {
+    if (
+      artifact.filePath &&
+      artifact.fileName &&
+      !entries.has(extraFilePathKey(artifact.filePath))
+    ) {
       entries.set(extraFilePathKey(artifact.filePath), {
         filePath: artifact.filePath,
         fileName: artifact.fileName,
@@ -105,7 +128,8 @@ function buildExtraScripts(
   const scriptMap = new Map<string, Map<string, HistoryFileRow[]>>();
   for (const [pathKey, file] of files) {
     const { scriptCode, bankCode } = parseExtraFilePath(file.filePath, file.fileName);
-    const bankName = bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
+    const bankName =
+      bankNamesByCode[bankCode] ?? bankNamesByCode[bankCode.toUpperCase()] ?? bankCode;
     const batches = index.batchGroups.get(memberKey(scriptCode)) ?? [];
     const gatewayDeliveries = buildFileGatewayDeliveries(file.filePath, batches, true);
     const bankMap = scriptMap.get(scriptCode) ?? new Map<string, HistoryFileRow[]>();
@@ -125,6 +149,12 @@ function buildExtraScripts(
     };
     bankMap.set(bankCode, [...(bankMap.get(bankCode) ?? []), row]);
     scriptMap.set(scriptCode, bankMap);
+  }
+
+  for (const status of Object.values(run.memberStatuses ?? {})) {
+    if (status.memberName?.trim() && !scriptMap.has(status.memberName)) {
+      scriptMap.set(status.memberName, new Map());
+    }
   }
 
   return Array.from(scriptMap.entries())

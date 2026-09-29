@@ -53,8 +53,7 @@ export class App {
   private errorDialogRef: MatDialogRef<ErrorDialogComponent> | null = null;
   private presentedErrorKey: string | null = null;
 
-  readonly detailsPanelOpen = signal(false);
-  readonly detailsPanelStage = signal<DrawerStage>('run');
+  readonly detailsPanelStage = signal<DetailsStage>('run');
 
   constructor() {
     effect(() => {
@@ -132,13 +131,8 @@ export class App {
       });
   }
 
-  openDetails(stage: DrawerStage): void {
+  openDetails(stage: DetailsStage): void {
     this.detailsPanelStage.set(stage);
-    this.detailsPanelOpen.set(true);
-  }
-
-  closeDetails(): void {
-    this.detailsPanelOpen.set(false);
   }
 
   startRunFromMainCard(): void {
@@ -202,5 +196,5 @@ export class App {
   }
 }
 
-type DrawerStage = 'run' | 'preset' | 'extra';
+type DetailsStage = 'run' | 'preset' | 'extra';
 type ErrorSource = { kind: 'workflow' | 'unhandled'; message: string };

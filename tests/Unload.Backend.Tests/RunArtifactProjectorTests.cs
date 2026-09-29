@@ -27,7 +27,7 @@ public class RunArtifactProjectorTests
         var original = new RunOutputArtifactInfo("result.txt", "/tmp/RESULT.txt", "Member A", "script-1", Now);
         IReadOnlyCollection<RunOutputArtifactInfo> source = [original];
 
-        var ignored = RunArtifactProjector.Apply(source, Event(RunnerStep.QueryCompleted, "/tmp/other.txt"));
+        var ignored = RunArtifactProjector.Apply(source, Event(RunnerStep.QueryStarted, "/tmp/other.txt"));
         var duplicate = RunArtifactProjector.Apply(source, Event(RunnerStep.FileWritten, "/tmp/result.txt"));
 
         Assert.Same(original, Assert.Single(ignored));

@@ -49,7 +49,7 @@ public class RunStatusControllerTests : IDisposable
     private RunStateStore CreateStore()
     {
         Directory.CreateDirectory(_scratchDirectory);
-        return new RunStateStore(1, Path.Combine(_scratchDirectory, "runs.json"));
+        return new RunStateStore(Path.Combine(_scratchDirectory, "runs.json"));
     }
 
     private static RunStatusController CreateController(

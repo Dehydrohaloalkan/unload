@@ -5,17 +5,6 @@ namespace Unload.Store;
 internal sealed class RunStateProjector
 {
     private const string TaskCodeRun = "run";
-    private readonly RunWorkerProjector _workerProjector;
-
-    public RunStateProjector(int workerCount)
-    {
-        _workerProjector = new RunWorkerProjector(workerCount);
-    }
-
-    public IReadOnlyDictionary<int, RunWorkerStatusInfo> CreateInitialWorkerStatuses(DateTimeOffset now)
-    {
-        return _workerProjector.CreateInitial(now);
-    }
 
     public RunStatusInfo CreateStarted(
         string correlationId,
@@ -51,11 +40,8 @@ internal sealed class RunStateProjector
             Message: "Run started.",
             MemberStatuses: memberStatuses,
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-            WorkerStatuses: CreateInitialWorkerStatuses(now),
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            PublishToGateway: publishToGateway,
-            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            FileStatuses: new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase));
+            PublishToGateway: publishToGateway);
     }
 
     public RunStatusInfo CreateFromEvent(RunnerEvent @event, DateTimeOffset now)
@@ -77,14 +63,7 @@ internal sealed class RunStateProjector
                 @event,
                 now),
             OutputArtifacts: RunArtifactProjector.Apply(Array.Empty<RunOutputArtifactInfo>(), @event),
-            WorkerStatuses: _workerProjector.Apply(CreateInitialWorkerStatuses(now), @event, now),
             SenderBatches: new Dictionary<string, SenderBatchStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            ScriptStatuses: RunScriptProjector.Apply(
-                new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
-                @event),
-            FileStatuses: RunFileProjector.Apply(
-                new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
-                @event),
             Failure: @event.Failure);
     }
 
@@ -112,10 +91,7 @@ internal sealed class RunStateProjector
             OutputPath = @event.Step == RunnerStep.Completed ? @event.FilePath : current.OutputPath,
             MemberStatuses = RunMemberProjector.Apply(current.MemberStatuses, @event, now),
             OutputArtifacts = RunArtifactProjector.Apply(current.OutputArtifacts, @event),
-            WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, @event, now),
-            SenderBatches = GatewayFeedbackProjector.ApplyQueued(current.SenderBatches, @event, now),
-            ScriptStatuses = RunScriptProjector.Apply(current.ScriptStatuses, @event),
-            FileStatuses = RunFileProjector.Apply(current.FileStatuses, @event)
+            SenderBatches = GatewayFeedbackProjector.ApplyQueued(current.SenderBatches, @event, now)
         };
 
         return RunCompletionPolicy.Apply(updated, now);
@@ -141,13 +117,10 @@ internal sealed class RunStateProjector
                     failure,
                     now),
             OutputArtifacts: Array.Empty<RunOutputArtifactInfo>(),
-            WorkerStatuses: CreateInitialWorkerStatuses(now),
             SenderBatches: GatewayFeedbackProjector.Apply(
                 source: null,
                 feedback,
                 now),
-            ScriptStatuses: new Dictionary<string, ScriptRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
-            FileStatuses: new Dictionary<string, FileRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
             Failure: failure);
     }
 
@@ -180,10 +153,7 @@ internal sealed class RunStateProjector
         {
             Status = RunLifecycleStatus.Running,
             UpdatedAt = now,
-            Message = "Run started.",
-            WorkerStatuses = current.WorkerStatuses is null || current.WorkerStatuses.Count == 0
-                ? CreateInitialWorkerStatuses(now)
-                : current.WorkerStatuses
+            Message = "Run started."
         };
     }
 
@@ -198,12 +168,6 @@ internal sealed class RunStateProjector
             return current;
         }
 
-        var failureEvent = new RunnerEvent(
-            now,
-            current.CorrelationId,
-            RunnerStep.Failed,
-            message,
-            Failure: failure);
         return current with
         {
             Status = RunLifecycleStatus.Failed,
@@ -211,20 +175,12 @@ internal sealed class RunStateProjector
             LastStep = RunnerStep.Failed,
             Message = message,
             Failure = failure ?? current.Failure,
-            MemberStatuses = RunMemberProjector.UpdateAll(
-                current.MemberStatuses,
+            MemberStatuses = RunMemberProjector.UpdateUnfinished(
+                current.MemberStatuses ?? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 MemberRunLifecycleStatus.Failed,
-                RunnerStep.Failed,
                 message,
                 now,
-                failure),
-            WorkerStatuses = _workerProjector.Apply(current.WorkerStatuses, failureEvent, now),
-            ScriptStatuses = RunScriptProjector.FailUnfinished(
-                current.ScriptStatuses,
-                message,
-                now,
-                failure),
-            FileStatuses = RunFileProjector.FailUnfinished(current.FileStatuses, message, now, failure)
+                failure)
         };
     }
 
@@ -239,10 +195,7 @@ internal sealed class RunStateProjector
         {
             Status = RunLifecycleStatus.CancellationRequested,
             UpdatedAt = now,
-            Message = message,
-            WorkerStatuses = current.WorkerStatuses is null || current.WorkerStatuses.Count == 0
-                ? CreateInitialWorkerStatuses(now)
-                : current.WorkerStatuses
+            Message = message
         };
     }
 
@@ -259,15 +212,11 @@ internal sealed class RunStateProjector
             UpdatedAt = now,
             LastStep = RunnerStep.Failed,
             Message = message,
-            MemberStatuses = RunMemberProjector.UpdateAll(
-                current.MemberStatuses,
+            MemberStatuses = RunMemberProjector.UpdateUnfinished(
+                current.MemberStatuses ?? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
                 MemberRunLifecycleStatus.Cancelled,
-                RunnerStep.Failed,
                 message,
-                now),
-            WorkerStatuses = RunWorkerProjector.Reset(current.WorkerStatuses, now),
-            ScriptStatuses = RunScriptProjector.CancelUnfinished(current.ScriptStatuses, message, now),
-            FileStatuses = RunFileProjector.CancelUnfinished(current.FileStatuses, message, now)
+                now)
         };
     }
 

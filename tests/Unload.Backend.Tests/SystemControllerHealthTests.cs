@@ -15,7 +15,7 @@ public class SystemControllerHealthTests
     {
         using var paths = new HealthPaths();
         var controller = CreateController(
-            new RunStateStore(workerCount: 1, paths.RunStateFilePath),
+            new RunStateStore(paths.RunStateFilePath),
             new TaskExecutionHistoryStore(paths.TaskHistoryFilePath));
 
         var result = Assert.IsType<OkObjectResult>(controller.GetHealth().Result);
@@ -30,7 +30,7 @@ public class SystemControllerHealthTests
     public void GetHealth_DegradedStoreReturnsServiceUnavailableWithoutInternalPath()
     {
         using var paths = new HealthPaths(blockRunStateDirectory: true);
-        var runStateStore = new RunStateStore(workerCount: 1, paths.RunStateFilePath);
+        var runStateStore = new RunStateStore(paths.RunStateFilePath);
         Assert.Throws<IOException>(() => runStateStore.SetRunning("run-1"));
         var controller = CreateController(
             runStateStore,

@@ -31,11 +31,7 @@
 
       <div class="details-members">
         @for (member of group.members; track member.key) {
-          <div
-            class="member-card"
-            [class.member-card--active]="selectedMemberKey() === member.key"
-            [ngClass]="memberCardBorderClass(member)"
-          >
+          <div class="member-card" [class.member-card--active]="selectedMemberKey() === member.key">
             <div class="details-check-row member-card__check">
               <mat-checkbox
                 [checked]="member.selected"
@@ -57,19 +53,13 @@
                   <span class="member-card__meta-value">{{ member.memberCode }}</span>
                 </div>
                 <div class="member-card__meta">
-                  <span class="member-card__meta-label">{{ 'memberSelection.metaExtension' | t }}</span>
+                  <span class="member-card__meta-label">{{
+                    'memberSelection.metaExtension' | t
+                  }}</span>
                   <span class="member-card__meta-value">{{
                     member.memberFileExtension || '—'
                   }}</span>
                 </div>
-                @if (memberLastUploadToday(member); as lastUpload) {
-                  <div class="member-card__meta">
-                    <span class="member-card__meta-label">{{
-                      'memberSelection.metaLastUploadToday' | t
-                    }}</span>
-                    <span class="member-card__meta-value">{{ formatTimestamp(lastUpload) }}</span>
-                  </div>
-                }
                 <div class="member-card__targets">
                   @for (targetCode of member.targetCodes; track targetCode) {
                     <span class="member-card__chip">{{ targetCode }}</span>

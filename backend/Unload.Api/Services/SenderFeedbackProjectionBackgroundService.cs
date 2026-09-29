@@ -31,9 +31,7 @@ public class SenderFeedbackProjectionBackgroundService(
                     var state = _runStateStore.Get(feedback.CorrelationId);
                     if (state is not null)
                     {
-                        await _livePublisher.PublishAsync(
-                            state,
-                            immediate: feedback.Kind == SenderFeedbackKind.BatchFailed || feedback.Failure is not null);
+                        await _livePublisher.PublishAsync(state);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

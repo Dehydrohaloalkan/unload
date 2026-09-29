@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.SignalR;
 using Unload.Core;
 using Unload.Store;
 using Unload.Tasks;
@@ -16,7 +15,6 @@ public class ExtraUnloadHostedService(
     RunStateStore runStateStore,
     TaskExecutionHistoryStore taskExecutionHistoryStore,
     ExtraUnloadEngine engine,
-    IHubContext<RunStatusHub> hubContext,
     RunStatusLivePublisher livePublisher,
     ILogger<ExtraUnloadHostedService> logger) : BackgroundService
 {
@@ -24,7 +22,6 @@ public class ExtraUnloadHostedService(
     private readonly RunStateStore _runStateStore = runStateStore;
     private readonly TaskExecutionHistoryStore _taskExecutionHistoryStore = taskExecutionHistoryStore;
     private readonly ExtraUnloadEngine _engine = engine;
-    private readonly IHubContext<RunStatusHub> _hubContext = hubContext;
     private readonly RunStatusLivePublisher _livePublisher = livePublisher;
     private readonly ILogger<ExtraUnloadHostedService> _logger = logger;
 
@@ -47,7 +44,7 @@ public class ExtraUnloadHostedService(
             var request = activation.Payload;
             using var runCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, activation.CancellationToken);
             var runToken = runCts.Token;
-            await PublishRunStateAsync(request.CorrelationId, immediate: true);
+            await PublishRunStateAsync(request.CorrelationId);
             _logger.LogInformation("Extra run started. CorrelationId: {CorrelationId}", request.CorrelationId);
 
             try
@@ -55,13 +52,13 @@ public class ExtraUnloadHostedService(
                 await foreach (var @event in _engine.RunAsync(request, runToken))
                 {
                     _runStateStore.ApplyEvent(@event);
-                    if (RunStatusHubContract.ShouldPublishStatusEvent(@event))
+                    if (@event.Step is RunnerStep.QueryStarted or
+                        RunnerStep.ScriptCompleted or
+                        RunnerStep.Completed or
+                        RunnerStep.Failed)
                     {
-                        await _hubContext.Clients.All.SendStatusAsync(@event, stoppingToken);
+                        await PublishRunStateAsync(@event.CorrelationId);
                     }
-                    await PublishRunStateAsync(
-                        @event.CorrelationId,
-                        immediate: @event.Step == RunnerStep.Failed || @event.Failure is not null);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -163,7 +160,7 @@ public class ExtraUnloadHostedService(
         return _runStateStore.Get(correlationId);
     }
 
-    private async Task PublishRunStateAsync(string correlationId, bool immediate = false)
+    private async Task PublishRunStateAsync(string correlationId)
     {
         var state = _runStateStore.Get(correlationId);
         if (state is null)
@@ -171,6 +168,6 @@ public class ExtraUnloadHostedService(
             return;
         }
 
-        await _livePublisher.PublishAsync(state, immediate);
+        await _livePublisher.PublishAsync(state);
     }
 }

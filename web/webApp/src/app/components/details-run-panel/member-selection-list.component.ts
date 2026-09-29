@@ -5,10 +5,6 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MemberGroupViewModel, MemberViewModel } from '../../app.models';
 import { WorkflowStore } from '../../app.store';
 import { TPipe } from '../../i18n/i18n';
-import { byDescDate } from '../../state/utils/compare.util';
-import { resolveMemberCardBorderClass } from '../../state/utils/member-card-style.util';
-import { memberKey } from '../../state/utils/member-index.util';
-import { formatTimestamp, isTodayDate } from '../../state/utils/time.util';
 
 @Component({
   selector: 'app-member-selection-list',
@@ -56,47 +52,6 @@ export class MemberSelectionListComponent {
     return selectedCount > 0 && selectedCount < group.members.length;
   }
 
-  /**
-   * Run-источник для рамок и времени карточек. Активный run обновляется живьём по SignalR
-   * (включая пофайловые подтверждения шлюза), а latestTodayRun — снапшот, который
-   * перечитывается только по завершении выгрузки; без живого источника рамки мемберов
-   * «зеленели» лишь в самом конце, хотя файлы уходили в шлюз по ходу выгрузки.
-   */
-  private readonly cardRun = computed(() => {
-    const live = this.store.activeRun();
-    const latest = this.store.latestTodayRun();
-    if (!live || !isTodayDate(live.createdAt)) {
-      return latest;
-    }
-    if (!latest || latest.correlationId === live.correlationId) {
-      return live;
-    }
-    return (live.createdAt ?? '') >= (latest.createdAt ?? '') ? live : latest;
-  });
-
-  memberCardBorderClass(member: MemberViewModel): string {
-    return resolveMemberCardBorderClass(member, this.cardRun());
-  }
-
-  memberLastUploadToday(member: MemberViewModel): string | null {
-    const run = this.cardRun();
-    if (!run) {
-      return null;
-    }
-
-    const key = memberKey(member.name);
-    const todays = (run.outputArtifacts ?? [])
-      .filter(
-        (artifact) =>
-          artifact.occurredAt &&
-          memberKey(artifact.memberName) === key &&
-          isTodayDate(artifact.occurredAt),
-      )
-      .sort(byDescDate((artifact) => artifact.occurredAt));
-
-    return todays[0]?.occurredAt ?? null;
-  }
-
   toggleAll(selected: boolean): void {
     if (selected) {
       this.store.selectAllMembers();
@@ -126,6 +81,4 @@ export class MemberSelectionListComponent {
   startSelected(): void {
     void this.store.startRunAsync();
   }
-
-  formatTimestamp = formatTimestamp;
 }

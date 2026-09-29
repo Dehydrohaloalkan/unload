@@ -126,9 +126,9 @@ Baseline пока не считается завершённым: остаютс
 
 `RunStateStore` перед разделением:
 
-- [x] `SetStarted` создаёт pending members и idle workers;
-- [x] runner events проецируют worker, member и artifact без дубликатов;
-- [x] `Completed`, `Failed`, `Cancelled` фиксируют terminal-состояние и сбрасывают workers;
+- [x] `SetStarted` создаёт pending members;
+- [x] runner events проецируют member и artifact без дубликатов;
+- [x] `Completed`, `Failed`, `Cancelled` фиксируют terminal-состояние participants;
 - [x] запрос отмены игнорирует промежуточный progress, но принимает terminal event;
 - [x] terminal state игнорирует поздние runner events и `SetRunning`;
 - [x] при `PublishToGateway = false` запуск завершается сразу и создаёт skipped batches;
@@ -243,7 +243,6 @@ RunStatePersistence        — загрузка и сохранение snapshot
 RunStateProjector          — координация применения RunnerEvent
 RunMemberProjector         — состояния мемберов
 RunArtifactProjector       — список созданных файлов
-RunWorkerProjector         — состояния workers
 GatewayFeedbackProjector   — применение sender-feedback
 RunCompletionPolicy        — чистое правило terminal-перехода
 RunTaskCodeResolver        — fallback task code для неизвестного feedback
@@ -254,7 +253,7 @@ RunTaskCodeResolver        — fallback task code для неизвестног�
 - [x] Перенести nested `RunStateProjector` в отдельный файл без изменения поведения.
 - [x] Выделить `RunCompletionPolicy` и покрыть таблицей переходов.
 - [x] Выделить gateway feedback projection.
-- [x] Выделить простые member, artifact и worker projections.
+- [x] Выделить простые member и artifact projections.
 - [x] Оставить `RunStateStore` единственным публичным фасадом изменения state и один CAS-путь для upsert/update.
 - [x] Изолировать распознавание task type по префиксу correlation ID в одном месте.
 - [x] Зафиксировать единую терминологию execution/main run/extra и исправить неоднозначные локальные имена.
@@ -337,14 +336,14 @@ GatewayRequeueController
   изолированном режиме без всех hosted services,
   обновляет `openapi/Unload.Api.json` и останавливает только созданный им процесс. Контрольные
   суммы подтвердили отсутствие изменений в `output/_state`.
-- `ng-openapi-gen` создаёт 39 DTO и функциональный Angular client в `src/app/generated/api`;
+- `ng-openapi-gen` создаёт DTO и функциональный Angular client в `src/app/generated/api`;
   `ApiClientService` использует generated operations, а ручной `app.models.ts` реэкспортирует
-  wire models и содержит только UI-модели, SignalR payload и именованные числовые константы.
+  wire models и содержит только UI-модели и именованные числовые константы.
 - Generated-файлы имеют `DO NOT EDIT`, исключены из Prettier и помечены
   `linguist-generated=true`.
 - `RunStatusHubContract` централизует hub/event names и типизированную публикацию payloads.
-  Backend tests фиксируют имена, payload types и JSON shape `RunnerEvent`; frontend test фиксирует
-  те же публичные имена. Удалено несуществующее backend-поле `targetCode` из frontend `RunnerEvent`.
+  Backend и frontend contract tests фиксируют одинаковые публичные имена; browser получает
+  агрегированный `run_status`, а не отдельные raw runner events.
 - `OpenApiContractTests` строит текущую Development schema без background workers и сравнивает её
   с committed-файлом, поэтому забытая регенерация ломает тест до попадания рассинхронизации в UI.
 - Frontend `check:api` генерирует client во временный каталог и сравнивает все файлы с committed
@@ -520,8 +519,8 @@ tests/
 - Чистый `RunCompletionPolicy` выделен отдельно и покрыт таблицей из 10 test cases.
 - `GatewayFeedbackProjector` выделен отдельно и покрыт 7 test cases для mapping, путей,
   дедупликации, terminal feedback и неизменности исходной карты.
-- `RunMemberProjector`, `RunArtifactProjector` и `RunWorkerProjector` выделены в небольшие
-  самостоятельные правила и покрыты 12 прямыми test cases; recovery использует тот же worker reset.
+- `RunMemberProjector` и `RunArtifactProjector` выделены в небольшие самостоятельные правила;
+  recovery изменяет только незавершённых участников.
 - `RunStateStore` делегирует создание снимков в projector, а upsert/update объединены в один
   `MutateRun`; публичные доменные методы сохранены для читаемости вызывающего кода. Три terminal
   mutation по-прежнему явно отклоняют неизвестный correlation ID.

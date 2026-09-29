@@ -14,7 +14,6 @@ export interface SenderBatchStatusInfo {
   plannedFiles?: (Array<SenderBatchFileStatusInfo> | null);
   queuedAt?: (string | null);
   sentFiles: Array<SenderFileDispatchStateInfo>;
-  sequence?: (number | string | null);
   startedAt?: (string | null);
   status: SenderBatchStatus;
   updatedAt: string;

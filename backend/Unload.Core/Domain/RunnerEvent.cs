@@ -10,15 +10,8 @@ namespace Unload.Core;
 /// <param name="Message">Человекочитаемое описание события.</param>
 /// <param name="MemberName">Имя мембера (если событие относится к конкретному мемберу).</param>
 /// <param name="ScriptCode">Код скрипта (если событие относится к конкретному скрипту).</param>
-/// <param name="Records">Количество обработанных записей (если применимо).</param>
 /// <param name="FilePath">Путь к файлу результата (если применимо).</param>
-/// <param name="WorkerId">Идентификатор worker-потока, если событие относится к конкретному worker.</param>
-/// <param name="ChunkNumber">Номер чанка в рамках мембера (если событие относится к файлу).</param>
-/// <param name="EstimatedBytes">Оценочный размер чанка до записи либо размер записанного чанка (если применимо).</param>
 /// <param name="BatchId">Идентификатор gateway-партии, если событие относится к постановке партии в очередь.</param>
-/// <param name="BatchFileCount">Число файлов в gateway-партии, если применимо.</param>
-/// <param name="Sequence">Монотонный порядковый номер события внутри запуска.</param>
-/// <param name="WorkOrder">Стабильный порядковый номер скрипта в discovery/queue order.</param>
 /// <param name="Failure">Структурированная диагностика ошибки, если событие сообщает об ошибке.</param>
 /// <param name="BatchFiles">Точный состав gateway-партии для события постановки в очередь.</param>
 public record RunnerEvent(
@@ -28,14 +21,7 @@ public record RunnerEvent(
     string Message,
     string? MemberName = null,
     string? ScriptCode = null,
-    int? Records = null,
     string? FilePath = null,
-    int? WorkerId = null,
-    int? ChunkNumber = null,
-    long? EstimatedBytes = null,
     string? BatchId = null,
-    int? BatchFileCount = null,
-    long Sequence = 0,
-    int? WorkOrder = null,
     RunnerFailureInfo? Failure = null,
     IReadOnlyCollection<SenderBatchFileStatusInfo>? BatchFiles = null);

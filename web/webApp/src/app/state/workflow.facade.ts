@@ -83,7 +83,6 @@ export class WorkflowStore {
 
   readonly activeRun = this.runStore.activeRun;
   readonly trackedCorrelationId = this.runStore.trackedCorrelationId;
-  readonly runEvents = this.runStore.runEvents;
   readonly publishRunToGateway = this.runStore.publishRunToGateway;
   readonly requeueRunning = this.runStore.requeueRunning;
   readonly requeueResult = this.runStore.requeueResult;
@@ -117,8 +116,6 @@ export class WorkflowStore {
     buildMemberGroups(
       this.catalogStore.catalog(),
       this.catalogStore.members(),
-      this.runStore.activeRun(),
-      this.runStore.runEvents(),
       this.selectionStore.selectedTargetCodes(),
     ),
   );

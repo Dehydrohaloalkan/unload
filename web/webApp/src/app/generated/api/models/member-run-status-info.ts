@@ -10,7 +10,6 @@ export interface MemberRunStatusInfo {
   memberName: string;
   message: (string | null);
   queuePosition?: (number | string | null);
-  sequence?: (number | string | null);
   status: MemberRunLifecycleStatus;
   updatedAt: string;
 }

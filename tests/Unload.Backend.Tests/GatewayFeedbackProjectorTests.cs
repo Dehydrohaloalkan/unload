@@ -346,7 +346,6 @@ public class GatewayFeedbackProjectorTests
             "Gateway batch queued.",
             MemberName: memberName,
             BatchId: "batch-1",
-            BatchFileCount: 2,
             BatchFiles: files ??
             [
                 Planned("/tmp/a.txt", "a.txt", actualBytes: 10),

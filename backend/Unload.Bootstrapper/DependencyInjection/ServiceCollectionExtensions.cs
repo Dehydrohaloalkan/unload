@@ -72,7 +72,6 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(config.Runner);
         services.AddSingleton<RunStateStore>(sp => new RunStateStore(
-            config.Runner.WorkerCount,
             runStateFilePath,
             sp.GetService<ILogger<RunStateStore>>()));
         services.AddSingleton<TaskExecutionHistoryStore>(sp => new TaskExecutionHistoryStore(

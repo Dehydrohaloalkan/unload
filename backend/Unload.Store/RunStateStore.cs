@@ -17,12 +17,11 @@ public class RunStateStore
     private readonly RunStateProjector _projector;
 
     public RunStateStore(
-        int workerCount,
         string stateFilePath,
         ILogger<RunStateStore>? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
-        _projector = new RunStateProjector(workerCount);
+        _projector = new RunStateProjector();
         _persistence = new RunStatePersistence(stateFilePath, logger);
         LoadFromDisk();
     }
@@ -296,13 +295,9 @@ public class RunStateStore
             UpdatedAt = recoveredAt,
             LastStep = RunnerStep.Failed,
             Message = "Run was interrupted due to server restart.",
-            WorkerStatuses = RunWorkerProjector.Reset(run.WorkerStatuses, recoveredAt),
-            ScriptStatuses = RunScriptProjector.CancelUnfinished(
-                run.ScriptStatuses,
-                "Run was interrupted due to server restart.",
-                recoveredAt),
-            FileStatuses = RunFileProjector.CancelUnfinished(
-                run.FileStatuses,
+            MemberStatuses = RunMemberProjector.UpdateUnfinished(
+                run.MemberStatuses ?? new Dictionary<string, MemberRunStatusInfo>(StringComparer.OrdinalIgnoreCase),
+                MemberRunLifecycleStatus.Cancelled,
                 "Run was interrupted due to server restart.",
                 recoveredAt)
         };

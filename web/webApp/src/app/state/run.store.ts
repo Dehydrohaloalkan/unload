@@ -16,7 +16,6 @@ import {
   RequeueItem,
   RequeueToGatewayResponse,
   RunStatusInfo,
-  RunnerEvent,
 } from '../app.models';
 import { t } from '../i18n/i18n';
 import { AdminStore } from './admin.store';
@@ -30,13 +29,11 @@ import { toErrorMessage } from './utils/error-message.util';
 import { isSameRunCorrelation, shouldAcceptRunStatus } from './utils/run-lifecycle.util';
 import { isRunStatusPayload, isTerminalRunStatus } from './utils/run-status.util';
 
-const RUN_EVENT_LIMIT = 80;
 const POLL_INTERVAL_MS = 2500;
 
 interface RunStoreState {
   activeRun: RunStatusInfo | null;
   trackedCorrelationId: string | null;
-  runEvents: RunnerEvent[];
   publishRunToGateway: boolean;
   requeueRunning: boolean;
   requeueResult: RequeueToGatewayResponse | null;
@@ -50,7 +47,6 @@ interface RunStoreState {
 const INITIAL: RunStoreState = {
   activeRun: null,
   trackedCorrelationId: null,
-  runEvents: [],
   publishRunToGateway: true,
   requeueRunning: false,
   requeueResult: null,
@@ -64,15 +60,21 @@ const INITIAL: RunStoreState = {
 export const RunStore = signalStore(
   { providedIn: 'root' },
   withState(INITIAL),
-  withComputed(({ activeRun, trackedCorrelationId, runLaunchPending, awaitingActivationRelease }) => ({
-    isRunBusy: computed(() => {
-      const run = activeRun();
-      return runLaunchPending() || awaitingActivationRelease() || (!!run && !isTerminalRunStatus(run.status));
+  withComputed(
+    ({ activeRun, trackedCorrelationId, runLaunchPending, awaitingActivationRelease }) => ({
+      isRunBusy: computed(() => {
+        const run = activeRun();
+        return (
+          runLaunchPending() ||
+          awaitingActivationRelease() ||
+          (!!run && !isTerminalRunStatus(run.status))
+        );
+      }),
+      isRunLaunching: computed(() => runLaunchPending()),
+      isAwaitingActivationRelease: computed(() => awaitingActivationRelease()),
+      trackedId: computed(() => trackedCorrelationId()),
     }),
-    isRunLaunching: computed(() => runLaunchPending()),
-    isAwaitingActivationRelease: computed(() => awaitingActivationRelease()),
-    trackedId: computed(() => trackedCorrelationId()),
-  })),
+  ),
   withMethods((store) => {
     const api = inject(ApiClientService);
     const catalog = inject(CatalogStore);
@@ -178,9 +180,7 @@ export const RunStore = signalStore(
       }
     };
 
-    const reconcileLaunchAttemptAsync = async (
-      attemptId: number | null,
-    ): Promise<void> => {
+    const reconcileLaunchAttemptAsync = async (attemptId: number | null): Promise<void> => {
       if (attemptId == null || store.postInFlight() || !ownsLaunchAttempt(attemptId)) return;
       try {
         const activeRun = await api.fetchActiveRun();
@@ -220,9 +220,10 @@ export const RunStore = signalStore(
         await reconcileLaunchAttemptAsync(store.launchAttemptId());
         return;
       }
-      const attemptId = store.launchAttemptCorrelationId() === correlationId
-        ? store.launchAttemptId() ?? undefined
-        : undefined;
+      const attemptId =
+        store.launchAttemptCorrelationId() === correlationId
+          ? (store.launchAttemptId() ?? undefined)
+          : undefined;
       if (!correlationId) {
         if (store.runLaunchPending() && store.launchAttemptId() != null) {
           await reconcileLaunchAttemptAsync(store.launchAttemptId());
@@ -251,16 +252,11 @@ export const RunStore = signalStore(
 
     destroyRef.onDestroy(() => stopPolling());
 
-    const adoptCorrelationId = async (
-      correlationId: string,
-      attemptId?: number,
-    ): Promise<void> => {
+    const adoptCorrelationId = async (correlationId: string, attemptId?: number): Promise<void> => {
       const previousCorrelationId = store.trackedCorrelationId();
       patchState(store, {
         trackedCorrelationId: correlationId,
-        ...(attemptId != null
-          ? { launchAttemptCorrelationId: correlationId }
-          : {}),
+        ...(attemptId != null ? { launchAttemptCorrelationId: correlationId } : {}),
         activeRun: isSameRunCorrelation(previousCorrelationId, correlationId)
           ? store.activeRun()
           : null,
@@ -302,9 +298,10 @@ export const RunStore = signalStore(
         patchState(store, { publishRunToGateway: Boolean(enabled) });
       },
 
-      applyInitialActiveRun(
-        payload: RunStatusInfo | { correlationId: string | null } | null,
-      ): { correlationId: string | null; status: RunStatusInfo | null } {
+      applyInitialActiveRun(payload: RunStatusInfo | { correlationId: string | null } | null): {
+        correlationId: string | null;
+        status: RunStatusInfo | null;
+      } {
         // A manual refresh may overlap an accepted launch. Do not let that
         // bootstrap response erase the local conservative guard while the
         // launch is still being reconciled.
@@ -318,7 +315,6 @@ export const RunStore = signalStore(
         patchState(store, {
           trackedCorrelationId: correlationId,
           activeRun: isRunStatusPayload(payload) ? payload : null,
-          runEvents: [],
           awaitingActivationRelease:
             isRunStatusPayload(payload) && isTerminalRunStatus(payload.status),
         });
@@ -361,7 +357,6 @@ export const RunStore = signalStore(
           launchAttemptCorrelationId: null,
         });
         errorStore.clear();
-        patchState(store, { runEvents: [] });
 
         const targets = catalog.catalog()?.targets ?? [];
         const targetCodes = runAllMembers
@@ -436,18 +431,6 @@ export const RunStore = signalStore(
         }
       },
 
-      _trackStatusEvents: rxMethod<RunnerEvent>(
-        tap((event) => {
-          // Игнорируем события чужих запусков (в т.ч. extra) — копим лог только отслеживаемого run.
-          if (event.correlationId !== store.trackedCorrelationId()) {
-            return;
-          }
-          patchState(store, (current) => ({
-            runEvents: [event, ...current.runEvents].slice(0, RUN_EVENT_LIMIT),
-          }));
-        }),
-      ),
-
       _trackRunStatus: rxMethod<RunStatusInfo>(
         tap((status) => {
           // Этот стор владеет только main-run; extra трекает ExtraStore.
@@ -493,7 +476,6 @@ export const RunStore = signalStore(
     onInit(store) {
       const hub = inject(RealtimeHubService);
 
-      store._trackStatusEvents(hub.statusEvents$);
       store._trackRunStatus(hub.runStatusEvents$);
       store._trackReconnect(hub.reconnected$);
 

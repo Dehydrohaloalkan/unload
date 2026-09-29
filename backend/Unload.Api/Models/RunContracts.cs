@@ -21,7 +21,6 @@ public record RunStartRequest(
 /// <param name="RunStatusPath">Путь API для получения статуса конкретного запуска.</param>
 /// <param name="HubPath">Путь SignalR hub для подписки на события.</param>
 /// <param name="SubscribeMethod">Имя метода hub для подписки на запуск.</param>
-/// <param name="EventName">Имя SignalR-события по шагам раннера.</param>
 /// <param name="RunStatusEventName">Имя SignalR-события с агрегированным статусом запуска.</param>
 /// <param name="StopPath">Путь API для остановки конкретного запуска.</param>
 public record RunAcceptedResponse(
@@ -29,7 +28,6 @@ public record RunAcceptedResponse(
     string RunStatusPath,
     string HubPath,
     string SubscribeMethod,
-    string EventName,
     string RunStatusEventName,
     string StopPath);
 

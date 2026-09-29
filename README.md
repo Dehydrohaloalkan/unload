@@ -162,7 +162,7 @@
 
 Главное:
 
-- `RunStateStore` — потокобезопасное in-memory хранилище статусов запусков с JSON-персистентностью. Хранит `RunStatusInfo` (статус, members, workers, artifacts, sender batches). При рестарте незавершённые запуски переводятся в `Cancelled`.
+- `RunStateStore` — потокобезопасное in-memory хранилище статусов запусков с JSON-персистентностью. Хранит `RunStatusInfo` (общий статус, результаты мемберов, artifacts, sender batches и failures). При рестарте незавершённые запуски переводятся в `Cancelled`.
 - `TaskExecutionHistoryStore` — история завершённых задач (`TaskRecord`). Используется воркфлоу для проверки `RequiresCompleted` (метод `HasRunToday`).
 - `JsonFileStore<T>` — атомарная JSON-персистентность (write-temp + move). Сбой записи логируется как `Error`.
 - `GatewaySenderFeedbackConsumer` — принимает sender-feedback из gateway.
@@ -250,9 +250,9 @@
 
 Главное:
 
-- главная страница показывает состояние 4 этапов (`сервер`, `пресет`, `выгрузка`, `extra`) и правую панель деталей;
+- главная страница показывает состояние 4 этапов (`сервер`, `пресет`, `выгрузка`, `extra`) и постоянно закреплённую панель деталей;
 - часы синхронизируются через `GET /api/system/time`;
-- подписывается на SignalR: `status`, `run_status`, `preset_state`;
+- подписывается на SignalR: `run_status`, `preset_state`;
 - в `admin mode` передаёт `adminOverride` для обхода gate-зависимостей.
 
 ### Вспомогательные приложения
@@ -360,7 +360,6 @@ SignalR:
 
 - hub: `/hubs/status`
 - события:
-  - `status` — события раннера активного запуска (`RunnerEvent`)
   - `run_status` — обновления статуса запуска (`RunStatusInfo`)
   - `preset_state` — состояние дневного окна (`PresetGateState`)
   - `preset_replayed` — результат повторного запуска уже выполненного preset (`ScriptTaskRunResult`)

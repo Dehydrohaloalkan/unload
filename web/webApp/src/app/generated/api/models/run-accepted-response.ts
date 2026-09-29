@@ -3,7 +3,6 @@
 
 export interface RunAcceptedResponse {
   correlationId: string;
-  eventName: string;
   hubPath: string;
   runStatusEventName: string;
   runStatusPath: string;

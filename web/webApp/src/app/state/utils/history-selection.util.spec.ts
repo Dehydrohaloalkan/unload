@@ -91,6 +91,7 @@ function createNode(mainFiles: HistoryFileRow[], scripts: HistoryScriptNode[]): 
     publishToGateway: true,
     gatewayDelivery: 'delivered',
     memberNames: ['Member A'],
+    memberResults: {},
     memberFiles: { 'Member A': mainFiles },
     gatewayAttempts: [],
     scripts,

@@ -20,7 +20,12 @@ internal static class RunMemberProjector
 
         if (@event.Step == RunnerStep.Failed && string.IsNullOrWhiteSpace(@event.MemberName))
         {
-            return UpdateUnfinishedAsFailed(map, @event.Message, now, @event.Failure);
+            return UpdateUnfinished(
+                map,
+                MemberRunLifecycleStatus.Failed,
+                @event.Message,
+                now,
+                @event.Failure);
         }
 
         if (string.IsNullOrWhiteSpace(@event.MemberName))
@@ -43,7 +48,6 @@ internal static class RunMemberProjector
             @event.Message,
             now,
             QueuePosition: existing?.QueuePosition,
-            Sequence: @event.Sequence > 0 ? @event.Sequence : existing?.Sequence,
             Failure: @event.Step == RunnerStep.Failed ? @event.Failure : existing?.Failure);
 
         return map;
@@ -70,14 +74,14 @@ internal static class RunMemberProjector
                 LastStep = step,
                 Message = message,
                 UpdatedAt = now,
-                Failure = failure,
-                Sequence = x.Value.Sequence
+                Failure = failure
             },
             StringComparer.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateUnfinishedAsFailed(
+    public static IReadOnlyDictionary<string, MemberRunStatusInfo> UpdateUnfinished(
         IReadOnlyDictionary<string, MemberRunStatusInfo> source,
+        MemberRunLifecycleStatus status,
         string? message,
         DateTimeOffset now,
         RunnerFailureInfo? failure = null)
@@ -88,12 +92,11 @@ internal static class RunMemberProjector
                 ? x.Value
                 : x.Value with
                 {
-                    Status = MemberRunLifecycleStatus.Failed,
+                    Status = status,
                     LastStep = RunnerStep.Failed,
                     Message = message,
                     UpdatedAt = now,
-                    Failure = failure,
-                    Sequence = x.Value.Sequence
+                    Failure = failure
                 },
             StringComparer.OrdinalIgnoreCase);
     }
@@ -114,7 +117,9 @@ internal static class RunMemberProjector
         }
 
         map[normalized] = map.TryGetValue(normalized, out var current)
-            ? current with
+            ? current.Status == MemberRunLifecycleStatus.Completed
+                ? current
+                : current with
             {
                 Status = MemberRunLifecycleStatus.Failed,
                 LastStep = RunnerStep.Failed,
