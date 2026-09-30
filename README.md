@@ -475,6 +475,7 @@ audit, обе сборки, backend/frontend tests и проверку акту�
 
 - Единая карта документации: [docs/README.md](docs/README.md)
 - Первый запуск и навигация по репозиторию: [docs/START_HERE.md](docs/START_HERE.md)
+- Карта кода по типам логики: [docs/CODE_MAP.md](docs/CODE_MAP.md)
 - Прикладная логика и быстрый вход: `README.md`
 - Пользовательские действия и наблюдаемые состояния: [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
 - Детальная архитектура, диаграммы и naming rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
